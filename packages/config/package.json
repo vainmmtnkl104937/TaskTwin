@@ -1,0 +1,35 @@
+{
+  "name": "@tasktwin/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./eslint/base": "./eslint/base.mjs",
+    "./eslint/browser": "./eslint/browser.mjs",
+    "./eslint/node": "./eslint/node.mjs",
+    "./typescript/base.json": "./typescript/base.json",
+    "./typescript/browser.json": "./typescript/browser.json",
+    "./typescript/nextjs.json": "./typescript/nextjs.json",
+    "./typescript/node.json": "./typescript/node.json"
+  },
+  "scripts": {
+    "build": "node scripts/validate.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@eslint/js": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.8.0",
+    "typescript-eslint": "8.65.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3"
+  },
+  "peerDependencies": {
+    "eslint": "^9.39.0",
+    "typescript": ">=5.9.0 <6.1.0"
+  }
+}

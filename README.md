@@ -20,14 +20,14 @@ general-purpose operating-system control are not part of the browser-first MVP.
 
 ## Workspaces
 
-| Workspace | Purpose in Session 01 |
-| --- | --- |
-| `apps/web` | Next.js landing page and web health indicator |
-| `apps/api` | NestJS control-plane shell with `GET /health` |
-| `apps/extension` | Manifest V3 popup shell with disabled recorder controls |
-| `apps/local-runner` | Node.js startup and health/status shell |
-| `packages/shared-types` | Shared service health contract |
-| `packages/config` | Shared strict TypeScript and ESLint configuration |
+| Workspace               | Purpose in Session 01                                   |
+| ----------------------- | ------------------------------------------------------- |
+| `apps/web`              | Next.js landing page and web health indicator           |
+| `apps/api`              | NestJS control-plane shell with `GET /health`           |
+| `apps/extension`        | Manifest V3 popup shell with disabled recorder controls |
+| `apps/local-runner`     | Node.js startup and health/status shell                 |
+| `packages/shared-types` | Shared service health contract                          |
+| `packages/config`       | Shared strict TypeScript and ESLint configuration       |
 
 The architectural direction is documented in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
