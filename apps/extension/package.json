@@ -1,0 +1,17 @@
+{
+  "name": "@tasktwin/extension",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "dev": "vite",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@tasktwin/config": "workspace:*",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "vite": "8.1.5"
+  }
+}

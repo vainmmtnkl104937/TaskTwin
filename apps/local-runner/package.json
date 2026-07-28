@@ -1,0 +1,23 @@
+{
+  "name": "@tasktwin/local-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "lint": "eslint .",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@tasktwin/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "@tasktwin/config": "workspace:*",
+    "@types/node": "22.19.1",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}
