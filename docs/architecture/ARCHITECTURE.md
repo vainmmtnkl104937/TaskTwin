@@ -48,12 +48,38 @@ executes no workflow.
 
 - `packages/shared-types` contains framework-independent contracts that cross
   workspace boundaries. Session 01 defines only service health.
+- `packages/workflow-schema` is the runtime-validated, framework-independent
+  contract shared by the extension, API, web editor, and local runner. It
+  defines data only and does not depend on any application framework.
 - `packages/config` centralizes strict TypeScript and ESLint configuration.
 - Application packages own framework bootstrapping and presentation, without
   introducing domain behavior.
 
-Future workflow, locator, policy, and execution packages described by the
-project direction are intentionally absent until their sessions define them.
+Future locator, policy, and execution packages described by the project
+direction are intentionally absent until their sessions define them.
+
+## Workflow contract
+
+`@tasktwin/workflow-schema` uses Zod as the runtime source of truth. TypeScript
+types are inferred from the same schemas so compile-time consumers and
+untrusted JSON inputs share one contract.
+
+Workflow definition version 1 is a strict, JSON-serializable object. Its
+`steps` array records execution order explicitly. Steps, locators, value
+sources, and assertions are discriminated unions, which gives each variant a
+stable discriminator and variant-specific required fields. Unknown variants
+and unexpected object properties are rejected.
+
+`schemaVersion` versions the shape of the contract. The separate positive
+workflow `version` identifies revisions of a workflow. Published-version
+immutability remains an application and persistence responsibility in a later
+session; the schema cannot enforce changes across stored records.
+
+Runtime validation is required because workflow definitions will eventually
+cross extension, API, editor, file, and local-runner boundaries. TypeScript
+types disappear at runtime and cannot protect those boundaries by themselves.
+The schema package remains independent from Next.js, NestJS, Chrome APIs,
+Prisma, and Playwright so every plane can consume the same domain contract.
 
 ## Safety and trust boundaries
 
@@ -61,6 +87,8 @@ project direction are intentionally absent until their sessions define them.
 - No service accepts or stores credentials in Session 01.
 - No browser event, screenshot, cookie, access token, password, or OTP is
   captured.
+- Workflow secret value sources store only a validated reference name, never a
+  secret value.
 - There is no AI behavior, policy bypass, or silent workflow repair.
 - Local execution is a responsibility boundary only; it is not implemented.
 

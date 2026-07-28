@@ -6,9 +6,11 @@ then run the approved workflow safely**.
 
 > Show it once. Review the plan. Run it safely.
 
-This repository currently contains the Session 01 foundation only. It provides
-buildable application shells, shared configuration and types, health checks,
-and architecture documentation. It does not yet record or execute workflows.
+This repository contains the Session 01 application foundation and the Session
+02 framework-independent workflow domain model. It provides buildable
+application shells, shared configuration and types, health checks, runtime
+workflow validation, and architecture documentation. It does not yet record or
+execute workflows.
 
 ## Browser-first MVP
 
@@ -20,14 +22,15 @@ general-purpose operating-system control are not part of the browser-first MVP.
 
 ## Workspaces
 
-| Workspace               | Purpose in Session 01                                   |
-| ----------------------- | ------------------------------------------------------- |
-| `apps/web`              | Next.js landing page and web health indicator           |
-| `apps/api`              | NestJS control-plane shell with `GET /health`           |
-| `apps/extension`        | Manifest V3 popup shell with disabled recorder controls |
-| `apps/local-runner`     | Node.js startup and health/status shell                 |
-| `packages/shared-types` | Shared service health contract                          |
-| `packages/config`       | Shared strict TypeScript and ESLint configuration       |
+| Workspace                  | Current purpose                                         |
+| -------------------------- | ------------------------------------------------------- |
+| `apps/web`                 | Next.js landing page and web health indicator           |
+| `apps/api`                 | NestJS control-plane shell with `GET /health`           |
+| `apps/extension`           | Manifest V3 popup shell with disabled recorder controls |
+| `apps/local-runner`        | Node.js startup and health/status shell                 |
+| `packages/shared-types`    | Shared service health contract                          |
+| `packages/workflow-schema` | Versioned workflow contracts and runtime validation     |
+| `packages/config`          | Shared strict TypeScript and ESLint configuration       |
 
 The architectural direction is documented in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
@@ -76,3 +79,11 @@ workflow execution, Playwright, AI integration, deployment, CI/CD, Docker,
 React Flow, and business data models.
 
 No credentials or secrets are required by the current repository.
+
+## Session 02 scope
+
+Session 02 defines the JSON-serializable version 1 workflow contract, including
+variables, value sources, locators, steps, assertions, and run statuses. Zod is
+the runtime source of truth, and TypeScript types are inferred from its schemas.
+The package validates workflow data but does not resolve locators, record
+browser events, execute steps, or store workflows.
