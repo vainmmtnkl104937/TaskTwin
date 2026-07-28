@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "workflowId": "exampleCheckout",
+  "version": 1,
+  "name": "Example checkout workflow",
+  "description": "Reusable Session 02 fixture containing every supported step type.",
+  "status": "draft",
+  "variables": [
+    {
+      "name": "country",
+      "valueType": "string",
+      "required": true,
+      "description": "Country option selected during checkout."
+    }
+  ],
+  "steps": [
+    {
+      "id": "navigateToCheckout",
+      "type": "navigate",
+      "name": "Open checkout",
+      "url": {
+        "kind": "literal",
+        "value": "https://example.com/checkout"
+      }
+    },
+    {
+      "id": "fillAccessCode",
+      "type": "fill",
+      "name": "Fill access code",
+      "locator": {
+        "kind": "label",
+        "value": "Access code",
+        "exact": true
+      },
+      "value": {
+        "kind": "secret",
+        "secretName": "checkoutAccessCode"
+      }
+    },
+    {
+      "id": "selectCountry",
+      "type": "select",
+      "name": "Select country",
+      "locator": {
+        "kind": "label",
+        "value": "Country"
+      },
+      "value": {
+        "kind": "variable",
+        "variableName": "country"
+      }
+    },
+    {
+      "id": "continueCheckout",
+      "type": "click",
+      "name": "Continue checkout",
+      "locator": {
+        "kind": "role",
+        "role": "button",
+        "name": "Continue",
+        "exact": true
+      }
+    },
+    {
+      "id": "waitForConfirmation",
+      "type": "wait",
+      "name": "Wait for confirmation",
+      "durationMs": 500
+    },
+    {
+      "id": "extractOrderNumber",
+      "type": "extract",
+      "name": "Read order number",
+      "locator": {
+        "kind": "testId",
+        "value": "order-number"
+      },
+      "source": {
+        "kind": "text"
+      },
+      "outputName": "orderNumber"
+    },
+    {
+      "id": "verifyConfirmation",
+      "type": "verify",
+      "name": "Verify confirmation",
+      "assertion": {
+        "kind": "text",
+        "locator": {
+          "kind": "css",
+          "selector": "[data-status='complete']"
+        },
+        "operator": "contains",
+        "expected": {
+          "kind": "literal",
+          "value": "Complete"
+        }
+      }
+    },
+    {
+      "id": "approveCompletion",
+      "type": "approval",
+      "name": "Approve completion",
+      "message": "Review the order number before completing the workflow."
+    }
+  ]
+}
