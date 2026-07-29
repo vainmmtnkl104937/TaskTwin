@@ -13,6 +13,10 @@ import {
   FlushPendingResponseSchema,
   type FlushPendingReason,
 } from './event-contracts.js';
+import {
+  RecordingFinalizationError,
+  type RecordingArtifactFinalizer,
+} from '../recording-artifacts/artifact-finalizer.js';
 import type {
   ActiveTab,
   ActiveTabProvider,
@@ -64,6 +68,7 @@ export class RecorderController {
     private readonly contentScript: ContentScriptCoordinator,
     private readonly clock: RecorderClock,
     private readonly idGenerator: RecorderIdGenerator,
+    private readonly artifactFinalizer: RecordingArtifactFinalizer,
   ) {}
 
   async handle(message: unknown): Promise<RecorderCommandResponse> {
@@ -116,10 +121,11 @@ export class RecorderController {
       };
     }
 
-    if (
-      parsedState.data.status === 'starting' ||
-      parsedState.data.status === 'stopping'
-    ) {
+    if (parsedState.data.status === 'stopping') {
+      return this.recoverInterruptedStop(parsedState.data);
+    }
+
+    if (parsedState.data.status === 'starting') {
       const interrupted = transitionRecordingState(
         parsedState.data,
         {
@@ -146,6 +152,62 @@ export class RecorderController {
     }
 
     return { success: true, state: parsedState.data };
+  }
+
+  private async recoverInterruptedStop(
+    stoppingState: RecordingSessionState,
+  ): Promise<StateLoadResult> {
+    const finalizationError = await this.finalizeArtifact(stoppingState);
+    if (finalizationError !== null) {
+      const failed = transitionRecordingState(
+        stoppingState,
+        {
+          type: 'fail',
+          error: createRecorderError(finalizationError),
+        },
+        this.clock.now(),
+      );
+      if (!failed.success) {
+        return {
+          success: false,
+          response: failureResponse('UNKNOWN_ERROR', stoppingState),
+        };
+      }
+      try {
+        await this.stateStore.save(failed.state);
+      } catch {
+        return {
+          success: false,
+          response: failureResponse('STORAGE_FAILURE', stoppingState),
+        };
+      }
+      return { success: true, state: failed.state };
+    }
+
+    const completed = transitionRecordingState(
+      stoppingState,
+      { type: 'complete-stop' },
+      this.clock.now(),
+    );
+    if (!completed.success) {
+      return {
+        success: false,
+        response: failureResponse('UNKNOWN_ERROR', stoppingState),
+      };
+    }
+    try {
+      await this.stateStore.save(completed.state);
+    } catch {
+      return {
+        success: false,
+        response: failureResponse('STORAGE_FAILURE', stoppingState),
+      };
+    }
+
+    if (stoppingState.activeTabId !== null) {
+      await this.notifyTab(stoppingState.activeTabId, completed.state);
+    }
+    return { success: true, state: completed.state };
   }
 
   private handleCommand(
@@ -282,6 +344,11 @@ export class RecorderController {
       return this.failOperation(stopping.state, notificationError);
     }
 
+    const finalizationError = await this.finalizeArtifact(stopping.state);
+    if (finalizationError !== null) {
+      return this.failOperation(stopping.state, finalizationError);
+    }
+
     const targetTabId = stopping.state.activeTabId;
     const idle = await this.persistTransition(stopping.state, {
       type: 'complete-stop',
@@ -301,6 +368,19 @@ export class RecorderController {
     }
 
     return { success: true, state: idle.state };
+  }
+
+  private async finalizeArtifact(
+    state: RecordingSessionState,
+  ): Promise<RecorderErrorCode | null> {
+    try {
+      await this.artifactFinalizer.finalize(state);
+      return null;
+    } catch (error: unknown) {
+      return error instanceof RecordingFinalizationError
+        ? error.code
+        : 'ARTIFACT_STORAGE_FAILURE';
+    }
   }
 
   private async flushBeforeTransition(

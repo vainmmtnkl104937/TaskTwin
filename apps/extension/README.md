@@ -186,11 +186,39 @@ preview, store the same validated object with `showRedactionPreview: false`;
 pause clears existing overlays and resume applies the updated setting. Do not
 use real sensitive values during manual testing.
 
+## Durable recording archive
+
+Active state and the active timeline remain in `chrome.storage.session`.
+Stopping first flushes pending input and validates the complete current
+timeline. Only then can the service worker build a `RecordingArtifact` and
+persist it in `chrome.storage.local`. A successful stop also creates a local
+`pending` outbox entry; recorder success is not returned before both records
+are durable.
+
+From service-worker DevTools, inspect the versioned archive and outbox:
+
+```js
+await chrome.storage.local.get([
+  'tasktwin.recordings.archive.v1',
+  'tasktwin.recordings.outbox.v1',
+]);
+```
+
+The initial limits are 20 retained artifacts, 4 MiB per serialized artifact,
+20 non-synced outbox entries, and 8 MiB for the serialized archive document.
+TaskTwin returns a fixed safe error rather than evicting or overwriting an
+unsynced artifact. Exact finalization retry is idempotent.
+
+Session 09 includes only a transport interface and mock tests. It does not
+store an access token, choose a workspace, call the API in production, or run a
+background retry scheduler.
+
 ## Current limitations
 
 Dynamic injection does not automatically survive a page reload or cross-origin
-navigation. Recorder state and timeline are intentionally not retained across
-browser restarts and are not synchronized to the backend or local runner.
+navigation. Active recorder state and timeline are not retained across a full
+browser restart; successfully finalized artifacts are retained locally. They
+are not uploaded automatically or synchronized to the local runner.
 Contenteditable controls, multi-selects, submit semantics, keyboard shortcuts,
 cross-origin iframes, closed shadow DOM, canvas, full accessibility-tree
 computation, locator replay, workflow generation, and execution are not
@@ -198,5 +226,5 @@ implemented. Privacy rules cover bounded English and Vietnamese patterns, not
 complete global PII detection. Redaction geometry does not yet cover arbitrary
 custom widgets, free-form page text, transformed elements, nested scrolling
 contexts, or screenshot pixel conversion. There is no screenshot capture,
-OCR, AI classification, backend artifact synchronization, or compliance
-certification.
+OCR, AI classification, production backend artifact transport, archive
+management UI, or compliance certification.

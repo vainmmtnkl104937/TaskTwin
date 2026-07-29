@@ -7,14 +7,15 @@ then run the approved workflow safely**.
 > Show it once. Review the plan. Run it safely.
 
 This repository contains the application foundation, framework-independent
-workflow domain model, authenticated control-plane foundation, and extension
-recorder timeline created through Session 08. It provides buildable
+workflow and recording domain models, authenticated control-plane foundation,
+and durable local recorder artifacts created through Session 09. It provides buildable
 application shells, shared configuration and types, health checks, runtime
 workflow validation, local PostgreSQL development tooling, short-lived
 access-token authentication, organization-scoped workspaces, deterministic
 recorder state, privacy-bounded browser event capture, semantic locator
-ranking, deterministic privacy classification, and redaction-plan contracts.
-It does not yet generate or execute workflows or capture screenshots.
+ranking, deterministic privacy classification, redaction-plan contracts, a
+local recording outbox, and idempotent recording persistence. It does not yet
+generate or execute workflows or capture screenshots.
 
 ## Browser-first MVP
 
@@ -26,18 +27,19 @@ general-purpose operating-system control are not part of the browser-first MVP.
 
 ## Workspaces
 
-| Workspace                  | Current purpose                                          |
-| -------------------------- | -------------------------------------------------------- |
-| `apps/web`                 | Next.js landing page and web health indicator            |
-| `apps/api`                 | NestJS health, authentication, and workspace endpoints   |
-| `apps/extension`           | Privacy-aware Manifest V3 browser interaction recorder   |
-| `apps/local-runner`        | Node.js startup and health/status shell                  |
-| `packages/shared-types`    | Shared service health contract                           |
-| `packages/workflow-schema` | Versioned workflow contracts and runtime validation      |
-| `packages/locator-engine`  | Pure locator scoring, ranking, and confidence rules      |
-| `packages/privacy-engine`  | Pure privacy classification and redaction-plan rules     |
-| `packages/database`        | Prisma client, identity, workspace, workflow persistence |
-| `packages/config`          | Shared strict TypeScript and ESLint configuration        |
+| Workspace                   | Current purpose                                        |
+| --------------------------- | ------------------------------------------------------ |
+| `apps/web`                  | Next.js landing page and web health indicator          |
+| `apps/api`                  | NestJS auth, workspace, health, and recording sync API |
+| `apps/extension`            | Privacy-aware Manifest V3 browser interaction recorder |
+| `apps/local-runner`         | Node.js startup and health/status shell                |
+| `packages/shared-types`     | Shared service health contract                         |
+| `packages/workflow-schema`  | Versioned workflow contracts and runtime validation    |
+| `packages/locator-engine`   | Pure locator scoring, ranking, and confidence rules    |
+| `packages/privacy-engine`   | Pure privacy classification and redaction-plan rules   |
+| `packages/recording-schema` | Current recording artifact and sync protocol contracts |
+| `packages/database`         | Prisma identity, workflow, and recording persistence   |
+| `packages/config`           | Shared strict TypeScript and ESLint configuration      |
 
 The architectural direction is documented in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
@@ -208,3 +210,21 @@ controls. A removable non-interactive preview is available for local fixture
 development. This session does not capture or persist screenshots, scan the
 complete page, use OCR or AI, synchronize artifacts, claim complete PII
 detection, generate workflows, or execute Playwright.
+
+## Session 09 scope
+
+Session 09 extracts the current privacy-aware recording contracts into the
+framework-independent `@tasktwin/recording-schema` package. A successful stop
+now flushes pending input, validates the complete timeline, creates an
+immutable artifact, persists it in `chrome.storage.local`, and creates a
+bounded local outbox entry before returning the recorder to idle.
+
+The control plane adds authenticated, workspace-scoped recording-session,
+batch, completion, and safe metadata endpoints backed by PostgreSQL.
+Application checks, database uniqueness, and transactional batch receipt make
+at-least-once delivery idempotent. Completion revalidates stored events and
+requires a complete contiguous sequence.
+
+This session does not add extension login or token storage, production HTTP
+sync, automatic retries, a recording dashboard, raw-event reads, workflow
+conversion, screenshots, AI, or Playwright.

@@ -3,6 +3,7 @@ import {
   createDatabaseClient,
   getRequiredDatabaseUrl,
   IdentityRepository,
+  RecordingRepository,
   type PrismaClient,
 } from '@tasktwin/database';
 
@@ -25,7 +26,12 @@ import { PrismaService } from './prisma.service.js';
       inject: [DATABASE_CLIENT],
       useFactory: (client: PrismaClient) => new IdentityRepository(client),
     },
+    {
+      provide: RecordingRepository,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: PrismaClient) => new RecordingRepository(client),
+    },
   ],
-  exports: [IdentityRepository],
+  exports: [IdentityRepository, RecordingRepository],
 })
 export class DatabaseModule {}

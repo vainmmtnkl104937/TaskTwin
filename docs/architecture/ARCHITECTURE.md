@@ -187,6 +187,25 @@ error instead of silently discarding older or newer events. Starting a new
 recording explicitly replaces the prior session timeline; stopping preserves
 the completed timeline for popup inspection until the next start.
 
+Session 09 separates active recorder state from durable recording history.
+State and the active timeline remain in `chrome.storage.session`. After
+pending input has been flushed and capture has entered `stopping`, the service
+worker validates the complete current timeline and builds
+`RecordingArtifact` version 1. Only a fully validated artifact may enter the
+bounded archive in `chrome.storage.local`.
+
+The local archive and outbox are strict versioned data. Exact finalization
+retries preserve the existing artifact and outbox state; different content
+under the same client session ID is rejected. Capacity and byte limits fail
+explicitly. No unsynced recording is evicted or overwritten automatically.
+Outbox state contains only identifiers, fixed status/error codes, attempt
+metadata, and timestamps. It contains no credential.
+
+The extension exposes a create/batch/complete transport port for future
+authenticated delivery. Session 09 tests this port with a mock but does not
+connect it to an HTTP implementation, choose a workspace, store a JWT, or
+schedule retries.
+
 The extension requests only `activeTab`, `scripting`, and `storage`.
 `activeTab` limits page access to the tab explicitly selected when the user
 invokes the extension. There are no host permissions or static content
@@ -215,6 +234,10 @@ message; it has no browser automation dependency and executes no workflow.
   results, and redaction-plan geometry. It depends on no browser or
   application framework; DOM metadata collection, Chrome storage, and preview
   rendering remain in the extension.
+- `packages/recording-schema` owns current recording events, deterministic
+  privacy summaries, immutable artifacts, bounded batch/completion contracts,
+  and safe sync responses. It reuses locator and privacy schemas while
+  remaining independent from Chrome, DOM, NestJS, Prisma, Playwright, and AI.
 - Application packages own framework bootstrapping and presentation, without
   introducing domain behavior.
 
@@ -248,6 +271,43 @@ types disappear at runtime and cannot protect those boundaries by themselves.
 The schema package remains independent from Next.js, NestJS, Chrome APIs,
 Prisma, and Playwright so every plane can consume the same domain contract.
 
+## Recording sync contract and persistence
+
+The extension and control plane share `@tasktwin/recording-schema`; they do not
+maintain separate interpretations of a current event. Artifact schema version
+1 wraps current privacy-aware event version 3. Legacy extension timelines
+remain explicit read-only compatibility formats and are not silently upgraded.
+
+The control plane stores:
+
+- `RecordingSession`: immutable artifact metadata, workspace, creator,
+  declaration, received counters, and receiving/completed state.
+- `RecordingEvent`: validated sanitized event JSON plus client event ID and
+  sequence used by relational uniqueness.
+- `RecordingSyncBatch`: processed client batch ID, range, count, and digest.
+
+Session creation is idempotent by globally unique `clientSessionId`. Batch
+receipt is idempotent by `(recordingSessionId, clientBatchId)`, while separate
+unique constraints protect client event IDs and sequences. Batch receipt,
+event insertion, and session counters share a serializable transaction.
+
+Completion does not trust counters or JSONB. It loads ordered stored events,
+parses each current event, reconstructs the artifact, recomputes its privacy
+summary, and verifies the full contiguous sequence before atomically marking
+the session completed. Completed sessions reject new batches. Metadata queries
+use an explicit safe selection and never return event JSON.
+
+The shared event validator also treats the client privacy decision as
+untrusted input. It independently classifies the bounded persisted target,
+rejects policy weakening, and checks allowed payload strings for deterministic
+personal, authentication, token, long-number, and related sensitive-literal
+patterns before the repository opens a transaction.
+
+Recording API resources are resolved through the current user's
+`OrganizationMember` relation. OWNER, ADMIN, and MEMBER can create, upload,
+complete, and read; VIEWER can read safe metadata only. Role and workspace
+authority are current database state, not JWT claims.
+
 ## Safety and trust boundaries
 
 - The extension uses temporary active-tab access and has no broad host
@@ -265,6 +325,9 @@ Prisma, and Playwright so every plane can consume the same domain contract.
   payloads. Complete page URLs, full DOM, outerHTML, arbitrary attributes, raw
   inbound messages, and input values in the popup are excluded from logs and
   presentation.
+- Finalized recording artifacts use bounded local storage and retain the same
+  strict event, locator, and privacy validation. Local outbox state contains no
+  JWT or raw transport error. Control-plane metadata responses omit raw events.
 - Locator data never reads an input value and contains no DOM nodes, HTML,
   arbitrary attributes, complete DOM paths, or full page content. Test IDs use
   a four-attribute allowlist. Text, identifiers, labels, names, placeholders,

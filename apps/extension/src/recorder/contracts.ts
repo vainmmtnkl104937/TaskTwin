@@ -19,6 +19,11 @@ export const RecorderErrorCodeSchema = z.enum([
   'INVALID_EVENT',
   'EVENT_REJECTED',
   'EVENT_LIMIT_REACHED',
+  'ARTIFACT_STORAGE_FAILURE',
+  'ARTIFACT_LIMIT_REACHED',
+  'ARTIFACT_TOO_LARGE',
+  'ARTIFACT_CONFLICT',
+  'ARTIFACT_INVALID',
   'UNKNOWN_ERROR',
 ]);
 
@@ -34,6 +39,16 @@ export const RECORDER_ERROR_MESSAGES = {
   EVENT_REJECTED: 'TaskTwin rejected an event outside the active recording.',
   EVENT_LIMIT_REACHED:
     'The recording event limit was reached. The captured timeline was preserved.',
+  ARTIFACT_STORAGE_FAILURE:
+    'TaskTwin could not save the completed recording locally.',
+  ARTIFACT_LIMIT_REACHED:
+    'The local recording archive is full. Existing recordings were preserved.',
+  ARTIFACT_TOO_LARGE:
+    'The completed recording exceeds the safe local artifact size limit.',
+  ARTIFACT_CONFLICT:
+    'A different local recording already uses this session identifier.',
+  ARTIFACT_INVALID:
+    'TaskTwin could not validate the completed recording artifact.',
   UNKNOWN_ERROR: 'TaskTwin could not complete the recorder action.',
 } as const satisfies Record<RecorderErrorCode, string>;
 

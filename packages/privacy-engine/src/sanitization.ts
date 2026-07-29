@@ -10,15 +10,36 @@ const TOKEN_PATTERN =
 const UUID_PATTERN =
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
 
-export function containsSensitiveLiteral(value: string): boolean {
+export type SensitiveLiteralKind =
+  'personal' | 'authentication' | 'financial-or-identity';
+
+const SENSITIVE_LITERAL_KIND_ORDER = [
+  'personal',
+  'authentication',
+  'financial-or-identity',
+] as const satisfies readonly SensitiveLiteralKind[];
+
+export function detectSensitiveLiteralKinds(
+  value: string,
+): readonly SensitiveLiteralKind[] {
   const normalized = value.trim().replace(UUID_PATTERN, '');
-  return (
-    EMAIL_PATTERN.test(normalized) ||
-    PHONE_PATTERN.test(normalized) ||
-    LONG_NUMBER_PATTERN.test(normalized) ||
-    OTP_PATTERN.test(normalized) ||
-    TOKEN_PATTERN.test(normalized)
-  );
+  const detected = new Set<SensitiveLiteralKind>();
+
+  if (EMAIL_PATTERN.test(normalized) || PHONE_PATTERN.test(normalized)) {
+    detected.add('personal');
+  }
+  if (OTP_PATTERN.test(normalized) || TOKEN_PATTERN.test(normalized)) {
+    detected.add('authentication');
+  }
+  if (LONG_NUMBER_PATTERN.test(normalized)) {
+    detected.add('financial-or-identity');
+  }
+
+  return SENSITIVE_LITERAL_KIND_ORDER.filter((kind) => detected.has(kind));
+}
+
+export function containsSensitiveLiteral(value: string): boolean {
+  return detectSensitiveLiteralKinds(value).length > 0;
 }
 
 export function sanitizePersistedText(
