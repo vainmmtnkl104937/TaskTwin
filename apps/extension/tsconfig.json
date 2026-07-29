@@ -1,4 +1,7 @@
 {
   "extends": "@tasktwin/config/typescript/browser.json",
-  "include": ["src/**/*.ts"]
+  "compilerOptions": {
+    "types": ["chrome"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "vite.config.ts"]
 }

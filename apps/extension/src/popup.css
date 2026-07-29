@@ -51,13 +51,26 @@ button {
   min-height: 2.5rem;
   border: 1px solid #bccbc5;
   border-radius: 0.5rem;
+  color: #f8fbfa;
+  background: #245b49;
   font: inherit;
+  cursor: pointer;
 }
 
 button:disabled {
   color: #6d7874;
   background: #edf1f0;
   cursor: not-allowed;
+}
+
+.error {
+  margin: 0.85rem 0 0;
+  padding: 0.7rem;
+  border-radius: 0.5rem;
+  color: #7b1f1f;
+  background: #fbe9e9;
+  font-size: 0.78rem;
+  line-height: 1.4;
 }
 
 .hint {

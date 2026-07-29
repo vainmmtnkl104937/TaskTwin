@@ -10,14 +10,29 @@
       <p class="eyebrow">TaskTwin</p>
       <h1>TaskTwin Recorder</h1>
       <p class="status" role="status">
-        Status: <strong data-status>Idle</strong>
+        Status:
+        <strong data-recorder-status data-status="idle">Idle</strong>
       </p>
       <div class="controls" aria-label="Recording controls">
-        <button type="button" disabled>Start Recording</button>
-        <button type="button" disabled>Stop Recording</button>
+        <button type="button" data-recorder-action="start" disabled>
+          Start Recording
+        </button>
+        <button type="button" data-recorder-action="pause" disabled>
+          Pause Recording
+        </button>
+        <button type="button" data-recorder-action="resume" disabled>
+          Resume Recording
+        </button>
+        <button type="button" data-recorder-action="stop" disabled>
+          Stop Recording
+        </button>
+        <button type="button" data-recorder-action="reset" disabled>
+          Reset Recorder
+        </button>
       </div>
+      <p class="error" role="alert" data-recorder-error hidden></p>
       <p class="hint">
-        Recording controls will be enabled in a future session.
+        Recording stays bound to the selected tab for this browser session.
       </p>
     </main>
     <script type="module" src="/src/popup.ts"></script>

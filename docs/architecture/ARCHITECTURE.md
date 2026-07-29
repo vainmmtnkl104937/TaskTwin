@@ -98,10 +98,20 @@ The Chrome extension and local runner form the local execution side. Browser
 access belongs here so that future browser interaction happens in the user's
 environment rather than in a remote cloud browser.
 
-In Session 01, the extension has no Chrome permissions and cannot capture
-events. Its controls are disabled. The runner reports a typed health status and
-logs a safe startup message; it has no browser automation dependency and
-executes no workflow.
+Session 05 makes the extension service worker the authoritative recorder-state
+coordinator. The popup sends validated commands and renders state, while a
+dynamically injected content script only receives validated state
+notifications. Recorder state uses session-scoped Chrome storage so popup
+closure and service-worker suspension do not lose it. The extension still
+captures no browser events or page content.
+
+The extension requests only `activeTab`, `scripting`, and `storage`.
+`activeTab` limits page access to the tab explicitly selected when the user
+invokes the extension. There are no host permissions or static content
+scripts.
+
+The runner continues to report a typed health status and log a safe startup
+message; it has no browser automation dependency and executes no workflow.
 
 ## Package boundaries
 
@@ -116,6 +126,10 @@ executes no workflow.
 - `packages/config` centralizes strict TypeScript and ESLint configuration.
 - Application packages own framework bootstrapping and presentation, without
   introducing domain behavior.
+
+Recorder message contracts and deterministic transition logic currently live
+inside `apps/extension` because only extension contexts consume them. They are
+kept independent from Chrome adapters so they can be tested without a browser.
 
 Future locator, policy, and execution packages described by the project
 direction are intentionally absent until their sessions define them.
@@ -145,12 +159,16 @@ Prisma, and Playwright so every plane can consume the same domain contract.
 
 ## Safety and trust boundaries
 
-- The extension uses least privilege and currently requests no permissions.
+- The extension uses temporary active-tab access and has no broad host
+  permissions.
 - Passwords cross only registration and login boundaries. Plaintext passwords
   are never logged or stored; password hashes are never selected by normal user
   reads or returned from API responses.
 - No browser event, screenshot, cookie, access token, password, or OTP is
   captured.
+- Recorder storage contains only versioned state, tab/window IDs, an HTTP(S)
+  origin, timestamps, and safe typed errors. Complete page URLs and message
+  payloads are not logged.
 - Workflow secret value sources store only a validated reference name, never a
   secret value.
 - Database credentials come from environment configuration. URLs and passwords

@@ -1,8 +1,14 @@
 {
   "manifest_version": 3,
   "name": "TaskTwin Recorder",
-  "description": "TaskTwin browser recorder shell",
+  "description": "TaskTwin browser recorder state coordinator",
   "version": "0.1.0",
+  "minimum_chrome_version": "102",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
   "action": {
     "default_popup": "index.html",
     "default_title": "TaskTwin Recorder"

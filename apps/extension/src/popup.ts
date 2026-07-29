@@ -1,12 +1,17 @@
 import './popup.css';
 
-type RecorderStatus = 'Idle';
+import type { RecorderCommand } from './recorder/contracts.js';
+import { PopupController, type PopupMessenger } from './popup-controller.js';
+import { DomPopupView } from './popup-view.js';
 
-const recorderStatus: RecorderStatus = 'Idle';
-const statusElement = document.querySelector<HTMLElement>('[data-status]');
-
-if (statusElement === null) {
-  throw new Error('Recorder status element is missing.');
+class ChromePopupMessenger implements PopupMessenger {
+  send(command: RecorderCommand): Promise<unknown> {
+    return chrome.runtime.sendMessage(command);
+  }
 }
 
-statusElement.textContent = recorderStatus;
+const popupController = new PopupController(
+  new ChromePopupMessenger(),
+  new DomPopupView(document),
+);
+void popupController.initialize();
