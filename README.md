@@ -8,14 +8,15 @@ then run the approved workflow safely**.
 
 This repository contains the application foundation, framework-independent
 workflow and recording domain models, authenticated control-plane foundation,
-and durable local recorder artifacts created through Session 09. It provides buildable
+and recording-to-draft conversion created through Session 10. It provides buildable
 application shells, shared configuration and types, health checks, runtime
 workflow validation, local PostgreSQL development tooling, short-lived
 access-token authentication, organization-scoped workspaces, deterministic
 recorder state, privacy-bounded browser event capture, semantic locator
 ranking, deterministic privacy classification, redaction-plan contracts, a
-local recording outbox, and idempotent recording persistence. It does not yet
-generate or execute workflows or capture screenshots.
+local recording outbox, idempotent recording persistence, and deterministic
+draft workflow generation. It does not yet edit, publish, or execute workflows
+or capture screenshots.
 
 ## Browser-first MVP
 
@@ -27,19 +28,20 @@ general-purpose operating-system control are not part of the browser-first MVP.
 
 ## Workspaces
 
-| Workspace                   | Current purpose                                        |
-| --------------------------- | ------------------------------------------------------ |
-| `apps/web`                  | Next.js landing page and web health indicator          |
-| `apps/api`                  | NestJS auth, workspace, health, and recording sync API |
-| `apps/extension`            | Privacy-aware Manifest V3 browser interaction recorder |
-| `apps/local-runner`         | Node.js startup and health/status shell                |
-| `packages/shared-types`     | Shared service health contract                         |
-| `packages/workflow-schema`  | Versioned workflow contracts and runtime validation    |
-| `packages/locator-engine`   | Pure locator scoring, ranking, and confidence rules    |
-| `packages/privacy-engine`   | Pure privacy classification and redaction-plan rules   |
-| `packages/recording-schema` | Current recording artifact and sync protocol contracts |
-| `packages/database`         | Prisma identity, workflow, and recording persistence   |
-| `packages/config`           | Shared strict TypeScript and ESLint configuration      |
+| Workspace                      | Current purpose                                        |
+| ------------------------------ | ------------------------------------------------------ |
+| `apps/web`                     | Next.js landing page and web health indicator          |
+| `apps/api`                     | NestJS auth, workspace, health, and recording sync API |
+| `apps/extension`               | Privacy-aware Manifest V3 browser interaction recorder |
+| `apps/local-runner`            | Node.js startup and health/status shell                |
+| `packages/shared-types`        | Shared service health contract                         |
+| `packages/workflow-schema`     | Versioned workflow contracts and runtime validation    |
+| `packages/locator-engine`      | Pure locator scoring, ranking, and confidence rules    |
+| `packages/privacy-engine`      | Pure privacy classification and redaction-plan rules   |
+| `packages/recording-schema`    | Current recording artifact and sync protocol contracts |
+| `packages/recording-converter` | Pure recording-to-draft workflow conversion            |
+| `packages/database`            | Prisma identity, workflow, and recording persistence   |
+| `packages/config`              | Shared strict TypeScript and ESLint configuration      |
 
 The architectural direction is documented in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
@@ -228,3 +230,22 @@ requires a complete contiguous sequence.
 This session does not add extension login or token storage, production HTTP
 sync, automatic retries, a recording dashboard, raw-event reads, workflow
 conversion, screenshots, AI, or Playwright.
+
+## Session 10 scope
+
+Session 10 adds the framework-independent
+`@tasktwin/recording-converter`. It validates a completed artifact, preserves
+event order, converts supported interactions into draft workflow steps, and
+reports every unresolved or conservatively deduplicated event. Masked personal
+input creates required variables; replayable blocked passwords create only
+secret reference names. Checkbox and radio state use `setChecked`, never blind
+clicks.
+
+The control plane exposes an authenticated, organization-scoped endpoint that
+creates a Workflow, version 1 `draft` WorkflowVersion, and idempotent conversion
+receipt in one transaction. The source recording remains unchanged and the API
+returns only a safe summary.
+
+This session does not add an editor, publishing, Playwright execution, AI,
+screenshots, assertion or wait inference, locator repair, or local-runner
+behavior.

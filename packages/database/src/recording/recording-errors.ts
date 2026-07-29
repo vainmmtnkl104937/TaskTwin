@@ -5,6 +5,7 @@ export type RecordingRepositoryErrorCode =
   | 'RECORDING_CONFLICT'
   | 'BATCH_CONFLICT'
   | 'SESSION_COMPLETED'
+  | 'RECORDING_NOT_COMPLETED'
   | 'INCOMPLETE_RECORDING'
   | 'PERSISTED_RECORDING_INVALID'
   | 'SERIALIZATION_FAILURE';
@@ -16,6 +17,7 @@ const ERROR_MESSAGES = {
   RECORDING_CONFLICT: 'The recording session conflicts with stored data.',
   BATCH_CONFLICT: 'The recording batch conflicts with stored data.',
   SESSION_COMPLETED: 'The recording session is already completed.',
+  RECORDING_NOT_COMPLETED: 'The recording session is not completed.',
   INCOMPLETE_RECORDING: 'The recording session is incomplete.',
   PERSISTED_RECORDING_INVALID: 'The stored recording data is invalid.',
   SERIALIZATION_FAILURE: 'The recording operation could not be serialized.',

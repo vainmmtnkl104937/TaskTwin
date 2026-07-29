@@ -1,4 +1,7 @@
-import type { RecordingPrivacySummary } from '@tasktwin/recording-schema';
+import type {
+  RecordingArtifact,
+  RecordingPrivacySummary,
+} from '@tasktwin/recording-schema';
 
 import type {
   OrganizationRole,
@@ -52,4 +55,10 @@ export interface CompleteRecordingSessionResult {
   eventCount: number;
   lastSequence: number;
   idempotent: boolean;
+}
+
+export interface CompletedRecordingArtifactRecord {
+  recordingSessionId: string;
+  workspaceId: string;
+  artifact: RecordingArtifact;
 }

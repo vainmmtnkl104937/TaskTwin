@@ -6,6 +6,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { HealthController } from './health/health.controller.js';
 import { HealthService } from './health/health.service.js';
 import { RecordingSessionsModule } from './recording-sessions/recording-sessions.module.js';
+import { RecordingWorkflowDraftsModule } from './recording-workflow-drafts/recording-workflow-drafts.module.js';
 import { WorkspacesModule } from './workspaces/workspaces.module.js';
 
 @Module({
@@ -14,6 +15,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module.js';
     AuthorizationModule,
     DatabaseModule,
     RecordingSessionsModule,
+    RecordingWorkflowDraftsModule,
     WorkspacesModule,
   ],
   controllers: [HealthController],

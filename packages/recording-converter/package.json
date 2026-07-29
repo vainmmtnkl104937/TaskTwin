@@ -1,5 +1,5 @@
 {
-  "name": "@tasktwin/workflow-schema",
+  "name": "@tasktwin/recording-converter",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,9 +9,7 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./dist/index.js"
-    },
-    "./fixtures/valid-workflow.v1.json": "./fixtures/valid-workflow.v1.json",
-    "./fixtures/valid-set-checked-workflow.v1.json": "./fixtures/valid-set-checked-workflow.v1.json"
+    }
   },
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
@@ -20,6 +18,10 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@tasktwin/locator-engine": "workspace:*",
+    "@tasktwin/privacy-engine": "workspace:*",
+    "@tasktwin/recording-schema": "workspace:*",
+    "@tasktwin/workflow-schema": "workspace:*",
     "zod": "4.4.3"
   },
   "devDependencies": {

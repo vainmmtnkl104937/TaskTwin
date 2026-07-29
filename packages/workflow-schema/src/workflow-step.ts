@@ -40,6 +40,13 @@ export const SelectStepSchema = z.strictObject({
   value: ValueSourceSchema,
 });
 
+export const SetCheckedStepSchema = z.strictObject({
+  ...baseStepShape,
+  type: z.literal('setChecked'),
+  locator: ElementLocatorSchema,
+  checked: z.boolean(),
+});
+
 export const WaitStepSchema = z.strictObject({
   ...baseStepShape,
   type: z.literal('wait'),
@@ -90,6 +97,7 @@ export const WorkflowStepSchema = z.discriminatedUnion('type', [
   ClickStepSchema,
   FillStepSchema,
   SelectStepSchema,
+  SetCheckedStepSchema,
   WaitStepSchema,
   ExtractStepSchema,
   VerifyStepSchema,
@@ -100,6 +108,7 @@ export type NavigateStep = z.infer<typeof NavigateStepSchema>;
 export type ClickStep = z.infer<typeof ClickStepSchema>;
 export type FillStep = z.infer<typeof FillStepSchema>;
 export type SelectStep = z.infer<typeof SelectStepSchema>;
+export type SetCheckedStep = z.infer<typeof SetCheckedStepSchema>;
 export type WaitStep = z.infer<typeof WaitStepSchema>;
 export type TextExtractSource = z.infer<typeof TextExtractSourceSchema>;
 export type ValueExtractSource = z.infer<typeof ValueExtractSourceSchema>;
