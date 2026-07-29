@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MAX_INPUT_VALUE_LENGTH,
+  LegacyRecordingTimelineSchema,
   RecordingEventCandidateSchema,
   RecordingEventSchema,
   RecordingTimelineSchema,
   type RecordingEventCandidate,
   type RecordingTargetSnapshot,
 } from '../src/recorder/event-contracts.js';
+import { locatorBundleFixture } from './locator-fixture.js';
 
 const occurredAt = '2026-07-29T10:00:00.000Z';
 const sessionId = '57a1a7d4-5ada-4bc8-ac17-10c84746a567';
@@ -28,17 +30,19 @@ const target: RecordingTargetSnapshot = {
 
 const candidates = [
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     eventType: 'click',
     occurredAt,
     target,
+    locatorBundle: locatorBundleFixture,
     payload: { activation: 'primary' },
   },
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     eventType: 'text-input',
     occurredAt,
     target: { ...target, tagName: 'input', inputType: 'text' },
+    locatorBundle: locatorBundleFixture,
     payload: {
       masked: false,
       maskedReason: null,
@@ -47,10 +51,11 @@ const candidates = [
     },
   },
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     eventType: 'select',
     occurredAt,
     target: { ...target, tagName: 'select' },
+    locatorBundle: locatorBundleFixture,
     payload: {
       value: 'second',
       label: 'Second option',
@@ -58,17 +63,19 @@ const candidates = [
     },
   },
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     eventType: 'checkbox',
     occurredAt,
     target: { ...target, tagName: 'input', inputType: 'checkbox' },
+    locatorBundle: locatorBundleFixture,
     payload: { checked: true },
   },
   {
-    schemaVersion: 1,
+    schemaVersion: 2,
     eventType: 'radio',
     occurredAt,
     target: { ...target, tagName: 'input', inputType: 'radio' },
+    locatorBundle: locatorBundleFixture,
     payload: { checked: true, value: 'alpha', truncated: false },
   },
 ] satisfies RecordingEventCandidate[];
@@ -85,6 +92,19 @@ describe('recording event contracts', () => {
       RecordingEventCandidateSchema.safeParse({
         ...candidates[0],
         eventType: 'scroll',
+      }).success,
+    ).toBe(false);
+    expect(
+      RecordingEventCandidateSchema.safeParse({
+        ...candidates[0],
+        locatorBundle: {
+          ...locatorBundleFixture,
+          primary: {
+            ...locatorBundleFixture.primary,
+            matchCount: 2,
+            unique: false,
+          },
+        },
       }).success,
     ).toBe(false);
     expect(
@@ -149,7 +169,7 @@ describe('recording event contracts', () => {
       recordedAt: occurredAt,
     });
     const timeline = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       sessionId,
       nextSequence: 2,
       events: [event],
@@ -168,5 +188,35 @@ describe('recording event contracts', () => {
         events: [{ ...event, sequence: 2 }],
       }).success,
     ).toBe(false);
+  });
+
+  it('reads the previous timeline schema explicitly without accepting it for new writes', () => {
+    const legacyTimeline = {
+      schemaVersion: 1,
+      sessionId,
+      nextSequence: 2,
+      events: [
+        {
+          schemaVersion: 1,
+          eventType: 'click',
+          occurredAt,
+          target,
+          payload: { activation: 'primary' },
+          eventId,
+          sessionId,
+          sequence: 1,
+          tabId: 42,
+          origin: 'https://example.com',
+          recordedAt: occurredAt,
+        },
+      ],
+    };
+
+    expect(
+      LegacyRecordingTimelineSchema.safeParse(legacyTimeline).success,
+    ).toBe(true);
+    expect(RecordingTimelineSchema.safeParse(legacyTimeline).success).toBe(
+      false,
+    );
   });
 });

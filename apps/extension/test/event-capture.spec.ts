@@ -8,6 +8,7 @@ import {
   type RecordingCandidateEmitter,
   type TrustedEventPolicy,
 } from '../src/content/event-capture.js';
+import { DomLocatorBundleFactory } from '../src/content/locator-dom-adapter.js';
 import { ContentScriptController } from '../src/content-script-controller.js';
 import {
   createInitialRecordingState,
@@ -36,6 +37,7 @@ function createCapture(policy = trustedPolicy) {
     emitter,
     { now: () => timestamp },
     policy,
+    new DomLocatorBundleFactory(document),
   );
   captures.push(capture);
   return { candidates, capture, emitter };

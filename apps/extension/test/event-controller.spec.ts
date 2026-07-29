@@ -21,6 +21,7 @@ import {
   type RecordingEventSenderContext,
 } from '../src/recorder/event-controller.js';
 import { createRecordingTimeline } from '../src/recorder/timeline.js';
+import { locatorBundleFixture } from './locator-fixture.js';
 
 const timestamp = '2026-07-29T10:00:00.000Z';
 const sessionId = '57a1a7d4-5ada-4bc8-ac17-10c84746a567';
@@ -95,7 +96,7 @@ function createCandidateMessage() {
   return {
     type: 'recorder/event-candidate',
     candidate: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       eventType: 'click',
       occurredAt: timestamp,
       target: {
@@ -110,6 +111,7 @@ function createCandidateMessage() {
         textPreview: 'Save',
         testIdCandidates: [],
       },
+      locatorBundle: locatorBundleFixture,
       payload: { activation: 'primary' },
     },
   };
@@ -276,7 +278,7 @@ describe('RecordingEventController', () => {
         }) as RecordingEvent,
     );
     const fullTimeline: RecordingTimeline = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       sessionId,
       nextSequence: MAX_RECORDING_EVENTS + 1,
       events,

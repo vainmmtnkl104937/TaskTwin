@@ -14,14 +14,16 @@ change recorder state or assign accepted-event identity and ordering.
   candidates, and assigns the authoritative event envelope and sequence.
 - The dynamically injected content script validates state notifications and
   uses document-level delegated listeners while recording. It emits strict,
-  sanitized candidates for approved interaction types only.
+  sanitized candidates for approved interaction types only. Its DOM adapter
+  derives labels and accessible names, checks exact match counts, and creates a
+  bounded CSS fallback before pure locator ranking.
 - Pure recorder contracts, state-machine, and controller modules are isolated
   from Chrome APIs and covered by unit tests.
 
 ## Storage lifecycle
 
-Recorder state and the version 1 event timeline are stored under
-`tasktwin.recorder.session.v1` and `tasktwin.recorder.timeline.v1` in
+Recorder state and the version 2 event timeline are stored under
+`tasktwin.recorder.session.v1` and `tasktwin.recorder.timeline.v2` in
 `chrome.storage.session`. This survives popup closure and Manifest V3
 service-worker suspension, but is cleared when Chrome restarts or the extension
 is disabled, reloaded, or updated. The next state request then creates a fresh
@@ -35,6 +37,28 @@ explicit recorder error; events are never silently evicted or dropped.
 Storage remains limited to trusted extension contexts. The content script does
 not read Chrome storage directly. Storage failures return a safe typed error;
 malformed stored state is never trusted.
+
+The timeline loader can read the Session 06 `timeline.v1` key so the popup can
+summarize an existing browser-session recording after an extension update.
+New recordings always write v2. Legacy events are not upgraded because no
+current-document uniqueness check was recorded for them.
+
+## Semantic locators
+
+Every new event contains `LocatorBundle` version 1. The extension proposes
+allowlisted test IDs, role plus accessible name, associated label, stable ID,
+placeholder, stable name, short visible text, and bounded CSS observations.
+The pure locator engine retains only candidates that match exactly one current
+document element, then applies fixed scoring and tie-breaking rules. Semantic
+locators rank above CSS; dynamic identifiers, generated classes, deep or
+positional CSS, and long text reduce score. Confidence is deterministic, not
+AI-generated.
+
+The adapter reads no input value while generating locators. It stores no DOM
+node, HTML, arbitrary attribute, complete DOM path, cookie, URL, password, or
+OTP. Accessible-name extraction currently covers common native controls,
+explicit allowlisted ARIA roles, `aria-label`, `aria-labelledby`, associated
+labels, and short button/link text.
 
 ## Capture boundary
 
@@ -83,8 +107,9 @@ To verify manually, build the extension, run the fixture server, enable
 Developer mode at `chrome://extensions`, choose **Load unpacked**, and select
 `apps/extension/dist`. Open `http://127.0.0.1:4176`, then exercise click, input,
 select, checkbox, radio, pause, resume, and stop. Inspect
-`chrome.storage.session` from the extension service worker and confirm password
-and OTP text is absent. Starting on `chrome://extensions` must show a safe
+`chrome.storage.session` from the extension service worker. Confirm locator
+priority and uniqueness on each fixture example and confirm password and OTP
+text is absent. Starting on `chrome://extensions` must show a safe
 unsupported-page error.
 
 ## Current limitations
@@ -93,4 +118,6 @@ Dynamic injection does not automatically survive a page reload or cross-origin
 navigation. Recorder state and timeline are intentionally not retained across
 browser restarts and are not synchronized to the backend or local runner.
 Contenteditable controls, multi-selects, submit semantics, keyboard shortcuts,
-locators, workflow generation, and execution are not implemented.
+cross-origin iframes, closed shadow DOM, canvas, full accessibility-tree
+computation, locator replay, workflow generation, and execution are not
+implemented.

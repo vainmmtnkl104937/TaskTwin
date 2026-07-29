@@ -73,6 +73,19 @@ Session 06 records only the approved minimal interaction categories. It does
 not generate locators or workflows, sync events, execute actions, capture
 arbitrary attributes or DOM, or request broad host permissions.
 
+## Session 07: deterministic semantic locator engine
+
+- Framework-independent locator scoring, ranking, deduplication, and confidence
+- Extension DOM adapter for accessible names and current-document match counts
+- Unique semantic primary locators and unique bounded fallbacks
+- Deterministic dynamic-identifier penalties and rule-based explanations
+- Runtime-validated locator bundles on timeline schema version 2 events
+- Explicit read compatibility for Session 06 timeline version 1
+
+Session 07 ranks locators only. It does not replay them, generate workflow
+steps, synchronize recordings, repair production locators, or use AI,
+Playwright, screenshots, computer vision, XPath, or broad host permissions.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their
