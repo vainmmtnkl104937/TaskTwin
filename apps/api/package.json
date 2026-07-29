@@ -13,6 +13,7 @@
     "test:integration:auth": "vitest run test/auth.integration.spec.ts",
     "test:integration:conversion": "vitest run test/recording-conversion.integration.spec.ts",
     "test:integration:recording": "vitest run test/recording.integration.spec.ts",
+    "test:integration:workflow-editor": "vitest run test/workflow-editor.integration.spec.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -25,6 +26,8 @@
     "@tasktwin/recording-converter": "workspace:*",
     "@tasktwin/recording-schema": "workspace:*",
     "@tasktwin/shared-types": "workspace:*",
+    "@tasktwin/workflow-editor-core": "workspace:*",
+    "@tasktwin/workflow-schema": "workspace:*",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",
     "reflect-metadata": "0.2.2",
@@ -35,7 +38,6 @@
     "@nestjs/cli": "11.0.24",
     "@nestjs/testing": "11.1.28",
     "@tasktwin/config": "workspace:*",
-    "@tasktwin/workflow-schema": "workspace:*",
     "@types/node": "22.19.1",
     "@types/supertest": "7.2.1",
     "eslint": "9.39.5",

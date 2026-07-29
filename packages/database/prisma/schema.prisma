@@ -110,6 +110,7 @@ model WorkflowVersion {
   id                  String                       @id @default(uuid()) @db.Uuid
   workflowId          String                       @map("workflow_id")
   version             Int
+  revision            Int                          @default(1)
   status              WorkflowLifecycleStatus
   schemaVersion       Int                          @map("schema_version")
   definition          Json                         @db.JsonB

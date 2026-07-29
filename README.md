@@ -8,15 +8,16 @@ then run the approved workflow safely**.
 
 This repository contains the application foundation, framework-independent
 workflow and recording domain models, authenticated control-plane foundation,
-and recording-to-draft conversion created through Session 10. It provides buildable
+and authenticated draft editor created through Session 11. It provides buildable
 application shells, shared configuration and types, health checks, runtime
 workflow validation, local PostgreSQL development tooling, short-lived
 access-token authentication, organization-scoped workspaces, deterministic
 recorder state, privacy-bounded browser event capture, semantic locator
 ranking, deterministic privacy classification, redaction-plan contracts, a
 local recording outbox, idempotent recording persistence, and deterministic
-draft workflow generation. It does not yet edit, publish, or execute workflows
-or capture screenshots.
+draft workflow generation, linear draft visualization, immutable editing
+operations, and revision-protected draft saving. It does not publish or execute
+workflows or capture screenshots.
 
 ## Browser-first MVP
 
@@ -28,20 +29,21 @@ general-purpose operating-system control are not part of the browser-first MVP.
 
 ## Workspaces
 
-| Workspace                      | Current purpose                                        |
-| ------------------------------ | ------------------------------------------------------ |
-| `apps/web`                     | Next.js landing page and web health indicator          |
-| `apps/api`                     | NestJS auth, workspace, health, and recording sync API |
-| `apps/extension`               | Privacy-aware Manifest V3 browser interaction recorder |
-| `apps/local-runner`            | Node.js startup and health/status shell                |
-| `packages/shared-types`        | Shared service health contract                         |
-| `packages/workflow-schema`     | Versioned workflow contracts and runtime validation    |
-| `packages/locator-engine`      | Pure locator scoring, ranking, and confidence rules    |
-| `packages/privacy-engine`      | Pure privacy classification and redaction-plan rules   |
-| `packages/recording-schema`    | Current recording artifact and sync protocol contracts |
-| `packages/recording-converter` | Pure recording-to-draft workflow conversion            |
-| `packages/database`            | Prisma identity, workflow, and recording persistence   |
-| `packages/config`              | Shared strict TypeScript and ESLint configuration      |
+| Workspace                       | Current purpose                                        |
+| ------------------------------- | ------------------------------------------------------ |
+| `apps/web`                      | Next.js login, workspace list, and draft editor        |
+| `apps/api`                      | NestJS control-plane APIs                              |
+| `apps/extension`                | Privacy-aware Manifest V3 browser interaction recorder |
+| `apps/local-runner`             | Node.js startup and health/status shell                |
+| `packages/shared-types`         | Shared service health contract                         |
+| `packages/workflow-schema`      | Versioned workflow contracts and runtime validation    |
+| `packages/locator-engine`       | Pure locator scoring, ranking, and confidence rules    |
+| `packages/privacy-engine`       | Pure privacy classification and redaction-plan rules   |
+| `packages/recording-schema`     | Current recording artifact and sync protocol contracts |
+| `packages/recording-converter`  | Pure recording-to-draft workflow conversion            |
+| `packages/workflow-editor-core` | Pure immutable draft editing and linear graph model    |
+| `packages/database`             | Prisma identity, workflow, and recording persistence   |
+| `packages/config`               | Shared strict TypeScript and ESLint configuration      |
 
 The architectural direction is documented in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
@@ -95,6 +97,7 @@ The API also requires `JWT_ACCESS_SECRET` (at least 32 characters).
 
 ```shell
 pnpm auth:check
+pnpm workflow-editor:check
 ```
 
 Useful development commands:
@@ -249,3 +252,21 @@ returns only a safe summary.
 This session does not add an editor, publishing, Playwright execution, AI,
 screenshots, assertion or wait inference, locator repair, or local-runner
 behavior.
+
+## Session 11 scope
+
+Session 11 adds an authenticated web bridge and the first draft workflow
+editor. The short-lived API access token stays in an HTTP-only cookie and is
+used only at Next.js server boundaries. Authorized users can list workflows,
+inspect one version, visualize its ordered steps, edit supported safe fields,
+add Wait or Approval, reorder or remove steps, validate the complete
+definition, and save explicitly.
+
+`WorkflowDefinition.steps` remains the sole execution-order source. React Flow
+is a fixed visualization and selection surface. Draft saves use a database
+revision separate from the workflow version; a stale revision returns HTTP 409
+without replacing local or persisted newer changes. VIEWER remains read-only.
+
+Session 11 does not publish workflows, create new versions, edit locators,
+manage secrets or advanced variables, repair workflows, execute browser
+actions, use AI, or add Playwright.

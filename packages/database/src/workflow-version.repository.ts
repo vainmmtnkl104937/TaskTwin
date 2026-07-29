@@ -6,6 +6,7 @@ export interface PersistedWorkflowVersion {
   id: string;
   workflowId: string;
   version: number;
+  revision: number;
   status: 'draft' | 'published' | 'archived';
   schemaVersion: number;
   definition: Prisma.JsonValue;

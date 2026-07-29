@@ -1,6 +1,6 @@
 export default function HomePage() {
   return (
-    <main>
+    <main className="landing-page">
       <section className="landing-card" aria-labelledby="product-name">
         <p className="eyebrow">Local-first browser automation</p>
         <h1 id="product-name">TaskTwin</h1>

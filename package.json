@@ -30,6 +30,7 @@
     "format:check": "prettier --check .",
     "lint": "turbo run lint",
     "recording:check": "pnpm --filter @tasktwin/api test:integration:recording",
+    "workflow-editor:check": "pnpm --filter @tasktwin/api test:integration:workflow-editor",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },

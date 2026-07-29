@@ -368,6 +368,39 @@ never accepted from the request. The unique
 idempotency, and Workflow, WorkflowVersion, and receipt share one serializable
 transaction.
 
+## Draft workflow editor
+
+`@tasktwin/workflow-editor-core` contains pure immutable transformations over a
+version 1 `WorkflowDefinition`. It has no React, Next.js, NestJS, Prisma, DOM,
+or browser dependency. Callers provide IDs for inserted steps. The package
+derives a deterministic linear node-and-edge projection, but
+`WorkflowDefinition.steps` array order remains the only execution-order
+authority.
+
+The web editor uses React Flow only to display and select that projection.
+Nodes cannot be dragged into a different execution order and arbitrary
+connections, branches, loops, and conditional edges are disabled. Locators are
+presented through safe summaries and remain read-only.
+
+The browser sends authentication credentials only to a Next.js Server Action.
+That boundary calls the NestJS login endpoint and stores the returned
+short-lived access token in an HTTP-only, SameSite cookie. Client JavaScript
+does not receive the token, and authenticated control-plane calls use an
+explicit server-only route list rather than a general proxy.
+
+Workflow version number and draft revision have different meanings. Version
+identifies the immutable workflow-version lineage; revision is an optimistic
+concurrency counter for the current draft. Saving requires the expected
+revision. The database transaction scopes the row through current organization
+membership, checks DRAFT status and immutable identity fields, conditionally
+updates by expected revision, increments it atomically, and synchronizes
+Workflow name and description. A stale request receives HTTP 409 and cannot
+overwrite newer data.
+
+OWNER, ADMIN, MEMBER, and VIEWER may read. Only OWNER, ADMIN, and MEMBER may
+write a draft. Published and archived definitions remain immutable through the
+editor API.
+
 ## Safety and trust boundaries
 
 - The extension uses temporary active-tab access and has no broad host

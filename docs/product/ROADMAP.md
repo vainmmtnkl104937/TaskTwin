@@ -133,6 +133,21 @@ Session 10 converts completed recordings into version 1 draft workflows. It
 does not add workflow editing, publishing, execution, Playwright, AI,
 screenshots, locator repair, wait/assertion inference, or local-runner changes.
 
+## Session 11: authenticated draft workflow editor
+
+- Framework-independent immutable workflow editor operations
+- HTTP-only web authentication bridge to the existing control plane
+- Workspace workflow list and version detail reads
+- Fixed linear React Flow visualization driven by `steps` array order
+- Safe draft property editing with locator and secret boundaries
+- Explicit validation and save behavior
+- Database-backed draft revision and optimistic concurrency
+- OWNER, ADMIN, and MEMBER writes with VIEWER read-only access
+
+Session 11 deliberately excludes publishing, workflow-version creation,
+branching, arbitrary graph connections, advanced variables, locator repair,
+collaboration, auto-save, execution, Playwright, AI, and refresh tokens.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their
