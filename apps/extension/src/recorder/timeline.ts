@@ -11,7 +11,7 @@ import {
 
 export function createRecordingTimeline(sessionId: string): RecordingTimeline {
   return RecordingTimelineSchema.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     sessionId,
     nextSequence: 1,
     events: [],

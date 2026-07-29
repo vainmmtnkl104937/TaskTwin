@@ -190,7 +190,7 @@ describe('RecorderController', () => {
     expect(contentScript.prepare).toHaveBeenCalledWith(42);
     expect(timelineStore.saves).toEqual([
       {
-        schemaVersion: 2,
+        schemaVersion: 3,
         sessionId,
         nextSequence: 1,
         events: [],

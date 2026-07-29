@@ -86,6 +86,22 @@ Session 07 ranks locators only. It does not replay them, generate workflow
 steps, synchronize recordings, repair production locators, or use AI,
 Playwright, screenshots, computer vision, XPath, or broad host permissions.
 
+## Session 08: deterministic privacy and redaction-plan foundation
+
+- Framework-independent sensitivity classification and policy resolution
+- Strict version 1 privacy decisions and settings
+- Bounded English and explicit Vietnamese privacy rules
+- Personal-data masking by default and non-weakenable blocked categories
+- Recording-value, target-snapshot, and locator-text sanitization
+- JSON-serializable viewport redaction plans with deterministic geometry
+- Local runtime-validated privacy settings and optional fixture preview
+
+Session 08 creates only the classification, sanitization, geometry, and local
+preview boundaries. It does not capture, persist, upload, or synchronize
+screenshots; scan free-form page content; use OCR, computer vision, or AI;
+claim complete PII detection or compliance certification; generate workflows;
+or execute Playwright.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

@@ -8,12 +8,13 @@ then run the approved workflow safely**.
 
 This repository contains the application foundation, framework-independent
 workflow domain model, authenticated control-plane foundation, and extension
-recorder timeline created through Session 06. It provides buildable
+recorder timeline created through Session 08. It provides buildable
 application shells, shared configuration and types, health checks, runtime
 workflow validation, local PostgreSQL development tooling, short-lived
 access-token authentication, organization-scoped workspaces, deterministic
-recorder state, privacy-bounded browser event capture, and deterministic
-semantic locator ranking. It does not yet generate or execute workflows.
+recorder state, privacy-bounded browser event capture, semantic locator
+ranking, deterministic privacy classification, and redaction-plan contracts.
+It does not yet generate or execute workflows or capture screenshots.
 
 ## Browser-first MVP
 
@@ -29,11 +30,12 @@ general-purpose operating-system control are not part of the browser-first MVP.
 | -------------------------- | -------------------------------------------------------- |
 | `apps/web`                 | Next.js landing page and web health indicator            |
 | `apps/api`                 | NestJS health, authentication, and workspace endpoints   |
-| `apps/extension`           | Manifest V3 recorder state and bounded event timeline    |
+| `apps/extension`           | Privacy-aware Manifest V3 browser interaction recorder   |
 | `apps/local-runner`        | Node.js startup and health/status shell                  |
 | `packages/shared-types`    | Shared service health contract                           |
 | `packages/workflow-schema` | Versioned workflow contracts and runtime validation      |
 | `packages/locator-engine`  | Pure locator scoring, ranking, and confidence rules      |
+| `packages/privacy-engine`  | Pure privacy classification and redaction-plan rules     |
 | `packages/database`        | Prisma client, identity, workspace, workflow persistence |
 | `packages/config`          | Shared strict TypeScript and ESLint configuration        |
 
@@ -190,3 +192,19 @@ The event timeline writes schema version 2 while retaining explicit read
 compatibility with Session 06 timeline version 1. This session does not create
 workflow steps, replay locators, use Playwright or AI, synchronize with the
 backend, or repair locators.
+
+## Session 08 scope
+
+Session 08 adds the framework-independent privacy engine, deterministic
+sensitivity classification, allow/mask/block policy resolution, and strict
+privacy decisions. Personal values are masked by default; authentication,
+financial, identity, and health values are blocked and cannot be enabled by
+settings. Recording targets and locator text are sanitized while safe
+structural identifiers remain available.
+
+The extension stores runtime-validated privacy settings locally and can build
+a normalized, viewport-clamped, bounded redaction plan from visible supported
+controls. A removable non-interactive preview is available for local fixture
+development. This session does not capture or persist screenshots, scan the
+complete page, use OCR or AI, synchronize artifacts, claim complete PII
+detection, generate workflows, or execute Playwright.

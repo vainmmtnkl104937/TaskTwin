@@ -9,6 +9,7 @@ import {
   type LocatorBundle,
   type LocatorObservation,
 } from '@tasktwin/locator-engine';
+import { containsSensitiveLiteral } from '@tasktwin/privacy-engine';
 
 const TEST_ID_ATTRIBUTES = [
   'data-testid',
@@ -40,12 +41,13 @@ function cssString(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-function countElements(
+function countRelevantElements(
   document: Document,
+  selector: string,
   predicate: (element: Element) => boolean,
 ): number {
   let count = 0;
-  for (const element of document.querySelectorAll('*')) {
+  for (const element of document.querySelectorAll(selector)) {
     if (predicate(element)) {
       count += 1;
     }
@@ -141,6 +143,7 @@ function stableClass(element: Element): string | null {
       token.length <= 64 &&
       /^[a-zA-Z_-][a-zA-Z0-9_-]*$/.test(token) &&
       isStable(token) &&
+      !containsSensitiveLiteral(token) &&
       !looksLikeGeneratedClass(`.${token}`)
     ) {
       return token;
@@ -215,13 +218,14 @@ export class DomLocatorBundleFactory {
         element.getAttribute(attribute) ?? '',
         MAX_TEST_ID_LENGTH,
       );
-      if (value === null) continue;
+      if (value === null || containsSensitiveLiteral(value)) continue;
       observations.push(
         observation(
           { kind: 'testId', attribute, value },
           'testId',
-          countElements(
+          countRelevantElements(
             this.document,
+            `[${attribute}]`,
             (candidate) => candidate.getAttribute(attribute) === value,
           ),
           value,
@@ -231,13 +235,14 @@ export class DomLocatorBundleFactory {
 
     const role = implicitRole(element);
     const name = accessibleName(element);
-    if (role !== null && name !== null) {
+    if (role !== null && name !== null && !containsSensitiveLiteral(name)) {
       observations.push(
         observation(
           { kind: 'role', role, name, exact: true },
           'role',
-          countElements(
+          countRelevantElements(
             this.document,
+            'button, a[href], input, select, textarea, [role]',
             (candidate) =>
               implicitRole(candidate) === role &&
               accessibleName(candidate) === name,
@@ -248,13 +253,14 @@ export class DomLocatorBundleFactory {
     }
 
     const label = labelText(element);
-    if (label !== null) {
+    if (label !== null && !containsSensitiveLiteral(label)) {
       observations.push(
         observation(
           { kind: 'label', value: label, exact: true },
           'label',
-          countElements(
+          countRelevantElements(
             this.document,
+            'input, select, textarea',
             (candidate) => labelText(candidate) === label,
           ),
           label,
@@ -263,7 +269,7 @@ export class DomLocatorBundleFactory {
     }
 
     const id = normalize(element.id, MAX_LOCATOR_VALUE_LENGTH);
-    if (id !== null) {
+    if (id !== null && !containsSensitiveLiteral(id)) {
       const selector = `[id="${cssString(id)}"]`;
       observations.push(
         observation(
@@ -283,13 +289,14 @@ export class DomLocatorBundleFactory {
         element.placeholder,
         MAX_LOCATOR_VALUE_LENGTH,
       );
-      if (placeholder !== null) {
+      if (placeholder !== null && !containsSensitiveLiteral(placeholder)) {
         observations.push(
           observation(
             { kind: 'placeholder', value: placeholder, exact: true },
             'placeholder',
-            countElements(
+            countRelevantElements(
               this.document,
+              'input, textarea',
               (candidate) =>
                 (candidate instanceof HTMLInputElement ||
                   candidate instanceof HTMLTextAreaElement) &&
@@ -306,7 +313,7 @@ export class DomLocatorBundleFactory {
       element.getAttribute('name') ?? '',
       MAX_LOCATOR_VALUE_LENGTH,
     );
-    if (nameAttribute !== null) {
+    if (nameAttribute !== null && !containsSensitiveLiteral(nameAttribute)) {
       const selector = `[name="${cssString(nameAttribute)}"]`;
       observations.push(
         observation(
@@ -322,13 +329,14 @@ export class DomLocatorBundleFactory {
       role !== null && TEXT_ROLES.has(role)
         ? normalize(element.textContent ?? '', MAX_VISIBLE_TEXT_LENGTH)
         : null;
-    if (visibleText !== null) {
+    if (visibleText !== null && !containsSensitiveLiteral(visibleText)) {
       observations.push(
         observation(
           { kind: 'text', value: visibleText, exact: true },
           'text',
-          countElements(
+          countRelevantElements(
             this.document,
+            'button, a[href], [role="button"], [role="link"]',
             (candidate) =>
               TEXT_ROLES.has(implicitRole(candidate) ?? '') &&
               normalize(

@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ContentScriptController,
   type EventCaptureLifecycle,
+  type PrivacyPreviewLifecycle,
+  type PrivacySettingsStore,
 } from '../src/content-script-controller.js';
 import {
   createInitialRecordingState,
@@ -46,12 +48,30 @@ function createRecordingNotification() {
 describe('ContentScriptController', () => {
   function createController() {
     const capture = {
+      configurePrivacy: vi.fn(),
       start: vi.fn(),
       stopWithoutFlush: vi.fn(),
       suspendAndFlush: vi.fn().mockResolvedValue(true),
       isCapturing: vi.fn().mockReturnValue(true),
     } satisfies EventCaptureLifecycle;
-    return { capture, controller: new ContentScriptController(capture) };
+    const settings = {
+      load: vi.fn().mockResolvedValue({
+        schemaVersion: 1,
+        personalDataPolicy: 'mask',
+        redactAllTextInputs: false,
+        showRedactionPreview: false,
+      }),
+    } satisfies PrivacySettingsStore;
+    const preview = {
+      activate: vi.fn(),
+      clear: vi.fn(),
+    } satisfies PrivacyPreviewLifecycle;
+    return {
+      capture,
+      settings,
+      preview,
+      controller: new ContentScriptController(capture, settings, preview),
+    };
   }
 
   it('validates and acknowledges state notifications', async () => {
@@ -64,8 +84,30 @@ describe('ContentScriptController', () => {
       receivedStatus: 'recording',
     });
     expect(capture.start).toHaveBeenCalledOnce();
+    expect(capture.configurePrivacy).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      personalDataPolicy: 'mask',
+      redactAllTextInputs: false,
+      showRedactionPreview: false,
+    });
     expect(controller.isRecorderActive()).toBe(true);
     expect(controller.getStatus()).toBe('recording');
+  });
+
+  it('restores validated settings and limits preview activation to recording state', async () => {
+    const { controller, preview, settings } = createController();
+    await controller.handle(createRecordingNotification());
+
+    expect(settings.load).toHaveBeenCalledOnce();
+    expect(preview.activate).toHaveBeenCalledOnce();
+
+    await controller.handle({
+      type: 'recorder/state-changed',
+      state: createInitialRecordingState(timestamp),
+    });
+
+    expect(preview.clear).toHaveBeenCalledOnce();
+    expect(preview.activate).toHaveBeenCalledOnce();
   });
 
   it('rejects malformed messages without changing its active state', async () => {
