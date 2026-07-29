@@ -7,11 +7,11 @@ then run the approved workflow safely**.
 > Show it once. Review the plan. Run it safely.
 
 This repository contains the application foundation, framework-independent
-workflow domain model, and initial control-plane persistence foundation created
-through Session 03. It provides buildable application shells, shared
+workflow domain model, and authenticated control-plane foundation created
+through Session 04. It provides buildable application shells, shared
 configuration and types, health checks, runtime workflow validation, local
-PostgreSQL development tooling, and architecture documentation. It does not
-yet record or execute workflows.
+PostgreSQL development tooling, short-lived access-token authentication, and
+organization-scoped workspaces. It does not yet record or execute workflows.
 
 ## Browser-first MVP
 
@@ -23,16 +23,16 @@ general-purpose operating-system control are not part of the browser-first MVP.
 
 ## Workspaces
 
-| Workspace                  | Current purpose                                           |
-| -------------------------- | --------------------------------------------------------- |
-| `apps/web`                 | Next.js landing page and web health indicator             |
-| `apps/api`                 | NestJS API and database readiness health endpoints        |
-| `apps/extension`           | Manifest V3 popup shell with disabled recorder controls   |
-| `apps/local-runner`        | Node.js startup and health/status shell                   |
-| `packages/shared-types`    | Shared service health contract                            |
-| `packages/workflow-schema` | Versioned workflow contracts and runtime validation       |
-| `packages/database`        | Prisma client and validated workflow persistence boundary |
-| `packages/config`          | Shared strict TypeScript and ESLint configuration         |
+| Workspace                  | Current purpose                                          |
+| -------------------------- | -------------------------------------------------------- |
+| `apps/web`                 | Next.js landing page and web health indicator            |
+| `apps/api`                 | NestJS health, authentication, and workspace endpoints   |
+| `apps/extension`           | Manifest V3 popup shell with disabled recorder controls  |
+| `apps/local-runner`        | Node.js startup and health/status shell                  |
+| `packages/shared-types`    | Shared service health contract                           |
+| `packages/workflow-schema` | Versioned workflow contracts and runtime validation      |
+| `packages/database`        | Prisma client, identity, workspace, workflow persistence |
+| `packages/config`          | Shared strict TypeScript and ESLint configuration        |
 
 The architectural direction is documented in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
@@ -80,6 +80,14 @@ pnpm db:check
 explicit integration test that requires the database and applied migration;
 normal `pnpm test` does not require Docker.
 
+The API also requires `JWT_ACCESS_SECRET` (at least 32 characters).
+`JWT_ACCESS_EXPIRES_IN` is an optional lifetime in seconds from 60 through
+3600 and defaults to 900. To run the opt-in authentication/database e2e check:
+
+```shell
+pnpm auth:check
+```
+
 Useful development commands:
 
 ```shell
@@ -113,8 +121,6 @@ explicitly excludes authentication, databases, queues, browser recording,
 workflow execution, Playwright, AI integration, deployment, CI/CD, Docker,
 React Flow, and business data models.
 
-No credentials or secrets are required by the current repository.
-
 ## Session 02 scope
 
 Session 02 defines the JSON-serializable version 1 workflow contract, including
@@ -130,3 +136,16 @@ the `Workflow` and immutable `WorkflowVersion` persistence models, runtime
 workflow validation before writes, and `GET /health/database`. It does not add
 workflow CRUD endpoints, authentication, users, execution, recording, queues,
 cloud deployment, or application containers.
+
+## Session 04 scope
+
+Session 04 adds email/password registration and login, short-lived JWT access
+tokens, `GET /auth/me`, organization ownership, default workspaces, and
+membership-scoped `GET /workspaces`. Registration creates the user,
+organization, OWNER membership, and default workspace atomically. Passwords
+are hashed with Argon2id and password hashes are never exposed by API response
+mappers.
+
+This session does not add refresh tokens, logout, password recovery, email
+verification, invitations, organization or workspace CRUD, workflow CRUD, UI
+authentication, browser automation, or production deployment.

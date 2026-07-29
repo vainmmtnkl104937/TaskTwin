@@ -27,10 +27,11 @@ describe('WorkflowVersionRepository', () => {
       createdAt: new Date('2026-07-29T00:00:00.000Z'),
       updatedAt: new Date('2026-07-29T00:00:00.000Z'),
     };
+    const findUnique = vi.fn().mockResolvedValue(null);
     const upsert = vi.fn().mockResolvedValue(undefined);
     const create = vi.fn().mockResolvedValue(persistedVersion);
     const transactionClient = {
-      workflow: { upsert },
+      workflow: { findUnique, upsert },
       workflowVersion: { create },
     } as unknown as Prisma.TransactionClient;
     const transaction = vi
@@ -47,10 +48,17 @@ describe('WorkflowVersionRepository', () => {
     } as unknown as PrismaClient;
     const repository = new WorkflowVersionRepository(prisma);
 
-    await expect(repository.create(definition)).resolves.toEqual(
-      persistedVersion,
-    );
+    await expect(
+      repository.create('7778ece0-8fa8-4ce7-9961-c08444ac57fc', definition),
+    ).resolves.toEqual(persistedVersion);
     expect(upsert).toHaveBeenCalledOnce();
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          workspaceId: '7778ece0-8fa8-4ce7-9961-c08444ac57fc',
+        }),
+      }),
+    );
     expect(create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         workflowId: 'exampleCheckout',
@@ -68,12 +76,45 @@ describe('WorkflowVersionRepository', () => {
     const repository = new WorkflowVersionRepository(prisma);
 
     await expect(
-      repository.create({
+      repository.create('7778ece0-8fa8-4ce7-9961-c08444ac57fc', {
         schemaVersion: 1,
         workflowId: 'invalid-workflow',
       }),
     ).rejects.toThrow();
     expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('refuses to move an existing workflow across workspaces', async () => {
+    const definition = await readValidWorkflowFixture();
+    const upsert = vi.fn();
+    const create = vi.fn();
+    const transactionClient = {
+      workflow: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValue({ workspaceId: 'existing-workspace' }),
+        upsert,
+      },
+      workflowVersion: { create },
+    } as unknown as Prisma.TransactionClient;
+    const transaction = vi
+      .fn()
+      .mockImplementation(
+        async (
+          operation: (
+            client: Prisma.TransactionClient,
+          ) => Promise<PersistedVersionResult>,
+        ) => operation(transactionClient),
+      );
+    const repository = new WorkflowVersionRepository({
+      $transaction: transaction,
+    } as unknown as PrismaClient);
+
+    await expect(
+      repository.create('different-workspace', definition),
+    ).rejects.toThrow('Workflow belongs to a different workspace');
+    expect(upsert).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
   });
 });
 
