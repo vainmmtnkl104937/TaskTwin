@@ -183,7 +183,7 @@ describe('document-level recording event capture', () => {
     expect(candidates).toHaveLength(1);
     expect(candidates[0]).toMatchObject({
       eventType: 'text-input',
-      payload: { masked: false, value: 'TaskTwin' },
+      payload: { capturePolicy: 'allow', value: 'TaskTwin' },
     });
   });
 
@@ -236,7 +236,7 @@ describe('document-level recording event capture', () => {
     },
   );
 
-  it('never emits password or one-time-code plaintext', async () => {
+  it('blocks password and one-time-code plaintext before message emission', async () => {
     document.body.innerHTML = `
       <input id="password" type="password" autocomplete="current-password" />
       <input id="otp" type="text" autocomplete="one-time-code" />
@@ -258,20 +258,144 @@ describe('document-level recording event capture', () => {
     expect(candidates).toHaveLength(2);
     expect(candidates.map((event) => event.payload)).toEqual([
       {
-        masked: true,
-        maskedReason: 'password',
-        value: null,
-        truncated: false,
+        capturePolicy: 'block',
       },
       {
-        masked: true,
-        maskedReason: 'one-time-code',
-        value: null,
-        truncated: false,
+        capturePolicy: 'block',
       },
     ]);
     expect(JSON.stringify(candidates)).not.toContain('password-plaintext');
     expect(JSON.stringify(candidates)).not.toContain('123456');
+  });
+
+  it('masks personal email and phone values by default', async () => {
+    document.body.innerHTML = `
+      <label>Email address <input id="email" type="email" autocomplete="email"></label>
+      <label>Phone number <input id="phone" type="tel" autocomplete="tel"></label>
+    `;
+    const email = document.querySelector<HTMLInputElement>('#email');
+    const phone = document.querySelector<HTMLInputElement>('#phone');
+    const { candidates, capture } = createCapture();
+    capture.start();
+
+    if (email === null || phone === null) {
+      throw new Error('Expected personal inputs');
+    }
+    email.value = ['fixture.person', 'example.test'].join('@');
+    phone.value = ['+84', '912', '345', '678'].join(' ');
+    dispatchInput(email);
+    dispatchInput(phone);
+    await vi.advanceTimersByTimeAsync(INPUT_DEBOUNCE_MS);
+
+    expect(candidates.map((candidate) => candidate.payload)).toEqual([
+      { capturePolicy: 'mask', value: null, truncated: false },
+      { capturePolicy: 'mask', value: null, truncated: false },
+    ]);
+    const serialized = JSON.stringify(candidates);
+    expect(serialized).not.toContain(email.value);
+    expect(serialized).not.toContain(phone.value);
+  });
+
+  it('stores a bounded personal value only when the supported setting allows it', async () => {
+    document.body.innerHTML =
+      '<label>Email address <input id="email" type="email" autocomplete="email"></label>';
+    const email = document.querySelector<HTMLInputElement>('#email');
+    const { candidates, capture } = createCapture();
+    capture.configurePrivacy({
+      schemaVersion: 1,
+      personalDataPolicy: 'allow',
+      redactAllTextInputs: false,
+      showRedactionPreview: false,
+    });
+    capture.start();
+
+    if (email === null) {
+      throw new Error('Expected email input');
+    }
+    email.value = ['allowed.person', 'example.test'].join('@');
+    dispatchInput(email);
+    await vi.advanceTimersByTimeAsync(INPUT_DEBOUNCE_MS);
+
+    expect(candidates[0]).toMatchObject({
+      privacyDecision: { sensitivity: 'personal', policy: 'allow' },
+      payload: {
+        capturePolicy: 'allow',
+        value: email.value,
+        truncated: false,
+      },
+    });
+  });
+
+  it.each([
+    {
+      label: 'financial',
+      input:
+        '<label>Card number <input name="cardNumber" autocomplete="cc-number"></label>',
+    },
+    {
+      label: 'identity',
+      input: '<label>Citizen ID <input name="citizenId"></label>',
+    },
+    {
+      label: 'health',
+      input: '<label>Medical condition <input name="medicalCondition"></label>',
+    },
+  ] as const)(
+    'blocks $label values without serializing them',
+    async ({ input }) => {
+      document.body.innerHTML = input;
+      const element = document.querySelector<HTMLInputElement>('input');
+      const { candidates, capture } = createCapture();
+      capture.start();
+
+      if (element === null) {
+        throw new Error('Expected sensitive input');
+      }
+      element.value = ['sensitive', 'fixture', 'value'].join('-');
+      dispatchInput(element);
+      await vi.advanceTimersByTimeAsync(INPUT_DEBOUNCE_MS);
+
+      expect(candidates[0]?.payload).toEqual({ capturePolicy: 'block' });
+      expect(JSON.stringify(candidates)).not.toContain(element.value);
+    },
+  );
+
+  it('removes sensitive target and locator text while preserving a safe test ID', () => {
+    const sensitiveAddress = ['fixture.person', 'example.test'].join('@');
+    document.body.innerHTML = `
+      <button data-testid="privacy-safe-structural-id">
+        Contact ${sensitiveAddress}
+      </button>
+    `;
+    const button = document.querySelector('button');
+    const { candidates, capture } = createCapture();
+    capture.start();
+
+    button?.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, button: 0, composed: true }),
+    );
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({
+      target: {
+        textPreview: null,
+        testIdCandidates: [
+          {
+            attribute: 'data-testid',
+            value: 'privacy-safe-structural-id',
+          },
+        ],
+      },
+      locatorBundle: {
+        primary: {
+          locator: {
+            kind: 'testId',
+            value: 'privacy-safe-structural-id',
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(candidates)).not.toContain(sensitiveAddress);
   });
 
   it('ignores hidden and file inputs', async () => {
@@ -337,17 +461,28 @@ describe('document-level recording event capture', () => {
       'radio',
     ]);
     expect(candidates[0]?.payload).toEqual({
+      capturePolicy: 'allow',
       value: 'second',
       label: 'Second option',
       truncated: false,
     });
     expect(candidates.slice(1, 3).map((event) => event.payload)).toEqual([
-      { checked: true },
-      { checked: false },
+      { capturePolicy: 'allow', checked: true },
+      { capturePolicy: 'allow', checked: false },
     ]);
     expect(candidates.slice(3).map((event) => event.payload)).toEqual([
-      { checked: true, value: 'alpha', truncated: false },
-      { checked: true, value: 'beta', truncated: false },
+      {
+        capturePolicy: 'allow',
+        checked: true,
+        value: 'alpha',
+        truncated: false,
+      },
+      {
+        capturePolicy: 'allow',
+        checked: true,
+        value: 'beta',
+        truncated: false,
+      },
     ]);
   });
 

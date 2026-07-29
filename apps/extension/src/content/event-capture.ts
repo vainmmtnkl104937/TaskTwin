@@ -1,4 +1,13 @@
 import type { LocatorBundle } from '@tasktwin/locator-engine';
+import {
+  classifyPrivacy,
+  DEFAULT_PRIVACY_SETTINGS,
+  PrivacySettingsSchema,
+  sanitizeCapturedValue,
+  sanitizePersistedText,
+  type PrivacyDecision,
+  type PrivacySettings,
+} from '@tasktwin/privacy-engine';
 
 import {
   MAX_CONTROL_VALUE_LENGTH,
@@ -7,10 +16,10 @@ import {
   MAX_TEXT_PREVIEW_LENGTH,
   RecordingEventCandidateSchema,
   RecordingTargetSnapshotSchema,
-  type MaskedInputReason,
   type RecordingEventCandidate,
   type RecordingTargetSnapshot,
 } from '../recorder/event-contracts.js';
+import { createPrivacyClassificationInput } from './privacy-dom-adapter.js';
 
 export const INPUT_DEBOUNCE_MS = 500;
 
@@ -64,6 +73,16 @@ function normalizeText(value: string, maximumLength: number): string | null {
   return normalized.slice(0, maximumLength);
 }
 
+function normalizePersistedText(
+  value: string,
+  maximumLength: number,
+): string | null {
+  return sanitizePersistedText(
+    normalizeText(value, maximumLength),
+    maximumLength,
+  );
+}
+
 function boundedControlValue(value: string): {
   value: string;
   truncated: boolean;
@@ -72,16 +91,6 @@ function boundedControlValue(value: string): {
   return {
     value: normalized.slice(0, MAX_CONTROL_VALUE_LENGTH),
     truncated: normalized.length > MAX_CONTROL_VALUE_LENGTH,
-  };
-}
-
-function boundedInputValue(value: string): {
-  value: string;
-  truncated: boolean;
-} {
-  return {
-    value: value.slice(0, MAX_INPUT_VALUE_LENGTH),
-    truncated: value.length > MAX_INPUT_VALUE_LENGTH,
   };
 }
 
@@ -179,20 +188,29 @@ function getAriaLabelledText(element: Element): string | null {
 export function createTargetSnapshot(
   element: Element,
 ): RecordingTargetSnapshot {
-  const labelText = getLabelText(element);
-  const ariaLabel = normalizeText(
+  const labelText = sanitizePersistedText(
+    getLabelText(element),
+    MAX_TARGET_METADATA_LENGTH,
+  );
+  const ariaLabel = normalizePersistedText(
     element.getAttribute('aria-label') ?? '',
     MAX_TARGET_METADATA_LENGTH,
   );
-  const ariaLabelledText = getAriaLabelledText(element);
+  const ariaLabelledText = sanitizePersistedText(
+    getAriaLabelledText(element),
+    MAX_TARGET_METADATA_LENGTH,
+  );
   const placeholder =
     element instanceof HTMLInputElement
-      ? normalizeText(element.placeholder, MAX_TARGET_METADATA_LENGTH)
+      ? normalizePersistedText(element.placeholder, MAX_TARGET_METADATA_LENGTH)
       : null;
   const textPreview =
     element instanceof HTMLInputElement || element instanceof HTMLSelectElement
       ? null
-      : normalizeText(element.textContent ?? '', MAX_TEXT_PREVIEW_LENGTH);
+      : normalizePersistedText(
+          element.textContent ?? '',
+          MAX_TEXT_PREVIEW_LENGTH,
+        );
 
   return RecordingTargetSnapshotSchema.parse({
     tagName: element.tagName.toLowerCase(),
@@ -200,12 +218,12 @@ export function createTargetSnapshot(
       element instanceof HTMLInputElement
         ? normalizeText(element.type, MAX_TARGET_METADATA_LENGTH)
         : null,
-    role: normalizeText(
+    role: normalizePersistedText(
       element.getAttribute('role') ?? '',
       MAX_TARGET_METADATA_LENGTH,
     ),
-    id: normalizeText(element.id, MAX_TARGET_METADATA_LENGTH),
-    name: normalizeText(
+    id: normalizePersistedText(element.id, MAX_TARGET_METADATA_LENGTH),
+    name: normalizePersistedText(
       element.getAttribute('name') ?? '',
       MAX_TARGET_METADATA_LENGTH,
     ),
@@ -215,7 +233,7 @@ export function createTargetSnapshot(
     placeholder,
     textPreview,
     testIdCandidates: TEST_ID_ATTRIBUTES.flatMap((attribute) => {
-      const value = normalizeText(
+      const value = normalizePersistedText(
         element.getAttribute(attribute) ?? '',
         MAX_TARGET_METADATA_LENGTH,
       );
@@ -224,60 +242,61 @@ export function createTargetSnapshot(
   });
 }
 
-function getMaskedReason(input: HTMLInputElement): MaskedInputReason | null {
-  if (input.type === 'password') {
-    return 'password';
+function decidePrivacy(
+  element: Element,
+  settings: PrivacySettings,
+): PrivacyDecision {
+  return classifyPrivacy(createPrivacyClassificationInput(element), settings);
+}
+
+function createTextValuePayload(value: string, decision: PrivacyDecision) {
+  const sanitized = sanitizeCapturedValue(
+    value,
+    decision,
+    MAX_INPUT_VALUE_LENGTH,
+  );
+  switch (sanitized.policy) {
+    case 'allow':
+      return {
+        capturePolicy: 'allow' as const,
+        value: sanitized.value,
+        truncated: sanitized.truncated,
+      };
+    case 'mask':
+      return {
+        capturePolicy: 'mask' as const,
+        value: null,
+        truncated: false as const,
+      };
+    case 'block':
+      return { capturePolicy: 'block' as const };
   }
-
-  const autocompleteTokens = (input.getAttribute('autocomplete') ?? '')
-    .toLowerCase()
-    .split(/\s+/);
-
-  for (const reason of [
-    'current-password',
-    'new-password',
-    'one-time-code',
-  ] as const) {
-    if (autocompleteTokens.includes(reason)) {
-      return reason;
-    }
-  }
-
-  return null;
 }
 
 function createTextInputCandidate(
   input: HTMLInputElement,
   occurredAt: string,
   locatorBundle: LocatorBundle,
+  settings: PrivacySettings,
 ): RecordingEventCandidate {
-  const maskedReason = getMaskedReason(input);
-  const payload =
-    maskedReason === null
-      ? {
-          masked: false as const,
-          maskedReason: null,
-          ...boundedInputValue(input.value),
-        }
-      : {
-          masked: true as const,
-          maskedReason,
-          value: null,
-          truncated: false as const,
-        };
+  const privacyDecision = decidePrivacy(input, settings);
 
   return RecordingEventCandidateSchema.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     eventType: 'text-input',
     occurredAt,
     target: createTargetSnapshot(input),
     locatorBundle,
-    payload,
+    privacyDecision,
+    payload: createTextValuePayload(input.value, privacyDecision),
   });
 }
 
 export class EventCaptureController {
   private capturing = false;
+  private privacySettings: PrivacySettings = structuredClone(
+    DEFAULT_PRIVACY_SETTINGS,
+  );
   private readonly pendingInputs = new Map<
     HTMLInputElement,
     PendingTextInput
@@ -291,6 +310,10 @@ export class EventCaptureController {
     private readonly trustedEvents: TrustedEventPolicy,
     private readonly locatorFactory: LocatorBundleFactory,
   ) {}
+
+  configurePrivacy(settings: PrivacySettings): void {
+    this.privacySettings = PrivacySettingsSchema.parse(settings);
+  }
 
   start(): void {
     if (this.capturing) {
@@ -351,13 +374,15 @@ export class EventCaptureController {
     if (locatorBundle === null) {
       return;
     }
+    const privacyDecision = decidePrivacy(actionable, this.privacySettings);
     this.submit(
       RecordingEventCandidateSchema.parse({
-        schemaVersion: 2,
+        schemaVersion: 3,
         eventType: 'click',
         occurredAt,
         target: createTargetSnapshot(actionable),
         locatorBundle,
+        privacyDecision,
         payload: { activation: 'primary' },
       }),
     );
@@ -396,6 +421,7 @@ export class EventCaptureController {
       target,
       occurredAt,
       locatorBundle,
+      this.privacySettings,
     );
     const timer = setTimeout(() => {
       this.pendingInputs.delete(target);
@@ -423,18 +449,46 @@ export class EventCaptureController {
       if (locatorBundle === null) {
         return;
       }
+      const privacyDecision = decidePrivacy(target, this.privacySettings);
+      const sanitizedValue = sanitizeCapturedValue(
+        value.value,
+        privacyDecision,
+        MAX_CONTROL_VALUE_LENGTH,
+      );
+      const sanitizedLabel = sanitizeCapturedValue(
+        label.value,
+        privacyDecision,
+        MAX_CONTROL_VALUE_LENGTH,
+      );
+      const payload =
+        sanitizedValue.policy === 'allow' && sanitizedLabel.policy === 'allow'
+          ? {
+              capturePolicy: 'allow' as const,
+              value: sanitizedValue.value,
+              label: sanitizedLabel.value,
+              truncated:
+                value.truncated ||
+                label.truncated ||
+                sanitizedValue.truncated ||
+                sanitizedLabel.truncated,
+            }
+          : privacyDecision.policy === 'mask'
+            ? {
+                capturePolicy: 'mask' as const,
+                value: null,
+                label: null,
+                truncated: false as const,
+              }
+            : { capturePolicy: 'block' as const };
       this.submit(
         RecordingEventCandidateSchema.parse({
-          schemaVersion: 2,
+          schemaVersion: 3,
           eventType: 'select',
           occurredAt,
           target: createTargetSnapshot(target),
           locatorBundle,
-          payload: {
-            value: value.value,
-            label: label.value,
-            truncated: value.truncated || label.truncated,
-          },
+          privacyDecision,
+          payload,
         }),
       );
       return;
@@ -450,14 +504,28 @@ export class EventCaptureController {
       if (locatorBundle === null) {
         return;
       }
+      const privacyDecision = decidePrivacy(target, this.privacySettings);
+      const payload =
+        privacyDecision.policy === 'allow'
+          ? {
+              capturePolicy: 'allow' as const,
+              checked: target.checked,
+            }
+          : privacyDecision.policy === 'mask'
+            ? {
+                capturePolicy: 'mask' as const,
+                checked: null,
+              }
+            : { capturePolicy: 'block' as const };
       this.submit(
         RecordingEventCandidateSchema.parse({
-          schemaVersion: 2,
+          schemaVersion: 3,
           eventType: 'checkbox',
           occurredAt,
           target: createTargetSnapshot(target),
           locatorBundle,
-          payload: { checked: target.checked },
+          privacyDecision,
+          payload,
         }),
       );
       return;
@@ -470,18 +538,38 @@ export class EventCaptureController {
       if (locatorBundle === null) {
         return;
       }
+      const privacyDecision = decidePrivacy(target, this.privacySettings);
+      const sanitizedValue = sanitizeCapturedValue(
+        value.value,
+        privacyDecision,
+        MAX_CONTROL_VALUE_LENGTH,
+      );
+      const payload =
+        sanitizedValue.policy === 'allow'
+          ? {
+              capturePolicy: 'allow' as const,
+              checked: true as const,
+              value:
+                sanitizedValue.value.length === 0 ? null : sanitizedValue.value,
+              truncated: value.truncated || sanitizedValue.truncated,
+            }
+          : sanitizedValue.policy === 'mask'
+            ? {
+                capturePolicy: 'mask' as const,
+                checked: null,
+                value: null,
+                truncated: false as const,
+              }
+            : { capturePolicy: 'block' as const };
       this.submit(
         RecordingEventCandidateSchema.parse({
-          schemaVersion: 2,
+          schemaVersion: 3,
           eventType: 'radio',
           occurredAt,
           target: createTargetSnapshot(target),
           locatorBundle,
-          payload: {
-            checked: true,
-            value: value.value.length === 0 ? null : value.value,
-            truncated: value.truncated,
-          },
+          privacyDecision,
+          payload,
         }),
       );
     }

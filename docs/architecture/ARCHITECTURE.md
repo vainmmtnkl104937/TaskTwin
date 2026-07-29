@@ -134,6 +134,53 @@ compatibility. A new recording always replaces legacy data with an empty v2
 timeline; old events are not silently upgraded because they have no verified
 locator bundle.
 
+Session 08 introduces a second pure decision boundary:
+`@tasktwin/privacy-engine`. The extension converts only bounded allowlisted
+control metadata into a privacy input; the engine classifies sensitivity,
+resolves an allow, mask, or block policy, and returns a strict version 1
+decision with fixed matched-rule IDs, reasons, and confidence. The classifier
+is deterministic and local. It sends no page metadata or recording value to
+the control plane, a backend service, or an AI model.
+
+Authentication, financial, identity, and health values are blocked regardless
+of settings. Personal values are masked by default, and unknown-sensitive
+values remain masked. Allowed values retain the existing length bounds, masked
+values become null, and blocked values are omitted. Sanitization occurs before
+the service worker persists the accepted event. The service worker still owns
+sender/session validation, event identity, ordering, timeline capacity, and
+storage.
+
+Privacy-aware candidates, accepted events, and timelines use schema version 3
+and the `tasktwin.recorder.timeline.v3` storage key. The loader retains
+read-only summary compatibility with Session 07 v2 and Session 06 v1 data.
+Legacy events are not assigned inferred privacy decisions or silently upgraded.
+
+Target descriptions and locator observations pass through the same privacy
+boundary. Sensitive literal text is removed from previews, labels, accessible
+names, placeholders, and locator values. Safe structural metadata remains:
+the extension can retain a stable test ID or stable ID on a sensitive control
+when the identifier itself contains no sensitive data. Input values never
+participate in locator identity.
+
+Privacy settings use a strict version 1 contract in `chrome.storage.local`
+under `tasktwin.privacy.settings.v1`. They control personal-data allow/mask
+behavior, whether otherwise allowed text controls are included in redaction
+geometry, and whether the local preview is visible. Missing or invalid settings
+fall back safely. No setting can weaken a blocked classification.
+
+The extension privacy DOM adapter scans only explicitly supported relevant
+controls. It does not inspect a complete form or page body and does not read
+field values while planning geometry. Visible non-zero rectangles enter a
+pure `RedactionPlan` version 1 builder, which normalizes coordinates, clamps
+them to the CSS-pixel viewport, rejects zero-area results, deterministically
+merges or deduplicates significant overlaps, orders the result, and enforces a
+hard region limit. Device pixel ratio is retained for a future image boundary;
+Session 08 captures or stores no screenshot.
+
+An optional fixture-only preview renders non-interactive removable overlays in
+the active recording context. Overlays use `pointer-events: none`, do not
+modify values, and are excluded from target and locator metadata.
+
 The event timeline shares the recorder's `chrome.storage.session` lifecycle.
 It has a hard capacity. Reaching the limit changes the recorder to an explicit
 error instead of silently discarding older or newer events. Starting a new
@@ -163,6 +210,11 @@ message; it has no browser automation dependency and executes no workflow.
   dynamic-value heuristics, deterministic ranking, explanations, and
   confidence. It depends only on the shared workflow locator contract and Zod;
   DOM and Chrome behavior remain in the extension.
+- `packages/privacy-engine` owns pure privacy contracts, bounded rule
+  dictionaries, deterministic classification and policy, sanitization
+  results, and redaction-plan geometry. It depends on no browser or
+  application framework; DOM metadata collection, Chrome storage, and preview
+  rendering remain in the extension.
 - Application packages own framework bootstrapping and presentation, without
   introducing domain behavior.
 
@@ -204,8 +256,10 @@ Prisma, and Playwright so every plane can consume the same domain contract.
   are never logged or stored; password hashes are never selected by normal user
   reads or returned from API responses.
 - No browser event, screenshot, cookie, access token, password, or OTP is
-  captured as a plaintext secret. Password and OTP input events may be retained
-  only with a null value and a fixed masking reason.
+  captured as a plaintext secret. Authentication, financial, identity, and
+  health values are blocked before timeline persistence. Personal data are
+  masked by default, and token-like or unknown-sensitive values are not
+  retained as plaintext.
 - Recorder storage contains versioned state and a bounded interaction timeline.
   The timeline uses allowlisted, length-bounded target metadata and event
   payloads. Complete page URLs, full DOM, outerHTML, arbitrary attributes, raw
@@ -215,6 +269,11 @@ Prisma, and Playwright so every plane can consume the same domain contract.
   arbitrary attributes, complete DOM paths, or full page content. Test IDs use
   a four-attribute allowlist. Text, identifiers, labels, names, placeholders,
   and CSS selectors are normalized and bounded before persistence.
+- Privacy classification uses only bounded allowlisted control metadata and
+  fixed local rules. Sensitive literals are removed from target and locator
+  text before persistence. Redaction plans contain only validated viewport
+  geometry, sensitivity, and fixed reasons; no image, DOM node, browser handle,
+  or field value is stored.
 - Workflow secret value sources store only a validated reference name, never a
   secret value.
 - Database credentials come from environment configuration. URLs and passwords

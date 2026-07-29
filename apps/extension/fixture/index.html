@@ -37,6 +37,24 @@
       .fixture-stable-id::after {
         content: 'Unique stable-ID target';
       }
+
+      .privacy-fixture {
+        border-top: 1px solid #cbd5e1;
+        margin-top: 1rem;
+        padding-top: 1rem;
+      }
+
+      .privacy-overlap {
+        display: grid;
+      }
+
+      .privacy-overlap > input {
+        grid-area: 1 / 1;
+      }
+
+      .privacy-overlap > input:last-child {
+        margin: 0.3rem 0 0 0.3rem;
+      }
     </style>
   </head>
   <body>
@@ -138,6 +156,142 @@
             Beta
           </label>
         </fieldset>
+
+        <section class="privacy-fixture" data-tasktwin-privacy-fixture>
+          <h2>Privacy fixture</h2>
+
+          <label>
+            Ordinary note
+            <input
+              data-testid="privacy-ordinary-note"
+              name="ordinaryNote"
+              type="text"
+              autocomplete="off"
+            />
+          </label>
+
+          <label>
+            Email address
+            <input
+              data-testid="privacy-email"
+              name="email"
+              type="email"
+              autocomplete="email"
+            />
+          </label>
+
+          <label>
+            Phone number
+            <input
+              data-testid="privacy-phone"
+              name="phone"
+              type="tel"
+              autocomplete="tel"
+            />
+          </label>
+
+          <label>
+            Street address
+            <input
+              data-testid="privacy-address"
+              name="streetAddress"
+              type="text"
+              autocomplete="street-address"
+            />
+          </label>
+
+          <label>
+            Payment card number
+            <input
+              data-testid="privacy-card-number"
+              name="cardNumber"
+              type="text"
+              autocomplete="cc-number"
+              inputmode="numeric"
+            />
+          </label>
+
+          <label>
+            Card security code
+            <input
+              data-testid="privacy-card-cvv"
+              name="cardCvv"
+              type="text"
+              autocomplete="cc-csc"
+              inputmode="numeric"
+            />
+          </label>
+
+          <label>
+            Bank account number
+            <input
+              data-testid="privacy-bank-account"
+              name="bankAccountNumber"
+              type="text"
+              inputmode="numeric"
+            />
+          </label>
+
+          <label>
+            Bank routing number
+            <input
+              data-testid="privacy-bank-routing"
+              name="routingNumber"
+              type="text"
+              inputmode="numeric"
+            />
+          </label>
+
+          <label>
+            Citizen identification number
+            <input
+              data-testid="privacy-citizen-id"
+              name="citizenId"
+              type="text"
+            />
+          </label>
+
+          <label>
+            Passport number
+            <input
+              data-testid="privacy-passport"
+              name="passportNumber"
+              type="text"
+            />
+          </label>
+
+          <label>
+            Medical condition
+            <input
+              data-testid="privacy-health"
+              name="medicalCondition"
+              type="text"
+            />
+          </label>
+
+          <div class="privacy-overlap">
+            <input
+              aria-label="Overlapping email field"
+              name="overlappingEmail"
+              type="email"
+              autocomplete="email"
+            />
+            <input
+              aria-label="Overlapping phone field"
+              name="overlappingPhone"
+              type="tel"
+              autocomplete="tel"
+            />
+          </div>
+
+          <button
+            data-testid="privacy-safe-structural-id"
+            data-tasktwin-privacy-sensitive="true"
+            type="button"
+          >
+            Contact fixture.person@example.test
+          </button>
+        </section>
       </form>
     </main>
   </body>

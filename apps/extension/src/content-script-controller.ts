@@ -1,4 +1,9 @@
 import {
+  DEFAULT_PRIVACY_SETTINGS,
+  type PrivacySettings,
+} from '@tasktwin/privacy-engine';
+
+import {
   ContentScriptResponseSchema,
   createRecorderError,
   RecorderStateChangedNotificationSchema,
@@ -12,17 +17,40 @@ import {
 } from './recorder/event-contracts.js';
 
 export interface EventCaptureLifecycle {
+  configurePrivacy(settings: PrivacySettings): void;
   start(): void;
   stopWithoutFlush(): void;
   suspendAndFlush(): Promise<boolean>;
   isCapturing(): boolean;
 }
 
+export interface PrivacySettingsStore {
+  load(): Promise<PrivacySettings>;
+}
+
+export interface PrivacyPreviewLifecycle {
+  activate(settings: PrivacySettings): void;
+  clear(): void;
+}
+
+const defaultPrivacySettingsStore: PrivacySettingsStore = {
+  load: () => Promise.resolve(structuredClone(DEFAULT_PRIVACY_SETTINGS)),
+};
+
+const noPrivacyPreview: PrivacyPreviewLifecycle = {
+  activate: () => undefined,
+  clear: () => undefined,
+};
+
 export class ContentScriptController {
   private currentStatus: RecorderStatus = 'idle';
   private currentSessionId: string | null = null;
 
-  constructor(private readonly capture: EventCaptureLifecycle) {}
+  constructor(
+    private readonly capture: EventCaptureLifecycle,
+    private readonly privacySettings: PrivacySettingsStore = defaultPrivacySettingsStore,
+    private readonly privacyPreview: PrivacyPreviewLifecycle = noPrivacyPreview,
+  ) {}
 
   async handle(
     message: unknown,
@@ -31,14 +59,29 @@ export class ContentScriptController {
       RecorderStateChangedNotificationSchema.safeParse(message);
 
     if (stateNotification.success) {
-      this.currentStatus = stateNotification.data.state.status;
-      this.currentSessionId = stateNotification.data.state.sessionId;
+      const nextStatus = stateNotification.data.state.status;
+      const nextSessionId = stateNotification.data.state.sessionId;
 
-      if (this.currentStatus === 'recording') {
+      if (nextStatus === 'recording') {
+        let settings: PrivacySettings;
+        try {
+          settings = await this.privacySettings.load();
+        } catch {
+          return ContentScriptResponseSchema.parse({
+            success: false,
+            error: createRecorderError('STORAGE_FAILURE'),
+          });
+        }
+        this.capture.configurePrivacy(settings);
         this.capture.start();
+        this.privacyPreview.activate(settings);
       } else {
         this.capture.stopWithoutFlush();
+        this.privacyPreview.clear();
       }
+
+      this.currentStatus = nextStatus;
+      this.currentSessionId = nextSessionId;
 
       return ContentScriptResponseSchema.parse({
         success: true,

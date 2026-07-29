@@ -4,6 +4,10 @@ import {
   type RecordingCandidateEmitter,
 } from './content/event-capture.js';
 import { DomLocatorBundleFactory } from './content/locator-dom-adapter.js';
+import { DomRedactionPlanFactory } from './content/privacy-dom-adapter.js';
+import { PrivacyPreviewController } from './content/privacy-preview-controller.js';
+import { ChromeLocalPrivacySettingsStore } from './content/privacy-settings-storage.js';
+import { RedactionPreviewRenderer } from './content/redaction-preview.js';
 import { ContentScriptController } from './content-script-controller.js';
 import {
   RecordingEventCandidateResponseSchema,
@@ -37,7 +41,16 @@ if (contentScriptGlobal.taskTwinRecorderContentScript === undefined) {
     browserTrustedEventPolicy,
     new DomLocatorBundleFactory(document),
   );
-  const controller = new ContentScriptController(capture);
+  const controller = new ContentScriptController(
+    capture,
+    new ChromeLocalPrivacySettingsStore(),
+    new PrivacyPreviewController(
+      document,
+      new DomRedactionPlanFactory(document),
+      new RedactionPreviewRenderer(document),
+      () => new Date().toISOString(),
+    ),
+  );
   contentScriptGlobal.taskTwinRecorderContentScript = controller;
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

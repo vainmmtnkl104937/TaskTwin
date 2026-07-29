@@ -19,8 +19,11 @@ import {
 } from '../recorder/ports.js';
 
 const RECORDING_STATE_STORAGE_KEY = 'tasktwin.recorder.session.v1';
-const RECORDING_TIMELINE_STORAGE_KEY = 'tasktwin.recorder.timeline.v2';
-const LEGACY_RECORDING_TIMELINE_STORAGE_KEY = 'tasktwin.recorder.timeline.v1';
+const RECORDING_TIMELINE_STORAGE_KEY = 'tasktwin.recorder.timeline.v3';
+const LEGACY_V2_RECORDING_TIMELINE_STORAGE_KEY =
+  'tasktwin.recorder.timeline.v2';
+const LEGACY_V1_RECORDING_TIMELINE_STORAGE_KEY =
+  'tasktwin.recorder.timeline.v1';
 
 export class ChromeSessionRecordingStateStore implements RecordingStateStore {
   async load(): Promise<unknown | undefined> {
@@ -41,11 +44,13 @@ export class ChromeSessionRecordingTimelineStore implements RecordingTimelineSto
   async load(): Promise<unknown | undefined> {
     const stored = await chrome.storage.session.get([
       RECORDING_TIMELINE_STORAGE_KEY,
-      LEGACY_RECORDING_TIMELINE_STORAGE_KEY,
+      LEGACY_V2_RECORDING_TIMELINE_STORAGE_KEY,
+      LEGACY_V1_RECORDING_TIMELINE_STORAGE_KEY,
     ]);
     return (
       stored[RECORDING_TIMELINE_STORAGE_KEY] ??
-      stored[LEGACY_RECORDING_TIMELINE_STORAGE_KEY]
+      stored[LEGACY_V2_RECORDING_TIMELINE_STORAGE_KEY] ??
+      stored[LEGACY_V1_RECORDING_TIMELINE_STORAGE_KEY]
     );
   }
 

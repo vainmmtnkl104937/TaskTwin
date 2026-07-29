@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@tasktwin/locator-engine": "workspace:*",
+    "@tasktwin/privacy-engine": "workspace:*",
     "zod": "4.4.3"
   },
   "devDependencies": {
