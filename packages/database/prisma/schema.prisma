@@ -28,15 +28,23 @@ enum OrganizationRole {
   @@map("organization_role")
 }
 
+enum RecordingSessionStatus {
+  receiving
+  completed
+
+  @@map("recording_session_status")
+}
+
 model User {
-  id                      String               @id @default(uuid()) @db.Uuid
-  email                   String               @unique(map: "users_email_key") @db.VarChar(254)
-  passwordHash            String               @map("password_hash") @db.VarChar(255)
-  displayName             String               @map("display_name") @db.VarChar(100)
-  isActive                Boolean              @default(true) @map("is_active")
-  createdAt               DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt               DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organizationMemberships OrganizationMember[]
+  id                       String               @id @default(uuid()) @db.Uuid
+  email                    String               @unique(map: "users_email_key") @db.VarChar(254)
+  passwordHash             String               @map("password_hash") @db.VarChar(255)
+  displayName              String               @map("display_name") @db.VarChar(100)
+  isActive                 Boolean              @default(true) @map("is_active")
+  createdAt                DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organizationMemberships  OrganizationMember[]
+  createdRecordingSessions RecordingSession[]   @relation("RecordingSessionCreator")
 
   @@map("users")
 }
@@ -59,8 +67,8 @@ model OrganizationMember {
   role           OrganizationRole
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@id([userId, organizationId], map: "organization_members_pkey")
   @@index([organizationId, role], map: "organization_members_organization_id_role_idx")
@@ -68,14 +76,15 @@ model OrganizationMember {
 }
 
 model Workspace {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @map("organization_id") @db.Uuid
-  name           String       @db.VarChar(120)
-  slug           String       @db.VarChar(63)
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  workflows      Workflow[]
+  id                String             @id @default(uuid()) @db.Uuid
+  organizationId    String             @map("organization_id") @db.Uuid
+  name              String             @db.VarChar(120)
+  slug              String             @db.VarChar(63)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  workflows         Workflow[]
+  recordingSessions RecordingSession[]
 
   @@unique([organizationId, slug], map: "workspaces_organization_id_slug_key")
   @@map("workspaces")
@@ -109,4 +118,66 @@ model WorkflowVersion {
   @@unique([workflowId, version], map: "workflow_versions_workflow_id_version_key")
   @@index([status], map: "workflow_versions_status_idx")
   @@map("workflow_versions")
+}
+
+model RecordingSession {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  workspaceId         String                 @map("workspace_id") @db.Uuid
+  createdByUserId     String                 @map("created_by_user_id") @db.Uuid
+  clientSessionId     String                 @unique(map: "recording_sessions_client_session_id_key") @map("client_session_id") @db.Uuid
+  schemaVersion       Int                    @map("schema_version")
+  targetOrigin        String                 @map("target_origin") @db.VarChar(512)
+  startedAt           DateTime               @map("started_at") @db.Timestamptz(3)
+  stoppedAt           DateTime               @map("stopped_at") @db.Timestamptz(3)
+  eventCount          Int                    @map("event_count")
+  lastSequence        Int                    @map("last_sequence")
+  privacySummary      Json                   @map("privacy_summary") @db.JsonB
+  metadataDigest      String                 @map("metadata_digest") @db.Char(64)
+  status              RecordingSessionStatus @default(receiving)
+  receivedEventCount  Int                    @default(0) @map("received_event_count")
+  receivedMinSequence Int?                   @map("received_min_sequence")
+  receivedMaxSequence Int?                   @map("received_max_sequence")
+  completedAt         DateTime?              @map("completed_at") @db.Timestamptz(3)
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace           Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  createdBy           User                   @relation("RecordingSessionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  events              RecordingEvent[]
+  syncBatches         RecordingSyncBatch[]
+
+  @@index([workspaceId, status, createdAt], map: "recording_sessions_workspace_id_status_created_at_idx")
+  @@index([createdByUserId, createdAt], map: "recording_sessions_created_by_user_id_created_at_idx")
+  @@index([status, updatedAt], map: "recording_sessions_status_updated_at_idx")
+  @@map("recording_sessions")
+}
+
+model RecordingEvent {
+  id                 String           @id @default(uuid()) @db.Uuid
+  recordingSessionId String           @map("recording_session_id") @db.Uuid
+  clientEventId      String           @map("client_event_id") @db.Uuid
+  sequence           Int
+  event              Json             @db.JsonB
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  recordingSession   RecordingSession @relation(fields: [recordingSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([recordingSessionId, clientEventId], map: "recording_events_recording_session_id_client_event_id_key")
+  @@unique([recordingSessionId, sequence], map: "recording_events_recording_session_id_sequence_key")
+  @@index([recordingSessionId, createdAt], map: "recording_events_recording_session_id_created_at_idx")
+  @@map("recording_events")
+}
+
+model RecordingSyncBatch {
+  id                 String           @id @default(uuid()) @db.Uuid
+  recordingSessionId String           @map("recording_session_id") @db.Uuid
+  clientBatchId      String           @map("client_batch_id") @db.VarChar(128)
+  firstSequence      Int              @map("first_sequence")
+  lastSequence       Int              @map("last_sequence")
+  eventCount         Int              @map("event_count")
+  payloadDigest      String           @map("payload_digest") @db.Char(64)
+  processedAt        DateTime         @default(now()) @map("processed_at") @db.Timestamptz(3)
+  recordingSession   RecordingSession @relation(fields: [recordingSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([recordingSessionId, clientBatchId], map: "recording_sync_batches_recording_session_id_client_batch_id_key")
+  @@index([recordingSessionId, processedAt], map: "recording_sync_batches_recording_session_id_processed_at_idx")
+  @@map("recording_sync_batches")
 }

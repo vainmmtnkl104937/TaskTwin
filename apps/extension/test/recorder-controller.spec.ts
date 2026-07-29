@@ -19,6 +19,10 @@ import type {
 } from '../src/recorder/contracts.js';
 import { RecorderController } from '../src/recorder/controller.js';
 import type { RecordingTimeline } from '../src/recorder/event-contracts.js';
+import {
+  RecordingFinalizationError,
+  type RecordingArtifactFinalizer,
+} from '../src/recording-artifacts/artifact-finalizer.js';
 
 const timestamp = '2026-07-29T10:00:00.000Z';
 const sessionId = '57a1a7d4-5ada-4bc8-ac17-10c84746a567';
@@ -67,6 +71,9 @@ function createController(options?: {
   storedTimeline?: unknown;
   activeTab?: ActiveTab | null;
   notifyResponse?: unknown;
+  finalizationError?: ConstructorParameters<
+    typeof RecordingFinalizationError
+  >[0];
 }) {
   const store = new FakeStateStore(options?.stored);
   const timelineStore = new FakeTimelineStore();
@@ -104,12 +111,24 @@ function createController(options?: {
   const idGenerator = {
     createSessionId: () => sessionId,
   } satisfies RecorderIdGenerator;
+  const artifactFinalizer = {
+    finalize: vi
+      .fn()
+      .mockImplementation(() =>
+        options?.finalizationError === undefined
+          ? Promise.resolve()
+          : Promise.reject(
+              new RecordingFinalizationError(options.finalizationError),
+            ),
+      ),
+  } satisfies RecordingArtifactFinalizer;
 
   return {
     store,
     timelineStore,
     activeTabProvider,
     contentScript,
+    artifactFinalizer,
     controller: new RecorderController(
       store,
       timelineStore,
@@ -117,6 +136,7 @@ function createController(options?: {
       contentScript,
       clock,
       idGenerator,
+      artifactFinalizer,
     ),
   };
 }
@@ -341,9 +361,10 @@ describe('RecorderController', () => {
     if (!paused.success) {
       throw new Error('Expected paused state');
     }
-    const { controller, store, contentScript } = createController({
-      stored: paused.state,
-    });
+    const { controller, store, contentScript, artifactFinalizer } =
+      createController({
+        stored: paused.state,
+      });
 
     const response = await controller.handle({ type: 'recorder/stop' });
 
@@ -361,6 +382,60 @@ describe('RecorderController', () => {
       reason: 'stop',
     });
     expect(contentScript.notify).toHaveBeenCalledTimes(2);
+    expect(artifactFinalizer.finalize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'stopping',
+        sessionId,
+      }),
+    );
+  });
+
+  it('does not report stop success when durable finalization fails', async () => {
+    const recording = createRecordingState();
+    const { controller, store, artifactFinalizer } = createController({
+      stored: recording,
+      finalizationError: 'ARTIFACT_STORAGE_FAILURE',
+    });
+
+    const response = await controller.handle({ type: 'recorder/stop' });
+
+    expect(response).toMatchObject({
+      success: false,
+      error: { code: 'ARTIFACT_STORAGE_FAILURE' },
+      state: {
+        status: 'error',
+        sessionId,
+      },
+    });
+    expect(store.saves.map((state) => state.status)).toEqual([
+      'stopping',
+      'error',
+    ]);
+    expect(artifactFinalizer.finalize).toHaveBeenCalledTimes(1);
+  });
+
+  it('recovers an interrupted stopping state before reporting idle', async () => {
+    const recording = createRecordingState();
+    const stopping = transitionRecordingState(
+      recording,
+      { type: 'stop' },
+      timestamp,
+    );
+    if (!stopping.success) {
+      throw new Error('Expected stopping state');
+    }
+    const { controller, store, artifactFinalizer } = createController({
+      stored: stopping.state,
+    });
+
+    const response = await controller.handle({ type: 'recorder/get-state' });
+
+    expect(response).toMatchObject({
+      success: true,
+      state: { status: 'idle' },
+    });
+    expect(artifactFinalizer.finalize).toHaveBeenCalledWith(stopping.state);
+    expect(store.saves.map((state) => state.status)).toEqual(['idle']);
   });
 
   it('rejects a mismatched content acknowledgement safely', async () => {

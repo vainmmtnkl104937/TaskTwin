@@ -13,6 +13,7 @@
   "dependencies": {
     "@tasktwin/locator-engine": "workspace:*",
     "@tasktwin/privacy-engine": "workspace:*",
+    "@tasktwin/recording-schema": "workspace:*",
     "zod": "4.4.3"
   },
   "devDependencies": {

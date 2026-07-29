@@ -1,0 +1,103 @@
+import {
+  BadRequestException,
+  type ExecutionContext,
+  NotFoundException,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { OrganizationRole, type RecordingRepository } from '@tasktwin/database';
+import { describe, expect, it, vi } from 'vitest';
+
+import { AUTHENTICATED_USER } from '../auth/authenticated-request.js';
+import {
+  VERIFIED_ORGANIZATION_CONTEXT,
+  type VerifiedOrganizationContext,
+} from './organization-context.js';
+import { OrganizationResourceContextGuard } from './organization-resource-context.guard.js';
+
+const userId = '74c2fef6-54cb-438d-b343-77e4cfd19806';
+const workspaceId = '74ef5779-b652-4dd2-88f8-2f88e1bbac71';
+
+interface TestRequest {
+  headers: Record<string, string>;
+  params: Record<string, unknown>;
+  [AUTHENTICATED_USER]: {
+    id: string;
+    email: string;
+    displayName: string;
+  };
+  [VERIFIED_ORGANIZATION_CONTEXT]?: VerifiedOrganizationContext;
+}
+
+function createRequest(resourceId: unknown = workspaceId): TestRequest {
+  return {
+    headers: {},
+    params: { workspaceId: resourceId },
+    [AUTHENTICATED_USER]: {
+      id: userId,
+      email: 'owner@example.test',
+      displayName: 'Owner',
+    },
+  };
+}
+
+function createExecutionContext(request: TestRequest): ExecutionContext {
+  return {
+    getHandler: () => function handler() {},
+    getClass: () => class Controller {},
+    switchToHttp: () => ({ getRequest: () => request }),
+  } as unknown as ExecutionContext;
+}
+
+function createReflector(): Reflector {
+  return {
+    getAllAndOverride: vi.fn().mockReturnValue({
+      kind: 'workspace',
+      parameterName: 'workspaceId',
+    }),
+  } as unknown as Reflector;
+}
+
+describe('OrganizationResourceContextGuard', () => {
+  it('resolves membership and attaches trusted organization context', async () => {
+    const request = createRequest();
+    const resolveWorkspaceAccess = vi.fn().mockResolvedValue({
+      organizationId: '13375635-b896-4446-81ed-2de3fa201dac',
+      userId,
+      role: OrganizationRole.MEMBER,
+    });
+    const guard = new OrganizationResourceContextGuard(createReflector(), {
+      resolveWorkspaceAccess,
+    } as unknown as RecordingRepository);
+
+    await expect(
+      guard.canActivate(createExecutionContext(request)),
+    ).resolves.toBe(true);
+    expect(resolveWorkspaceAccess).toHaveBeenCalledWith(userId, workspaceId);
+    expect(request[VERIFIED_ORGANIZATION_CONTEXT]).toMatchObject({
+      userId,
+      role: OrganizationRole.MEMBER,
+    });
+  });
+
+  it('returns not found for an inaccessible cross-organization resource', async () => {
+    const guard = new OrganizationResourceContextGuard(createReflector(), {
+      resolveWorkspaceAccess: vi.fn().mockResolvedValue(null),
+    } as unknown as RecordingRepository);
+
+    await expect(
+      guard.canActivate(createExecutionContext(createRequest())),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects an invalid route identifier before repository access', async () => {
+    const resolveWorkspaceAccess = vi.fn();
+    const guard = new OrganizationResourceContextGuard(createReflector(), {
+      resolveWorkspaceAccess,
+    } as unknown as RecordingRepository);
+
+    await expect(
+      guard.canActivate(createExecutionContext(createRequest('not-a-uuid'))),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(resolveWorkspaceAccess).not.toHaveBeenCalled();
+  });
+});

@@ -25,10 +25,11 @@
     "db:reset": "pnpm --filter @tasktwin/database db:reset",
     "db:status": "pnpm --filter @tasktwin/database db:status",
     "db:up": "docker compose up --detach --wait postgres",
-    "auth:check": "pnpm --filter @tasktwin/api test:integration",
+    "auth:check": "pnpm --filter @tasktwin/api test:integration:auth",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "turbo run lint",
+    "recording:check": "pnpm --filter @tasktwin/api test:integration:recording",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },

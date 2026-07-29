@@ -9,7 +9,9 @@
     "lint": "eslint .",
     "start": "node dist/main.js",
     "test": "vitest run --exclude test/**/*.integration.spec.ts",
-    "test:integration": "vitest run test/auth.integration.spec.ts",
+    "test:integration": "vitest run test",
+    "test:integration:auth": "vitest run test/auth.integration.spec.ts",
+    "test:integration:recording": "vitest run test/recording.integration.spec.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -19,6 +21,7 @@
     "@nestjs/platform-express": "11.1.28",
     "@node-rs/argon2": "2.0.2",
     "@tasktwin/database": "workspace:*",
+    "@tasktwin/recording-schema": "workspace:*",
     "@tasktwin/shared-types": "workspace:*",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",

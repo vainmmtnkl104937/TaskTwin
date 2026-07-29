@@ -1,0 +1,9 @@
+export const LOCAL_RECORDING_ARCHIVE_STORAGE_KEY =
+  'tasktwin.recordings.archive.v1';
+export const LOCAL_RECORDING_OUTBOX_STORAGE_KEY =
+  'tasktwin.recordings.outbox.v1';
+
+export const MAX_RETAINED_RECORDING_ARTIFACTS = 20;
+export const MAX_SERIALIZED_RECORDING_ARTIFACT_BYTES = 4 * 1024 * 1024;
+export const MAX_PENDING_RECORDING_OUTBOX_ENTRIES = 20;
+export const MAX_SERIALIZED_LOCAL_RECORDING_ARCHIVE_BYTES = 8 * 1024 * 1024;

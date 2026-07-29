@@ -1,11 +1,20 @@
+import { LocatorBundleSchema } from '@tasktwin/locator-engine';
 import {
-  LocatorBundleSchema,
-  type LocatorBundle,
-} from '@tasktwin/locator-engine';
-import {
-  containsSensitiveLiteral,
-  PrivacyDecisionSchema,
-} from '@tasktwin/privacy-engine';
+  MAX_CONTROL_VALUE_LENGTH,
+  MAX_INPUT_VALUE_LENGTH,
+  MAX_RECORDING_EVENTS,
+  MAX_TARGET_METADATA_LENGTH,
+  MAX_TEXT_PREVIEW_LENGTH,
+  ClickEventPayloadSchema,
+  RecordingEventCandidateSchema,
+  RecordingEventSchema,
+  RecordingEventTypeSchema,
+  RecordingTargetSnapshotSchema,
+  type RecordingEvent,
+  type RecordingEventCandidate,
+  type RecordingEventType,
+  type RecordingTargetSnapshot,
+} from '@tasktwin/recording-schema';
 import { z } from 'zod';
 
 import {
@@ -13,20 +22,27 @@ import {
   RecordingSessionStateSchema,
 } from './contracts.js';
 
-export const MAX_RECORDING_EVENTS = 1_000;
-export const MAX_INPUT_VALUE_LENGTH = 2_048;
-export const MAX_CONTROL_VALUE_LENGTH = 512;
-export const MAX_TARGET_METADATA_LENGTH = 160;
-export const MAX_TEXT_PREVIEW_LENGTH = 120;
+export {
+  MAX_CONTROL_VALUE_LENGTH,
+  MAX_INPUT_VALUE_LENGTH,
+  MAX_RECORDING_EVENTS,
+  MAX_TARGET_METADATA_LENGTH,
+  MAX_TEXT_PREVIEW_LENGTH,
+  ClickEventPayloadSchema,
+  RecordingEventCandidateSchema,
+  RecordingEventSchema,
+  RecordingEventTypeSchema,
+  RecordingTargetSnapshotSchema,
+};
+export type {
+  RecordingEvent,
+  RecordingEventCandidate,
+  RecordingEventType,
+  RecordingTargetSnapshot,
+};
 
 const TimestampSchema = z.string().datetime({ offset: true });
 const UuidSchema = z.string().uuid();
-const BoundedMetadataSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(MAX_TARGET_METADATA_LENGTH);
-const NullableMetadataSchema = BoundedMetadataSchema.nullable();
 const ControlValueSchema = z.string().max(MAX_CONTROL_VALUE_LENGTH);
 
 const OriginSchema = z
@@ -40,54 +56,12 @@ const OriginSchema = z
     );
   }, 'Must be an HTTP or HTTPS origin.');
 
-export const RecordingEventTypeSchema = z.enum([
-  'click',
-  'text-input',
-  'select',
-  'checkbox',
-  'radio',
-]);
-
-export const TestIdAttributeSchema = z.enum([
-  'data-testid',
-  'data-test',
-  'data-cy',
-  'data-qa',
-]);
-
-export const TestIdCandidateSchema = z.strictObject({
-  attribute: TestIdAttributeSchema,
-  value: BoundedMetadataSchema,
-});
-
-export const RecordingTargetSnapshotSchema = z.strictObject({
-  tagName: z
-    .string()
-    .trim()
-    .min(1)
-    .max(32)
-    .regex(/^[a-z][a-z0-9-]*$/),
-  inputType: NullableMetadataSchema,
-  role: NullableMetadataSchema,
-  id: NullableMetadataSchema,
-  name: NullableMetadataSchema,
-  labelText: NullableMetadataSchema,
-  accessibleName: NullableMetadataSchema,
-  placeholder: NullableMetadataSchema,
-  textPreview: z.string().trim().min(1).max(MAX_TEXT_PREVIEW_LENGTH).nullable(),
-  testIdCandidates: z.array(TestIdCandidateSchema).max(4),
-});
-
 export const MaskedInputReasonSchema = z.enum([
   'password',
   'current-password',
   'new-password',
   'one-time-code',
 ]);
-
-export const ClickEventPayloadSchema = z.strictObject({
-  activation: z.literal('primary'),
-});
 
 export const UnmaskedTextInputPayloadSchema = z.strictObject({
   masked: z.literal(false),
@@ -103,322 +77,26 @@ export const MaskedTextInputPayloadSchema = z.strictObject({
   truncated: z.literal(false),
 });
 
-export const TextInputEventPayloadSchema = z.discriminatedUnion('masked', [
-  UnmaskedTextInputPayloadSchema,
-  MaskedTextInputPayloadSchema,
-]);
-
-export const SelectEventPayloadSchema = z.strictObject({
-  value: ControlValueSchema,
-  label: ControlValueSchema,
-  truncated: z.boolean(),
-});
-
-export const CheckboxEventPayloadSchema = z.strictObject({
-  checked: z.boolean(),
-});
-
-export const RadioEventPayloadSchema = z.strictObject({
-  checked: z.literal(true),
-  value: ControlValueSchema.nullable(),
-  truncated: z.boolean(),
-});
-
-const candidateBaseShape = {
-  schemaVersion: z.literal(2),
-  occurredAt: TimestampSchema,
-  target: RecordingTargetSnapshotSchema,
-  locatorBundle: LocatorBundleSchema,
-};
-
-export const ClickEventCandidateSchema = z.strictObject({
-  ...candidateBaseShape,
-  eventType: z.literal('click'),
-  payload: ClickEventPayloadSchema,
-});
-
-export const TextInputEventCandidateSchema = z.strictObject({
-  ...candidateBaseShape,
-  eventType: z.literal('text-input'),
-  payload: TextInputEventPayloadSchema,
-});
-
-export const SelectEventCandidateSchema = z.strictObject({
-  ...candidateBaseShape,
-  eventType: z.literal('select'),
-  payload: SelectEventPayloadSchema,
-});
-
-export const CheckboxEventCandidateSchema = z.strictObject({
-  ...candidateBaseShape,
-  eventType: z.literal('checkbox'),
-  payload: CheckboxEventPayloadSchema,
-});
-
-export const RadioEventCandidateSchema = z.strictObject({
-  ...candidateBaseShape,
-  eventType: z.literal('radio'),
-  payload: RadioEventPayloadSchema,
-});
-
-export const LegacyV2RecordingEventCandidateSchema = z.discriminatedUnion(
-  'eventType',
-  [
-    ClickEventCandidateSchema,
-    TextInputEventCandidateSchema,
-    SelectEventCandidateSchema,
-    CheckboxEventCandidateSchema,
-    RadioEventCandidateSchema,
-  ],
+export const LegacyTextInputEventPayloadSchema = z.discriminatedUnion(
+  'masked',
+  [UnmaskedTextInputPayloadSchema, MaskedTextInputPayloadSchema],
 );
 
-export const PrivacyCapturePolicySchema = z.enum(['allow', 'mask', 'block']);
-
-export const AllowedTextInputPayloadSchema = z.strictObject({
-  capturePolicy: z.literal('allow'),
-  value: z.string().max(MAX_INPUT_VALUE_LENGTH),
-  truncated: z.boolean(),
-});
-
-export const MaskedTextInputV3PayloadSchema = z.strictObject({
-  capturePolicy: z.literal('mask'),
-  value: z.null(),
-  truncated: z.literal(false),
-});
-
-export const BlockedValuePayloadSchema = z.strictObject({
-  capturePolicy: z.literal('block'),
-});
-
-export const TextInputV3PayloadSchema = z.discriminatedUnion('capturePolicy', [
-  AllowedTextInputPayloadSchema,
-  MaskedTextInputV3PayloadSchema,
-  BlockedValuePayloadSchema,
-]);
-
-export const AllowedSelectPayloadSchema = z.strictObject({
-  capturePolicy: z.literal('allow'),
+export const LegacySelectEventPayloadSchema = z.strictObject({
   value: ControlValueSchema,
   label: ControlValueSchema,
   truncated: z.boolean(),
 });
 
-export const MaskedSelectPayloadSchema = z.strictObject({
-  capturePolicy: z.literal('mask'),
-  value: z.null(),
-  label: z.null(),
-  truncated: z.literal(false),
-});
-
-export const SelectV3PayloadSchema = z.discriminatedUnion('capturePolicy', [
-  AllowedSelectPayloadSchema,
-  MaskedSelectPayloadSchema,
-  BlockedValuePayloadSchema,
-]);
-
-export const AllowedCheckboxPayloadSchema = z.strictObject({
-  capturePolicy: z.literal('allow'),
+export const LegacyCheckboxEventPayloadSchema = z.strictObject({
   checked: z.boolean(),
 });
 
-export const MaskedCheckboxPayloadSchema = z.strictObject({
-  capturePolicy: z.literal('mask'),
-  checked: z.null(),
-});
-
-export const CheckboxV3PayloadSchema = z.discriminatedUnion('capturePolicy', [
-  AllowedCheckboxPayloadSchema,
-  MaskedCheckboxPayloadSchema,
-  BlockedValuePayloadSchema,
-]);
-
-export const AllowedRadioPayloadSchema = z.strictObject({
-  capturePolicy: z.literal('allow'),
+export const LegacyRadioEventPayloadSchema = z.strictObject({
   checked: z.literal(true),
   value: ControlValueSchema.nullable(),
   truncated: z.boolean(),
 });
-
-export const MaskedRadioPayloadSchema = z.strictObject({
-  capturePolicy: z.literal('mask'),
-  checked: z.null(),
-  value: z.null(),
-  truncated: z.literal(false),
-});
-
-export const RadioV3PayloadSchema = z.discriminatedUnion('capturePolicy', [
-  AllowedRadioPayloadSchema,
-  MaskedRadioPayloadSchema,
-  BlockedValuePayloadSchema,
-]);
-
-const candidateV3BaseShape = {
-  schemaVersion: z.literal(3),
-  occurredAt: TimestampSchema,
-  target: RecordingTargetSnapshotSchema,
-  locatorBundle: LocatorBundleSchema,
-  privacyDecision: PrivacyDecisionSchema,
-};
-
-const ClickEventCandidateV3Schema = z.strictObject({
-  ...candidateV3BaseShape,
-  eventType: z.literal('click'),
-  payload: ClickEventPayloadSchema,
-});
-
-const TextInputEventCandidateV3Schema = z.strictObject({
-  ...candidateV3BaseShape,
-  eventType: z.literal('text-input'),
-  payload: TextInputV3PayloadSchema,
-});
-
-const SelectEventCandidateV3Schema = z.strictObject({
-  ...candidateV3BaseShape,
-  eventType: z.literal('select'),
-  payload: SelectV3PayloadSchema,
-});
-
-const CheckboxEventCandidateV3Schema = z.strictObject({
-  ...candidateV3BaseShape,
-  eventType: z.literal('checkbox'),
-  payload: CheckboxV3PayloadSchema,
-});
-
-const RadioEventCandidateV3Schema = z.strictObject({
-  ...candidateV3BaseShape,
-  eventType: z.literal('radio'),
-  payload: RadioV3PayloadSchema,
-});
-
-function validatePrivacyPolicy(
-  event: {
-    eventType: string;
-    privacyDecision: {
-      sensitivity: string;
-      policy: string;
-    };
-    payload: object;
-    target: z.infer<typeof RecordingTargetSnapshotSchema>;
-    locatorBundle: LocatorBundle;
-  },
-  context: z.RefinementCtx,
-): void {
-  const { policy, sensitivity } = event.privacyDecision;
-  const requiredPolicy =
-    sensitivity === 'authentication' ||
-    sensitivity === 'financial' ||
-    sensitivity === 'identity' ||
-    sensitivity === 'health'
-      ? 'block'
-      : sensitivity === 'unknown-sensitive'
-        ? 'mask'
-        : null;
-
-  if (requiredPolicy !== null && policy !== requiredPolicy) {
-    context.addIssue({
-      code: 'custom',
-      path: ['privacyDecision', 'policy'],
-      message: `The ${sensitivity} sensitivity requires the ${requiredPolicy} policy.`,
-    });
-  }
-
-  if (
-    (sensitivity === 'public' || sensitivity === 'general') &&
-    policy !== 'allow'
-  ) {
-    context.addIssue({
-      code: 'custom',
-      path: ['privacyDecision', 'policy'],
-      message: `The ${sensitivity} sensitivity requires the allow policy.`,
-    });
-  }
-
-  if (sensitivity === 'personal' && policy !== 'allow' && policy !== 'mask') {
-    context.addIssue({
-      code: 'custom',
-      path: ['privacyDecision', 'policy'],
-      message: 'Personal data may only use the allow or mask policy.',
-    });
-  }
-
-  if (
-    event.eventType !== 'click' &&
-    (!('capturePolicy' in event.payload) ||
-      event.payload.capturePolicy !== policy)
-  ) {
-    context.addIssue({
-      code: 'custom',
-      path: ['payload', 'capturePolicy'],
-      message: 'Payload policy must match the privacy decision.',
-    });
-  }
-
-  const targetValues = [
-    event.target.id,
-    event.target.name,
-    event.target.labelText,
-    event.target.accessibleName,
-    event.target.placeholder,
-    event.target.textPreview,
-    ...event.target.testIdCandidates.map((candidate) => candidate.value),
-  ];
-  if (
-    targetValues.some(
-      (value) => value !== null && containsSensitiveLiteral(value),
-    )
-  ) {
-    context.addIssue({
-      code: 'custom',
-      path: ['target'],
-      message: 'Target metadata must not contain a sensitive literal.',
-    });
-  }
-
-  const locatorCandidates = [
-    event.locatorBundle.primary,
-    ...event.locatorBundle.fallbacks,
-  ];
-  if (
-    locatorCandidates.some((candidate) =>
-      locatorTextValues(candidate.locator).some(containsSensitiveLiteral),
-    )
-  ) {
-    context.addIssue({
-      code: 'custom',
-      path: ['locatorBundle'],
-      message: 'Locator metadata must not contain a sensitive literal.',
-    });
-  }
-}
-
-function locatorTextValues(
-  locator: LocatorBundle['primary']['locator'],
-): string[] {
-  switch (locator.kind) {
-    case 'testId':
-      return [locator.value];
-    case 'role':
-      return locator.name === undefined
-        ? [locator.role]
-        : [locator.role, locator.name];
-    case 'label':
-    case 'text':
-    case 'placeholder':
-      return [locator.value];
-    case 'css':
-      return [locator.selector];
-  }
-}
-
-export const RecordingEventCandidateSchema = z
-  .discriminatedUnion('eventType', [
-    ClickEventCandidateV3Schema,
-    TextInputEventCandidateV3Schema,
-    SelectEventCandidateV3Schema,
-    CheckboxEventCandidateV3Schema,
-    RadioEventCandidateV3Schema,
-  ])
-  .superRefine(validatePrivacyPolicy);
 
 const acceptedEventEnvelopeShape = {
   eventId: UuidSchema,
@@ -429,95 +107,47 @@ const acceptedEventEnvelopeShape = {
   recordedAt: TimestampSchema,
 };
 
-export const ClickRecordingEventSchema = z.strictObject({
-  ...candidateBaseShape,
-  ...acceptedEventEnvelopeShape,
-  eventType: z.literal('click'),
-  payload: ClickEventPayloadSchema,
-});
-
-export const TextInputRecordingEventSchema = z.strictObject({
-  ...candidateBaseShape,
-  ...acceptedEventEnvelopeShape,
-  eventType: z.literal('text-input'),
-  payload: TextInputEventPayloadSchema,
-});
-
-export const SelectRecordingEventSchema = z.strictObject({
-  ...candidateBaseShape,
-  ...acceptedEventEnvelopeShape,
-  eventType: z.literal('select'),
-  payload: SelectEventPayloadSchema,
-});
-
-export const CheckboxRecordingEventSchema = z.strictObject({
-  ...candidateBaseShape,
-  ...acceptedEventEnvelopeShape,
-  eventType: z.literal('checkbox'),
-  payload: CheckboxEventPayloadSchema,
-});
-
-export const RadioRecordingEventSchema = z.strictObject({
-  ...candidateBaseShape,
-  ...acceptedEventEnvelopeShape,
-  eventType: z.literal('radio'),
-  payload: RadioEventPayloadSchema,
-});
+const legacyV2CandidateBaseShape = {
+  schemaVersion: z.literal(2),
+  occurredAt: TimestampSchema,
+  target: RecordingTargetSnapshotSchema,
+  locatorBundle: LocatorBundleSchema,
+};
 
 export const LegacyV2RecordingEventSchema = z.discriminatedUnion('eventType', [
-  ClickRecordingEventSchema,
-  TextInputRecordingEventSchema,
-  SelectRecordingEventSchema,
-  CheckboxRecordingEventSchema,
-  RadioRecordingEventSchema,
+  z.strictObject({
+    ...legacyV2CandidateBaseShape,
+    ...acceptedEventEnvelopeShape,
+    eventType: z.literal('click'),
+    payload: ClickEventPayloadSchema,
+  }),
+  z.strictObject({
+    ...legacyV2CandidateBaseShape,
+    ...acceptedEventEnvelopeShape,
+    eventType: z.literal('text-input'),
+    payload: LegacyTextInputEventPayloadSchema,
+  }),
+  z.strictObject({
+    ...legacyV2CandidateBaseShape,
+    ...acceptedEventEnvelopeShape,
+    eventType: z.literal('select'),
+    payload: LegacySelectEventPayloadSchema,
+  }),
+  z.strictObject({
+    ...legacyV2CandidateBaseShape,
+    ...acceptedEventEnvelopeShape,
+    eventType: z.literal('checkbox'),
+    payload: LegacyCheckboxEventPayloadSchema,
+  }),
+  z.strictObject({
+    ...legacyV2CandidateBaseShape,
+    ...acceptedEventEnvelopeShape,
+    eventType: z.literal('radio'),
+    payload: LegacyRadioEventPayloadSchema,
+  }),
 ]);
 
-const ClickRecordingEventV3Schema = z.strictObject({
-  ...candidateV3BaseShape,
-  ...acceptedEventEnvelopeShape,
-  eventType: z.literal('click'),
-  payload: ClickEventPayloadSchema,
-});
-
-const TextInputRecordingEventV3Schema = z.strictObject({
-  ...candidateV3BaseShape,
-  ...acceptedEventEnvelopeShape,
-  eventType: z.literal('text-input'),
-  payload: TextInputV3PayloadSchema,
-});
-
-const SelectRecordingEventV3Schema = z.strictObject({
-  ...candidateV3BaseShape,
-  ...acceptedEventEnvelopeShape,
-  eventType: z.literal('select'),
-  payload: SelectV3PayloadSchema,
-});
-
-const CheckboxRecordingEventV3Schema = z.strictObject({
-  ...candidateV3BaseShape,
-  ...acceptedEventEnvelopeShape,
-  eventType: z.literal('checkbox'),
-  payload: CheckboxV3PayloadSchema,
-});
-
-const RadioRecordingEventV3Schema = z.strictObject({
-  ...candidateV3BaseShape,
-  ...acceptedEventEnvelopeShape,
-  eventType: z.literal('radio'),
-  payload: RadioV3PayloadSchema,
-});
-
-export const RecordingEventSchema = z
-  .discriminatedUnion('eventType', [
-    ClickRecordingEventV3Schema,
-    TextInputRecordingEventV3Schema,
-    SelectRecordingEventV3Schema,
-    CheckboxRecordingEventV3Schema,
-    RadioRecordingEventV3Schema,
-  ])
-  .superRefine(validatePrivacyPolicy);
-
-const legacyCandidateBaseShape = {
+const legacyV1CandidateBaseShape = {
   schemaVersion: z.literal(1),
   occurredAt: TimestampSchema,
   target: RecordingTargetSnapshotSchema,
@@ -525,34 +155,34 @@ const legacyCandidateBaseShape = {
 
 export const LegacyRecordingEventSchema = z.discriminatedUnion('eventType', [
   z.strictObject({
-    ...legacyCandidateBaseShape,
+    ...legacyV1CandidateBaseShape,
     ...acceptedEventEnvelopeShape,
     eventType: z.literal('click'),
     payload: ClickEventPayloadSchema,
   }),
   z.strictObject({
-    ...legacyCandidateBaseShape,
+    ...legacyV1CandidateBaseShape,
     ...acceptedEventEnvelopeShape,
     eventType: z.literal('text-input'),
-    payload: TextInputEventPayloadSchema,
+    payload: LegacyTextInputEventPayloadSchema,
   }),
   z.strictObject({
-    ...legacyCandidateBaseShape,
+    ...legacyV1CandidateBaseShape,
     ...acceptedEventEnvelopeShape,
     eventType: z.literal('select'),
-    payload: SelectEventPayloadSchema,
+    payload: LegacySelectEventPayloadSchema,
   }),
   z.strictObject({
-    ...legacyCandidateBaseShape,
+    ...legacyV1CandidateBaseShape,
     ...acceptedEventEnvelopeShape,
     eventType: z.literal('checkbox'),
-    payload: CheckboxEventPayloadSchema,
+    payload: LegacyCheckboxEventPayloadSchema,
   }),
   z.strictObject({
-    ...legacyCandidateBaseShape,
+    ...legacyV1CandidateBaseShape,
     ...acceptedEventEnvelopeShape,
     eventType: z.literal('radio'),
-    payload: RadioEventPayloadSchema,
+    payload: LegacyRadioEventPayloadSchema,
   }),
 ]);
 
@@ -572,7 +202,6 @@ function validateTimeline(
         message: 'Event session must match the timeline session.',
       });
     }
-
     if (event.sequence !== index + 1) {
       context.addIssue({
         code: 'custom',
@@ -699,15 +328,6 @@ export const RecorderPopupResponseSchema = z.discriminatedUnion('success', [
   RecorderPopupFailureResponseSchema,
 ]);
 
-export type RecordingEventType = z.infer<typeof RecordingEventTypeSchema>;
-export type RecordingTargetSnapshot = z.infer<
-  typeof RecordingTargetSnapshotSchema
->;
-export type MaskedInputReason = z.infer<typeof MaskedInputReasonSchema>;
-export type RecordingEventCandidate = z.infer<
-  typeof RecordingEventCandidateSchema
->;
-export type RecordingEvent = z.infer<typeof RecordingEventSchema>;
 export type RecordingTimeline = z.infer<typeof RecordingTimelineSchema>;
 export type LegacyRecordingTimeline = z.infer<
   typeof LegacyRecordingTimelineSchema

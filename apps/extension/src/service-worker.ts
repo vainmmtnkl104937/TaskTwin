@@ -7,6 +7,8 @@ import {
   CryptoRecorderIdGenerator,
   SystemRecorderClock,
 } from './chrome/adapters.js';
+import { ChromeLocalRecordingArchive } from './recording-artifacts/archive-store.js';
+import { LocalRecordingArtifactFinalizer } from './recording-artifacts/artifact-finalizer.js';
 import {
   createRecorderError,
   RecorderCommandSchema,
@@ -33,6 +35,11 @@ const stateStore = new ChromeSessionRecordingStateStore();
 const timelineStore = new ChromeSessionRecordingTimelineStore();
 const contentScript = new ChromeContentScriptCoordinator();
 const clock = new SystemRecorderClock();
+const recordingArchive = new ChromeLocalRecordingArchive();
+const artifactFinalizer = new LocalRecordingArtifactFinalizer(
+  timelineStore,
+  recordingArchive,
+);
 
 const recorderController = new RecorderController(
   stateStore,
@@ -41,6 +48,7 @@ const recorderController = new RecorderController(
   contentScript,
   clock,
   new CryptoRecorderIdGenerator(),
+  artifactFinalizer,
 );
 
 const recordingEventController = new RecordingEventController(

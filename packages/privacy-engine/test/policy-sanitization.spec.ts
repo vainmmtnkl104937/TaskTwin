@@ -4,6 +4,7 @@ import {
   classifyPrivacy,
   containsSensitiveLiteral,
   DEFAULT_PRIVACY_SETTINGS,
+  detectSensitiveLiteralKinds,
   PrivacyDecisionSchema,
   resolvePrivacyPolicy,
   sanitizeCapturedValue,
@@ -116,5 +117,40 @@ describe('privacy policy and sanitization', () => {
       'privacy-safe-structural-id',
     );
     expect(sanitizePersistedText('Email address')).toBe('Email address');
+  });
+
+  it.each([
+    ['person@example.test', ['personal']],
+    ['+84 912 345 678', ['personal']],
+  ] as const)('classifies the personal literal %s', (value, expectedKinds) => {
+    expect(detectSensitiveLiteralKinds(value)).toEqual(expectedKinds);
+  });
+
+  it.each([
+    ['123456', ['authentication']],
+    ['token=fixture-token-value', ['authentication']],
+  ] as const)(
+    'classifies the authentication literal %s',
+    (value, expectedKinds) => {
+      expect(detectSensitiveLiteralKinds(value)).toEqual(expectedKinds);
+    },
+  );
+
+  it('classifies a long number as financial or identity data', () => {
+    expect(detectSensitiveLiteralKinds('4111111111111111')).toEqual([
+      'financial-or-identity',
+    ]);
+  });
+
+  it('returns deterministic unique kinds in fixed order', () => {
+    expect(
+      detectSensitiveLiteralKinds(
+        'person@example.test token=fixture-token-value 4111111111111111',
+      ),
+    ).toEqual(['personal', 'authentication', 'financial-or-identity']);
+  });
+
+  it('does not classify a safe structural value', () => {
+    expect(detectSensitiveLiteralKinds('tasktwin-save-button')).toEqual([]);
   });
 });

@@ -29,7 +29,7 @@ describe('database integration', () => {
     await prisma?.$disconnect();
   });
 
-  it('connects to PostgreSQL and finds the applied Session 04 migration', async () => {
+  it('connects to PostgreSQL and finds the applied Session 09 migration', async () => {
     if (prisma === undefined) {
       throw new Error('Database client was not initialized');
     }
@@ -42,7 +42,7 @@ describe('database integration', () => {
       FROM "_prisma_migrations"
       WHERE finished_at IS NOT NULL
         AND rolled_back_at IS NULL
-        AND migration_name = '20260729064955_identity_workspace_auth'
+        AND migration_name = '20260729114329_recording_artifact_sync'
     `;
 
     expect(connectionResult[0]?.value).toBe(1);

@@ -102,6 +102,22 @@ screenshots; scan free-form page content; use OCR, computer vision, or AI;
 claim complete PII detection or compliance certification; generate workflows;
 or execute Playwright.
 
+## Session 09: durable recording artifacts and control-plane sync
+
+- Framework-independent current recording, artifact, and sync contracts
+- Validated immutable artifacts in bounded `chrome.storage.local` storage
+- Local pending/syncing/synced/failed outbox state
+- Authenticated workspace-scoped recording-session APIs
+- Idempotent bounded event batches and processed-batch receipts
+- Transactional PostgreSQL event persistence
+- Completion-time privacy, count, origin, and sequence verification
+- Safe metadata reads without raw events
+
+Session 09 provides a transport abstraction and tests at-least-once
+orchestration with a mock. Extension authentication, production HTTP sync,
+automatic retry scheduling, recording review UI, workflow conversion,
+screenshots, AI, and execution remain out of scope.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their
