@@ -7,7 +7,10 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { RecordingRepository } from '@tasktwin/database';
+import {
+  RecordingRepository,
+  WorkflowDraftRepository,
+} from '@tasktwin/database';
 
 import {
   AUTHENTICATED_USER,
@@ -35,6 +38,7 @@ export class OrganizationResourceContextGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly recordingRepository: RecordingRepository,
+    private readonly workflowDraftRepository: WorkflowDraftRepository,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -61,16 +65,28 @@ export class OrganizationResourceContextGuard implements CanActivate {
       throw new BadRequestException('Invalid resource identifier');
     }
 
-    const access =
-      metadata.kind === 'workspace'
-        ? await this.recordingRepository.resolveWorkspaceAccess(
-            user.id,
-            resourceId,
-          )
-        : await this.recordingRepository.resolveRecordingSessionAccess(
+    let access;
+    switch (metadata.kind) {
+      case 'workspace':
+        access = await this.recordingRepository.resolveWorkspaceAccess(
+          user.id,
+          resourceId,
+        );
+        break;
+      case 'recordingSession':
+        access = await this.recordingRepository.resolveRecordingSessionAccess(
+          user.id,
+          resourceId,
+        );
+        break;
+      case 'workflowVersion':
+        access =
+          await this.workflowDraftRepository.resolveWorkflowVersionAccess(
             user.id,
             resourceId,
           );
+        break;
+    }
 
     if (access === null || access.userId !== user.id) {
       throw new NotFoundException();

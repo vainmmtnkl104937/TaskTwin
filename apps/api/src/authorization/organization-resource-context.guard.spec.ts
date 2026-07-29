@@ -4,7 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { OrganizationRole, type RecordingRepository } from '@tasktwin/database';
+import {
+  OrganizationRole,
+  type RecordingRepository,
+  type WorkflowDraftRepository,
+} from '@tasktwin/database';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AUTHENTICATED_USER } from '../auth/authenticated-request.js';
@@ -28,10 +32,13 @@ interface TestRequest {
   [VERIFIED_ORGANIZATION_CONTEXT]?: VerifiedOrganizationContext;
 }
 
-function createRequest(resourceId: unknown = workspaceId): TestRequest {
+function createRequest(
+  resourceId: unknown = workspaceId,
+  parameterName = 'workspaceId',
+): TestRequest {
   return {
     headers: {},
-    params: { workspaceId: resourceId },
+    params: { [parameterName]: resourceId },
     [AUTHENTICATED_USER]: {
       id: userId,
       email: 'owner@example.test',
@@ -48,16 +55,23 @@ function createExecutionContext(request: TestRequest): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
-function createReflector(): Reflector {
+function createReflector(
+  kind: 'workspace' | 'recordingSession' | 'workflowVersion' = 'workspace',
+  parameterName = 'workspaceId',
+): Reflector {
   return {
     getAllAndOverride: vi.fn().mockReturnValue({
-      kind: 'workspace',
-      parameterName: 'workspaceId',
+      kind,
+      parameterName,
     }),
   } as unknown as Reflector;
 }
 
 describe('OrganizationResourceContextGuard', () => {
+  const workflowDraftRepository = {
+    resolveWorkflowVersionAccess: vi.fn(),
+  } as unknown as WorkflowDraftRepository;
+
   it('resolves membership and attaches trusted organization context', async () => {
     const request = createRequest();
     const resolveWorkspaceAccess = vi.fn().mockResolvedValue({
@@ -65,9 +79,13 @@ describe('OrganizationResourceContextGuard', () => {
       userId,
       role: OrganizationRole.MEMBER,
     });
-    const guard = new OrganizationResourceContextGuard(createReflector(), {
-      resolveWorkspaceAccess,
-    } as unknown as RecordingRepository);
+    const guard = new OrganizationResourceContextGuard(
+      createReflector(),
+      {
+        resolveWorkspaceAccess,
+      } as unknown as RecordingRepository,
+      workflowDraftRepository,
+    );
 
     await expect(
       guard.canActivate(createExecutionContext(request)),
@@ -80,9 +98,13 @@ describe('OrganizationResourceContextGuard', () => {
   });
 
   it('returns not found for an inaccessible cross-organization resource', async () => {
-    const guard = new OrganizationResourceContextGuard(createReflector(), {
-      resolveWorkspaceAccess: vi.fn().mockResolvedValue(null),
-    } as unknown as RecordingRepository);
+    const guard = new OrganizationResourceContextGuard(
+      createReflector(),
+      {
+        resolveWorkspaceAccess: vi.fn().mockResolvedValue(null),
+      } as unknown as RecordingRepository,
+      workflowDraftRepository,
+    );
 
     await expect(
       guard.canActivate(createExecutionContext(createRequest())),
@@ -91,13 +113,45 @@ describe('OrganizationResourceContextGuard', () => {
 
   it('rejects an invalid route identifier before repository access', async () => {
     const resolveWorkspaceAccess = vi.fn();
-    const guard = new OrganizationResourceContextGuard(createReflector(), {
-      resolveWorkspaceAccess,
-    } as unknown as RecordingRepository);
+    const guard = new OrganizationResourceContextGuard(
+      createReflector(),
+      {
+        resolveWorkspaceAccess,
+      } as unknown as RecordingRepository,
+      workflowDraftRepository,
+    );
 
     await expect(
       guard.canActivate(createExecutionContext(createRequest('not-a-uuid'))),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(resolveWorkspaceAccess).not.toHaveBeenCalled();
+  });
+
+  it('resolves workflow-version membership through the workflow repository', async () => {
+    const workflowVersionId = 'b39dfd6a-febf-42f6-b6c0-85c662509ad8';
+    const resolveWorkflowVersionAccess = vi.fn().mockResolvedValue({
+      organizationId: '13375635-b896-4446-81ed-2de3fa201dac',
+      userId,
+      role: OrganizationRole.VIEWER,
+    });
+    const guard = new OrganizationResourceContextGuard(
+      createReflector('workflowVersion', 'workflowVersionId'),
+      {} as RecordingRepository,
+      {
+        resolveWorkflowVersionAccess,
+      } as unknown as WorkflowDraftRepository,
+    );
+
+    await expect(
+      guard.canActivate(
+        createExecutionContext(
+          createRequest(workflowVersionId, 'workflowVersionId'),
+        ),
+      ),
+    ).resolves.toBe(true);
+    expect(resolveWorkflowVersionAccess).toHaveBeenCalledWith(
+      userId,
+      workflowVersionId,
+    );
   });
 });

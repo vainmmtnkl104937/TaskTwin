@@ -44,3 +44,15 @@ export {
   WorkflowVersionRepository,
   type PersistedWorkflowVersion,
 } from './workflow-version.repository.js';
+export {
+  WorkflowDraftRepositoryError,
+  type WorkflowDraftRepositoryErrorCode,
+} from './workflow-draft/workflow-draft-errors.js';
+export type {
+  UpdateWorkflowDraftResult,
+  WorkflowAccessRecord,
+  WorkflowListItemRecord,
+  WorkflowVersionDetailRecord,
+  WorkspaceWorkflowListRecord,
+} from './workflow-draft/workflow-draft-records.js';
+export { WorkflowDraftRepository } from './workflow-draft/workflow-draft.repository.js';

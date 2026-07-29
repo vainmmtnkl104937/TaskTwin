@@ -1,6 +1,7 @@
 {
   "extends": "@tasktwin/config/typescript/nextjs.json",
   "compilerOptions": {
+    "jsx": "react-jsx",
     "paths": {
       "@/*": ["./*"]
     }
