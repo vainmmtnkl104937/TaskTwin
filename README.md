@@ -12,8 +12,8 @@ recorder timeline created through Session 06. It provides buildable
 application shells, shared configuration and types, health checks, runtime
 workflow validation, local PostgreSQL development tooling, short-lived
 access-token authentication, organization-scoped workspaces, deterministic
-recorder state, and privacy-bounded browser event capture. It does not yet
-generate or execute workflows.
+recorder state, privacy-bounded browser event capture, and deterministic
+semantic locator ranking. It does not yet generate or execute workflows.
 
 ## Browser-first MVP
 
@@ -33,6 +33,7 @@ general-purpose operating-system control are not part of the browser-first MVP.
 | `apps/local-runner`        | Node.js startup and health/status shell                  |
 | `packages/shared-types`    | Shared service health contract                           |
 | `packages/workflow-schema` | Versioned workflow contracts and runtime validation      |
+| `packages/locator-engine`  | Pure locator scoring, ranking, and confidence rules      |
 | `packages/database`        | Prisma client, identity, workspace, workflow persistence |
 | `packages/config`          | Shared strict TypeScript and ESLint configuration        |
 
@@ -175,3 +176,17 @@ masked null values.
 The popup shows only event count and a fixed action-category summary. This
 session does not generate locators or workflows, synchronize with the backend,
 execute browser actions, capture arbitrary DOM data, or add broad host access.
+
+## Session 07 scope
+
+Session 07 adds a framework-independent semantic locator engine and an
+extension-owned DOM adapter. Each newly accepted recording event contains a
+runtime-validated locator bundle with one unique primary locator, unique
+ordered fallbacks, deterministic scores, reasons, and confidence. Semantic
+test-ID, role, label, placeholder, stable identifier, text, and bounded CSS
+strategies are evaluated against the current document.
+
+The event timeline writes schema version 2 while retaining explicit read
+compatibility with Session 06 timeline version 1. This session does not create
+workflow steps, replay locators, use Playwright or AI, synchronize with the
+backend, or repair locators.

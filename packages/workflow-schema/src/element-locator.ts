@@ -2,9 +2,17 @@ import { z } from 'zod';
 
 import { NonEmptyStringSchema } from './primitives.js';
 
+export const TestIdAttributeSchema = z.enum([
+  'data-testid',
+  'data-test',
+  'data-cy',
+  'data-qa',
+]);
+
 export const TestIdLocatorSchema = z.strictObject({
   kind: z.literal('testId'),
   value: NonEmptyStringSchema,
+  attribute: TestIdAttributeSchema.optional(),
 });
 
 export const RoleLocatorSchema = z.strictObject({
@@ -26,6 +34,12 @@ export const TextLocatorSchema = z.strictObject({
   exact: z.boolean().optional(),
 });
 
+export const PlaceholderLocatorSchema = z.strictObject({
+  kind: z.literal('placeholder'),
+  value: NonEmptyStringSchema,
+  exact: z.boolean().optional(),
+});
+
 export const CssLocatorSchema = z.strictObject({
   kind: z.literal('css'),
   selector: NonEmptyStringSchema,
@@ -36,12 +50,15 @@ export const ElementLocatorSchema = z.discriminatedUnion('kind', [
   RoleLocatorSchema,
   LabelLocatorSchema,
   TextLocatorSchema,
+  PlaceholderLocatorSchema,
   CssLocatorSchema,
 ]);
 
+export type TestIdAttribute = z.infer<typeof TestIdAttributeSchema>;
 export type TestIdLocator = z.infer<typeof TestIdLocatorSchema>;
 export type RoleLocator = z.infer<typeof RoleLocatorSchema>;
 export type LabelLocator = z.infer<typeof LabelLocatorSchema>;
 export type TextLocator = z.infer<typeof TextLocatorSchema>;
+export type PlaceholderLocator = z.infer<typeof PlaceholderLocatorSchema>;
 export type CssLocator = z.infer<typeof CssLocatorSchema>;
 export type ElementLocator = z.infer<typeof ElementLocatorSchema>;

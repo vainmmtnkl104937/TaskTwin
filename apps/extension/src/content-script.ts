@@ -3,6 +3,7 @@ import {
   EventCaptureController,
   type RecordingCandidateEmitter,
 } from './content/event-capture.js';
+import { DomLocatorBundleFactory } from './content/locator-dom-adapter.js';
 import { ContentScriptController } from './content-script-controller.js';
 import {
   RecordingEventCandidateResponseSchema,
@@ -34,6 +35,7 @@ if (contentScriptGlobal.taskTwinRecorderContentScript === undefined) {
     new ChromeRecordingCandidateEmitter(),
     { now: () => new Date().toISOString() },
     browserTrustedEventPolicy,
+    new DomLocatorBundleFactory(document),
   );
   const controller = new ContentScriptController(capture);
   contentScriptGlobal.taskTwinRecorderContentScript = controller;

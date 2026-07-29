@@ -137,6 +137,39 @@ describe('WorkflowDefinitionSchema', () => {
     ).toBe(false);
   });
 
+  it('supports additive placeholder and allowlisted test ID locators', () => {
+    expect(
+      ElementLocatorSchema.safeParse({
+        kind: 'placeholder',
+        value: 'Search tasks',
+        exact: true,
+      }).success,
+    ).toBe(true);
+
+    for (const attribute of [
+      'data-testid',
+      'data-test',
+      'data-cy',
+      'data-qa',
+    ]) {
+      expect(
+        ElementLocatorSchema.safeParse({
+          kind: 'testId',
+          attribute,
+          value: 'save-task',
+        }).success,
+      ).toBe(true);
+    }
+
+    expect(
+      ElementLocatorSchema.safeParse({
+        kind: 'testId',
+        attribute: 'data-unknown',
+        value: 'save-task',
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects invalid wait durations', () => {
     const workflow = parseValidFixture();
     const baseWaitStep = {

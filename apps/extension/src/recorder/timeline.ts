@@ -6,11 +6,12 @@ import {
   type RecordingEventCandidate,
   type RecordingTimeline,
   type RecordingTimelineSummary,
+  type PersistedRecordingTimeline,
 } from './event-contracts.js';
 
 export function createRecordingTimeline(sessionId: string): RecordingTimeline {
   return RecordingTimelineSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     sessionId,
     nextSequence: 1,
     events: [],
@@ -18,7 +19,7 @@ export function createRecordingTimeline(sessionId: string): RecordingTimeline {
 }
 
 export function summarizeRecordingTimeline(
-  timeline: RecordingTimeline | undefined,
+  timeline: PersistedRecordingTimeline | undefined,
 ): RecordingTimelineSummary {
   const latestEvent = timeline?.events.at(-1);
   return {

@@ -1,3 +1,5 @@
+import type { LocatorBundle } from '@tasktwin/locator-engine';
+
 import {
   MAX_CONTROL_VALUE_LENGTH,
   MAX_INPUT_VALUE_LENGTH,
@@ -39,6 +41,10 @@ export interface CaptureClock {
 
 export interface TrustedEventPolicy {
   isTrusted(event: Event): boolean;
+}
+
+export interface LocatorBundleFactory {
+  create(element: Element, generatedAt: string): LocatorBundle | null;
 }
 
 export const browserTrustedEventPolicy: TrustedEventPolicy = {
@@ -243,6 +249,7 @@ function getMaskedReason(input: HTMLInputElement): MaskedInputReason | null {
 function createTextInputCandidate(
   input: HTMLInputElement,
   occurredAt: string,
+  locatorBundle: LocatorBundle,
 ): RecordingEventCandidate {
   const maskedReason = getMaskedReason(input);
   const payload =
@@ -260,10 +267,11 @@ function createTextInputCandidate(
         };
 
   return RecordingEventCandidateSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     eventType: 'text-input',
     occurredAt,
     target: createTargetSnapshot(input),
+    locatorBundle,
     payload,
   });
 }
@@ -281,6 +289,7 @@ export class EventCaptureController {
     private readonly emitter: RecordingCandidateEmitter,
     private readonly clock: CaptureClock,
     private readonly trustedEvents: TrustedEventPolicy,
+    private readonly locatorFactory: LocatorBundleFactory,
   ) {}
 
   start(): void {
@@ -337,12 +346,18 @@ export class EventCaptureController {
       return;
     }
 
+    const occurredAt = this.clock.now();
+    const locatorBundle = this.locatorFactory.create(actionable, occurredAt);
+    if (locatorBundle === null) {
+      return;
+    }
     this.submit(
       RecordingEventCandidateSchema.parse({
-        schemaVersion: 1,
+        schemaVersion: 2,
         eventType: 'click',
-        occurredAt: this.clock.now(),
+        occurredAt,
         target: createTargetSnapshot(actionable),
+        locatorBundle,
         payload: { activation: 'primary' },
       }),
     );
@@ -372,7 +387,16 @@ export class EventCaptureController {
       clearTimeout(previous.timer);
     }
 
-    const candidate = createTextInputCandidate(target, this.clock.now());
+    const occurredAt = this.clock.now();
+    const locatorBundle = this.locatorFactory.create(target, occurredAt);
+    if (locatorBundle === null) {
+      return;
+    }
+    const candidate = createTextInputCandidate(
+      target,
+      occurredAt,
+      locatorBundle,
+    );
     const timer = setTimeout(() => {
       this.pendingInputs.delete(target);
       this.submit(candidate);
@@ -394,12 +418,18 @@ export class EventCaptureController {
       const label = boundedControlValue(
         target.selectedOptions.item(0)?.textContent ?? '',
       );
+      const occurredAt = this.clock.now();
+      const locatorBundle = this.locatorFactory.create(target, occurredAt);
+      if (locatorBundle === null) {
+        return;
+      }
       this.submit(
         RecordingEventCandidateSchema.parse({
-          schemaVersion: 1,
+          schemaVersion: 2,
           eventType: 'select',
-          occurredAt: this.clock.now(),
+          occurredAt,
           target: createTargetSnapshot(target),
+          locatorBundle,
           payload: {
             value: value.value,
             label: label.value,
@@ -415,12 +445,18 @@ export class EventCaptureController {
     }
 
     if (target.type === 'checkbox') {
+      const occurredAt = this.clock.now();
+      const locatorBundle = this.locatorFactory.create(target, occurredAt);
+      if (locatorBundle === null) {
+        return;
+      }
       this.submit(
         RecordingEventCandidateSchema.parse({
-          schemaVersion: 1,
+          schemaVersion: 2,
           eventType: 'checkbox',
-          occurredAt: this.clock.now(),
+          occurredAt,
           target: createTargetSnapshot(target),
+          locatorBundle,
           payload: { checked: target.checked },
         }),
       );
@@ -429,12 +465,18 @@ export class EventCaptureController {
 
     if (target.type === 'radio' && target.checked) {
       const value = boundedControlValue(target.value);
+      const occurredAt = this.clock.now();
+      const locatorBundle = this.locatorFactory.create(target, occurredAt);
+      if (locatorBundle === null) {
+        return;
+      }
       this.submit(
         RecordingEventCandidateSchema.parse({
-          schemaVersion: 1,
+          schemaVersion: 2,
           eventType: 'radio',
-          occurredAt: this.clock.now(),
+          occurredAt,
           target: createTargetSnapshot(target),
+          locatorBundle,
           payload: {
             checked: true,
             value: value.value.length === 0 ? null : value.value,

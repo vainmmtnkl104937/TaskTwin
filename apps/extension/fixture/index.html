@@ -29,6 +29,14 @@
         min-height: 2.5rem;
         font: inherit;
       }
+
+      .fixture-fallback-only::after {
+        content: 'Fallback-only target';
+      }
+
+      .fixture-stable-id::after {
+        content: 'Unique stable-ID target';
+      }
     </style>
   </head>
   <body>
@@ -40,6 +48,17 @@
           <span>Run fixture action</span>
         </button>
 
+        <button type="button" aria-label="Open recorder settings">
+          <span aria-hidden="true">⚙</span>
+        </button>
+
+        <button
+          id="stable-id-action"
+          class="fixture-stable-id"
+          type="button"
+          title="Unique stable-ID target"
+        ></button>
+
         <label>
           Text input
           <input
@@ -49,6 +68,31 @@
             placeholder="Type several characters"
           />
         </label>
+
+        <input
+          type="search"
+          placeholder="Placeholder-only search"
+          aria-describedby="placeholder-help"
+        />
+        <small id="placeholder-help">Input with no associated label</small>
+
+        <section>
+          <button type="button" class="duplicate-first">Continue</button>
+          <button type="button" class="duplicate-second">Continue</button>
+        </section>
+
+        <input
+          id="react-57a1a7d4-5ada-4bc8-ac17-10c84746a567"
+          type="text"
+          aria-describedby="generated-id-help"
+        />
+        <small id="generated-id-help">Generated-ID input</small>
+
+        <button
+          type="button"
+          class="fixture-fallback-only"
+          title="Fallback-only target"
+        ></button>
 
         <label>
           Password

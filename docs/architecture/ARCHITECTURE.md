@@ -118,6 +118,22 @@ stored as masked nulls; hidden and file inputs are ignored. Target snapshots
 use a bounded allowlist rather than DOM serialization or arbitrary attributes.
 The popup receives only event count and a fixed event-category summary.
 
+Session 07 adds a DOM-to-contract boundary without changing timeline
+authority. The extension DOM adapter reads only bounded, allowlisted metadata,
+derives accessible names and labels, and checks every proposed locator against
+the current document. It passes observations to
+`@tasktwin/locator-engine`, whose framework-independent rules score, deduplicate,
+rank, explain, and assign confidence. Only candidates matching exactly one
+element are included.
+
+New accepted events use timeline schema version 2 and contain a validated
+`LocatorBundle` version 1. The primary candidate is unique, fallbacks are
+unique and ordered, and CSS is a bounded low-priority fallback. The storage
+adapter writes the v2 key and can read the previous v1 key for popup summary
+compatibility. A new recording always replaces legacy data with an empty v2
+timeline; old events are not silently upgraded because they have no verified
+locator bundle.
+
 The event timeline shares the recorder's `chrome.storage.session` lifecycle.
 It has a hard capacity. Reaching the limit changes the recorder to an explicit
 error instead of silently discarding older or newer events. Starting a new
@@ -143,6 +159,10 @@ message; it has no browser automation dependency and executes no workflow.
   It depends on `workflow-schema` to validate definitions before writes, but it
   has no NestJS or application dependency.
 - `packages/config` centralizes strict TypeScript and ESLint configuration.
+- `packages/locator-engine` owns pure locator contracts, scoring constants,
+  dynamic-value heuristics, deterministic ranking, explanations, and
+  confidence. It depends only on the shared workflow locator contract and Zod;
+  DOM and Chrome behavior remain in the extension.
 - Application packages own framework bootstrapping and presentation, without
   introducing domain behavior.
 
@@ -150,8 +170,8 @@ Recorder message contracts and deterministic transition logic currently live
 inside `apps/extension` because only extension contexts consume them. They are
 kept independent from Chrome adapters so they can be tested without a browser.
 
-Future locator, policy, and execution packages described by the project
-direction are intentionally absent until their sessions define them.
+Future policy and execution packages described by the project direction are
+intentionally absent until their sessions define them.
 
 ## Workflow contract
 
@@ -191,6 +211,10 @@ Prisma, and Playwright so every plane can consume the same domain contract.
   payloads. Complete page URLs, full DOM, outerHTML, arbitrary attributes, raw
   inbound messages, and input values in the popup are excluded from logs and
   presentation.
+- Locator data never reads an input value and contains no DOM nodes, HTML,
+  arbitrary attributes, complete DOM paths, or full page content. Test IDs use
+  a four-attribute allowlist. Text, identifiers, labels, names, placeholders,
+  and CSS selectors are normalized and bounded before persistence.
 - Workflow secret value sources store only a validated reference name, never a
   secret value.
 - Database credentials come from environment configuration. URLs and passwords

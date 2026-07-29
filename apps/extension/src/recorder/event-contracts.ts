@@ -1,3 +1,4 @@
+import { LocatorBundleSchema } from '@tasktwin/locator-engine';
 import { z } from 'zod';
 
 import {
@@ -117,9 +118,10 @@ export const RadioEventPayloadSchema = z.strictObject({
 });
 
 const candidateBaseShape = {
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   occurredAt: TimestampSchema,
   target: RecordingTargetSnapshotSchema,
+  locatorBundle: LocatorBundleSchema,
 };
 
 export const ClickEventCandidateSchema = z.strictObject({
@@ -212,40 +214,102 @@ export const RecordingEventSchema = z.discriminatedUnion('eventType', [
   RadioRecordingEventSchema,
 ]);
 
-export const RecordingTimelineSchema = z
+const legacyCandidateBaseShape = {
+  schemaVersion: z.literal(1),
+  occurredAt: TimestampSchema,
+  target: RecordingTargetSnapshotSchema,
+};
+
+export const LegacyRecordingEventSchema = z.discriminatedUnion('eventType', [
+  z.strictObject({
+    ...legacyCandidateBaseShape,
+    ...acceptedEventEnvelopeShape,
+    eventType: z.literal('click'),
+    payload: ClickEventPayloadSchema,
+  }),
+  z.strictObject({
+    ...legacyCandidateBaseShape,
+    ...acceptedEventEnvelopeShape,
+    eventType: z.literal('text-input'),
+    payload: TextInputEventPayloadSchema,
+  }),
+  z.strictObject({
+    ...legacyCandidateBaseShape,
+    ...acceptedEventEnvelopeShape,
+    eventType: z.literal('select'),
+    payload: SelectEventPayloadSchema,
+  }),
+  z.strictObject({
+    ...legacyCandidateBaseShape,
+    ...acceptedEventEnvelopeShape,
+    eventType: z.literal('checkbox'),
+    payload: CheckboxEventPayloadSchema,
+  }),
+  z.strictObject({
+    ...legacyCandidateBaseShape,
+    ...acceptedEventEnvelopeShape,
+    eventType: z.literal('radio'),
+    payload: RadioEventPayloadSchema,
+  }),
+]);
+
+function validateTimeline(
+  timeline: {
+    sessionId: string;
+    nextSequence: number;
+    events: ReadonlyArray<{ sessionId: string; sequence: number }>;
+  },
+  context: z.RefinementCtx,
+): void {
+  timeline.events.forEach((event, index) => {
+    if (event.sessionId !== timeline.sessionId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['events', index, 'sessionId'],
+        message: 'Event session must match the timeline session.',
+      });
+    }
+
+    if (event.sequence !== index + 1) {
+      context.addIssue({
+        code: 'custom',
+        path: ['events', index, 'sequence'],
+        message: 'Event sequence must be ordered and contiguous.',
+      });
+    }
+  });
+
+  if (timeline.nextSequence !== timeline.events.length + 1) {
+    context.addIssue({
+      code: 'custom',
+      path: ['nextSequence'],
+      message: 'Next sequence must follow the final stored event.',
+    });
+  }
+}
+
+export const LegacyRecordingTimelineSchema = z
   .strictObject({
     schemaVersion: z.literal(1),
     sessionId: UuidSchema,
     nextSequence: z.number().int().positive(),
+    events: z.array(LegacyRecordingEventSchema).max(MAX_RECORDING_EVENTS),
+  })
+  .superRefine(validateTimeline);
+
+export const RecordingTimelineSchema = z
+  .strictObject({
+    schemaVersion: z.literal(2),
+    sessionId: UuidSchema,
+    nextSequence: z.number().int().positive(),
     events: z.array(RecordingEventSchema).max(MAX_RECORDING_EVENTS),
   })
-  .superRefine((timeline, context) => {
-    timeline.events.forEach((event, index) => {
-      if (event.sessionId !== timeline.sessionId) {
-        context.addIssue({
-          code: 'custom',
-          path: ['events', index, 'sessionId'],
-          message: 'Event session must match the timeline session.',
-        });
-      }
+  .superRefine(validateTimeline);
 
-      if (event.sequence !== index + 1) {
-        context.addIssue({
-          code: 'custom',
-          path: ['events', index, 'sequence'],
-          message: 'Event sequence must be ordered and contiguous.',
-        });
-      }
-    });
-
-    if (timeline.nextSequence !== timeline.events.length + 1) {
-      context.addIssue({
-        code: 'custom',
-        path: ['nextSequence'],
-        message: 'Next sequence must follow the final stored event.',
-      });
-    }
-  });
+export const PersistedRecordingTimelineSchema = z.union([
+  RecordingTimelineSchema,
+  LegacyRecordingTimelineSchema,
+]);
 
 export const RecordingTimelineSummarySchema = z.strictObject({
   eventCount: z.number().int().min(0).max(MAX_RECORDING_EVENTS),
@@ -332,6 +396,12 @@ export type RecordingEventCandidate = z.infer<
 >;
 export type RecordingEvent = z.infer<typeof RecordingEventSchema>;
 export type RecordingTimeline = z.infer<typeof RecordingTimelineSchema>;
+export type LegacyRecordingTimeline = z.infer<
+  typeof LegacyRecordingTimelineSchema
+>;
+export type PersistedRecordingTimeline = z.infer<
+  typeof PersistedRecordingTimelineSchema
+>;
 export type RecordingTimelineSummary = z.infer<
   typeof RecordingTimelineSummarySchema
 >;

@@ -2,7 +2,9 @@ export {
   CssLocatorSchema,
   ElementLocatorSchema,
   LabelLocatorSchema,
+  PlaceholderLocatorSchema,
   RoleLocatorSchema,
+  TestIdAttributeSchema,
   TestIdLocatorSchema,
   TextLocatorSchema,
 } from './element-locator.js';
@@ -10,7 +12,9 @@ export type {
   CssLocator,
   ElementLocator,
   LabelLocator,
+  PlaceholderLocator,
   RoleLocator,
+  TestIdAttribute,
   TestIdLocator,
   TextLocator,
 } from './element-locator.js';

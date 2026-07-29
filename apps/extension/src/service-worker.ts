@@ -18,7 +18,7 @@ import {
   RecordingEventCandidateMessageSchema,
   RecordingEventCandidateResponseSchema,
   RecorderPopupResponseSchema,
-  RecordingTimelineSchema,
+  PersistedRecordingTimelineSchema,
   type RecorderPopupResponse,
   type RecordingTimelineSummary,
   TimelineSummaryChangedNotificationSchema,
@@ -98,7 +98,8 @@ async function addTimelineSummary(
   try {
     const storedTimeline = await timelineStore.load();
     if (storedTimeline !== undefined) {
-      const parsedTimeline = RecordingTimelineSchema.safeParse(storedTimeline);
+      const parsedTimeline =
+        PersistedRecordingTimelineSchema.safeParse(storedTimeline);
       if (!parsedTimeline.success) {
         throw new Error('Invalid recording timeline');
       }
