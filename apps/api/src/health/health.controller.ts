@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import type { ServiceHealthResponse } from '@tasktwin/shared-types';
 
-import { HealthService } from './health.service';
+import { HealthService } from './health.service.js';
 
 @Controller('health')
 export class HealthController {

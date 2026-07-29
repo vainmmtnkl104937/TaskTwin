@@ -1,0 +1,40 @@
+{
+  "name": "@tasktwin/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm db:generate && tsc --project tsconfig.build.json",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:reset": "node scripts/reset-development-database.mjs",
+    "db:status": "prisma migrate status",
+    "lint": "eslint .",
+    "test": "pnpm db:generate && vitest run --exclude test/database.integration.spec.ts",
+    "test:integration": "pnpm db:generate && vitest run test/database.integration.spec.ts",
+    "typecheck": "pnpm db:generate && tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.9.1",
+    "@prisma/client": "7.9.1",
+    "@tasktwin/workflow-schema": "workspace:*",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@tasktwin/config": "workspace:*",
+    "@types/node": "22.19.1",
+    "@types/pg": "8.20.0",
+    "eslint": "9.39.5",
+    "prisma": "7.9.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

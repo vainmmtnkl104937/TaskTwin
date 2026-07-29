@@ -24,14 +24,41 @@ this session.
 
 ## Control plane
 
-The web application and API form the control-plane side of the architecture.
+The web application, API, and PostgreSQL database form the control-plane side
+of the architecture.
 The web application will eventually present workflow information and review
 states. The API will coordinate control-plane operations. It is not intended to
 drive a browser directly.
 
-In Session 01, the web application is a static landing page with a running
-status, and the API exposes only `GET /health`. There is no authentication,
-database, queue, workflow model, or API-to-runner connection.
+The web application remains a static landing page. The API exposes its original
+`GET /health` liveness endpoint and `GET /health/database` for database
+readiness. Session 03 adds only workflow definition persistence; there is still
+no authentication, queue, workflow CRUD, or API-to-runner connection.
+
+## Control-plane persistence
+
+`@tasktwin/database` owns Prisma configuration, the generated client boundary,
+and persistence code. It is a framework-independent package: NestJS dependency
+injection and HTTP health behavior stay in `apps/api`.
+
+The control-plane database stores two concepts:
+
+- `Workflow` is the stable identity and current descriptive metadata.
+- `WorkflowVersion` is an append-only revision containing lifecycle status,
+  schema version, and the complete workflow definition as PostgreSQL `JSONB`.
+
+`(workflowId, version)` is unique, so a second record cannot overwrite the same
+revision. The repository exposes creation but no update operation. A workflow
+definition is parsed with `WorkflowDefinitionSchema` before a transaction or
+write begins; TypeScript alone is not trusted at this boundary. Application
+validation enforces positive workflow and schema versions.
+
+Deleting a `Workflow` cascades to its versions. This is an explicit relational
+choice for future administrative deletion, not a CRUD feature exposed in this
+session. Normal version writes remain immutable.
+
+PostgreSQL belongs only to the control plane. The Chrome extension and local
+runner do not connect to it, and browser execution remains local.
 
 ## Local execution plane
 
@@ -51,6 +78,9 @@ executes no workflow.
 - `packages/workflow-schema` is the runtime-validated, framework-independent
   contract shared by the extension, API, web editor, and local runner. It
   defines data only and does not depend on any application framework.
+- `packages/database` is the framework-independent Prisma persistence boundary.
+  It depends on `workflow-schema` to validate definitions before writes, but it
+  has no NestJS or application dependency.
 - `packages/config` centralizes strict TypeScript and ESLint configuration.
 - Application packages own framework bootstrapping and presentation, without
   introducing domain behavior.
@@ -89,6 +119,11 @@ Prisma, and Playwright so every plane can consume the same domain contract.
   captured.
 - Workflow secret value sources store only a validated reference name, never a
   secret value.
+- Database credentials come from environment configuration. URLs and passwords
+  are not returned by health endpoints or written to application logs.
+- The normal unit-test suite mocks persistence and does not silently skip or
+  connect to PostgreSQL. The real integration check is opt-in and fails when
+  configuration, connectivity, or migrations are missing.
 - There is no AI behavior, policy bypass, or silent workflow repair.
 - Local execution is a responsibility boundary only; it is not implemented.
 

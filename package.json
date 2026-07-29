@@ -8,9 +8,23 @@
     "node": ">=22.13.0 <23",
     "pnpm": ">=10.34.5 <11"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "prisma"
+    ]
+  },
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "db:check": "pnpm --filter @tasktwin/database test:integration",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter @tasktwin/database db:generate",
+    "db:logs": "docker compose logs --follow postgres",
+    "db:migrate": "pnpm --filter @tasktwin/database db:migrate",
+    "db:reset": "pnpm --filter @tasktwin/database db:reset",
+    "db:status": "pnpm --filter @tasktwin/database db:status",
+    "db:up": "docker compose up --detach --wait postgres",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "turbo run lint",

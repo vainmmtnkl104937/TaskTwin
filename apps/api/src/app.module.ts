@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 
-import { HealthController } from './health/health.controller';
-import { HealthService } from './health/health.service';
+import { DatabaseModule } from './database/database.module.js';
+import { HealthController } from './health/health.controller.js';
+import { HealthService } from './health/health.service.js';
 
 @Module({
+  imports: [DatabaseModule],
   controllers: [HealthController],
   providers: [HealthService],
 })

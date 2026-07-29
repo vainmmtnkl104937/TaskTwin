@@ -6,11 +6,12 @@ then run the approved workflow safely**.
 
 > Show it once. Review the plan. Run it safely.
 
-This repository contains the Session 01 application foundation and the Session
-02 framework-independent workflow domain model. It provides buildable
-application shells, shared configuration and types, health checks, runtime
-workflow validation, and architecture documentation. It does not yet record or
-execute workflows.
+This repository contains the application foundation, framework-independent
+workflow domain model, and initial control-plane persistence foundation created
+through Session 03. It provides buildable application shells, shared
+configuration and types, health checks, runtime workflow validation, local
+PostgreSQL development tooling, and architecture documentation. It does not
+yet record or execute workflows.
 
 ## Browser-first MVP
 
@@ -22,15 +23,16 @@ general-purpose operating-system control are not part of the browser-first MVP.
 
 ## Workspaces
 
-| Workspace                  | Current purpose                                         |
-| -------------------------- | ------------------------------------------------------- |
-| `apps/web`                 | Next.js landing page and web health indicator           |
-| `apps/api`                 | NestJS control-plane shell with `GET /health`           |
-| `apps/extension`           | Manifest V3 popup shell with disabled recorder controls |
-| `apps/local-runner`        | Node.js startup and health/status shell                 |
-| `packages/shared-types`    | Shared service health contract                          |
-| `packages/workflow-schema` | Versioned workflow contracts and runtime validation     |
-| `packages/config`          | Shared strict TypeScript and ESLint configuration       |
+| Workspace                  | Current purpose                                           |
+| -------------------------- | --------------------------------------------------------- |
+| `apps/web`                 | Next.js landing page and web health indicator             |
+| `apps/api`                 | NestJS API and database readiness health endpoints        |
+| `apps/extension`           | Manifest V3 popup shell with disabled recorder controls   |
+| `apps/local-runner`        | Node.js startup and health/status shell                   |
+| `packages/shared-types`    | Shared service health contract                            |
+| `packages/workflow-schema` | Versioned workflow contracts and runtime validation       |
+| `packages/database`        | Prisma client and validated workflow persistence boundary |
+| `packages/config`          | Shared strict TypeScript and ESLint configuration         |
 
 The architectural direction is documented in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
@@ -40,6 +42,7 @@ The architectural direction is documented in
 - Node.js 22.13 or later within the Node 22 release line
 - Corepack
 - pnpm 10.34.5
+- Docker Desktop or another Docker Engine with Compose for database development
 
 Activate the pinned package manager and install all dependencies:
 
@@ -58,6 +61,38 @@ pnpm test
 pnpm build
 pnpm format:check
 ```
+
+## Local database
+
+Copy the environment template and replace its development-only password. The
+real `.env` file is ignored by Git.
+
+```powershell
+Copy-Item .env.example .env
+pnpm db:up
+pnpm db:generate
+pnpm db:migrate
+pnpm db:status
+pnpm db:check
+```
+
+`pnpm db:up` waits for PostgreSQL to become healthy. `pnpm db:check` is an
+explicit integration test that requires the database and applied migration;
+normal `pnpm test` does not require Docker.
+
+Useful development commands:
+
+```shell
+pnpm db:logs
+pnpm db:down
+```
+
+`pnpm db:down` stops the container but keeps the named development volume.
+`pnpm db:reset` is destructive: it deletes all data in the configured
+development database and reapplies migrations. It refuses non-loopback hosts
+and requires the explicit one-command confirmation
+`TASKTWIN_ALLOW_DATABASE_RESET=true`. Run it only against a disposable local
+database after checking `DATABASE_URL`.
 
 Start individual applications after building as needed:
 
@@ -87,3 +122,11 @@ variables, value sources, locators, steps, assertions, and run statuses. Zod is
 the runtime source of truth, and TypeScript types are inferred from its schemas.
 The package validates workflow data but does not resolve locators, record
 browser events, execute steps, or store workflows.
+
+## Session 03 scope
+
+Session 03 adds local PostgreSQL through Docker Compose, Prisma 7 configuration,
+the `Workflow` and immutable `WorkflowVersion` persistence models, runtime
+workflow validation before writes, and `GET /health/database`. It does not add
+workflow CRUD endpoints, authentication, users, execution, recording, queues,
+cloud deployment, or application containers.
