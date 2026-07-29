@@ -1,5 +1,5 @@
 {
-  "name": "@tasktwin/workflow-editor-core",
+  "name": "@tasktwin/workflow-inputs",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -18,8 +18,8 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@tasktwin/workflow-inputs": "workspace:*",
-    "@tasktwin/workflow-schema": "workspace:*"
+    "@tasktwin/workflow-schema": "workspace:*",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@tasktwin/config": "workspace:*",

@@ -2,6 +2,7 @@ import {
   WorkflowDefinitionSchema,
   type WorkflowDefinition,
 } from '@tasktwin/workflow-schema';
+import { analyzeWorkflowInputs } from '@tasktwin/workflow-inputs';
 
 import { validateNavigateUrl } from './navigate-url-policy.js';
 
@@ -97,6 +98,19 @@ export function validateEditorWorkflow(input: unknown): WorkflowEditorIssue[] {
       }
     }
   });
+
+  for (const issue of analyzeWorkflowInputs(result.data).issues) {
+    if (issue.severity !== 'blocking') {
+      continue;
+    }
+    issues.push({
+      code: issue.code,
+      message: issue.message,
+      path: issue.path,
+      ...(issue.stepId === undefined ? {} : { stepId: issue.stepId }),
+      ...(issue.stepIndex === undefined ? {} : { stepIndex: issue.stepIndex }),
+    });
+  }
 
   return issues;
 }

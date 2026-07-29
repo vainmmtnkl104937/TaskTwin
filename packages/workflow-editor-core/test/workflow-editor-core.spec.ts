@@ -6,14 +6,20 @@ import type {
 import { describe, expect, it } from 'vitest';
 
 import {
+  addVariable,
   addApprovalStep,
   addWaitStep,
   deriveLinearGraph,
+  findVariableUsages,
   findDuplicateStepIds,
   moveWorkflowStepDown,
   moveWorkflowStepUp,
+  removeVariable,
+  renameVariable,
   removeWorkflowStep,
   summarizeNavigateUrl,
+  updateStepValueSource,
+  updateVariable,
   updateWorkflowMetadata,
   updateWorkflowStep,
   validateEditorWorkflow,
@@ -145,6 +151,162 @@ describe('workflow editor operations', () => {
     ];
 
     expect(findDuplicateStepIds(workflow)).toEqual(['step-1', 'step-2']);
+  });
+});
+
+describe('workflow variable operations', () => {
+  function variableWorkflow(): WorkflowDefinition {
+    const input = createWorkflow();
+    input.variables = [
+      {
+        name: 'customerEmail',
+        label: 'Customer email',
+        valueType: 'string',
+        required: true,
+      },
+      {
+        name: 'unusedFlag',
+        valueType: 'boolean',
+        required: false,
+      },
+    ];
+    input.steps.push({
+      id: 'step-4',
+      type: 'fill',
+      name: 'Fill email',
+      locator: { kind: 'label', value: 'Email' },
+      value: { kind: 'variable', variableName: 'customerEmail' },
+    });
+    input.steps.push({
+      id: 'step-5',
+      type: 'verify',
+      name: 'Verify email',
+      assertion: {
+        kind: 'value',
+        locator: { kind: 'label', value: 'Email' },
+        operator: 'equals',
+        expected: { kind: 'variable', variableName: 'customerEmail' },
+      },
+    });
+    return input;
+  }
+
+  it('adds a variable without mutating the source workflow', () => {
+    const original = createWorkflow();
+    const result = addVariable(original, {
+      name: 'customerEmail',
+      valueType: 'string',
+      required: true,
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) {
+      expect(result.workflow.variables).toHaveLength(1);
+    }
+    expect(original.variables).toEqual([]);
+  });
+
+  it('renames declarations and every reference atomically', () => {
+    const original = variableWorkflow();
+    const snapshot = structuredClone(original);
+    const result = renameVariable(original, 'customerEmail', 'contactEmail');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.workflow.variables[0]?.name).toBe('contactEmail');
+      expect(
+        findVariableUsages(result.workflow, 'contactEmail').map(
+          (usage) => usage.stepId,
+        ),
+      ).toEqual(['step-4', 'step-5']);
+      expect(findVariableUsages(result.workflow, 'customerEmail')).toEqual([]);
+    }
+    expect(original).toEqual(snapshot);
+  });
+
+  it('rejects rename collisions without changing the workflow', () => {
+    const original = variableWorkflow();
+    const result = renameVariable(original, 'customerEmail', 'unusedFlag');
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'VARIABLE_NAME_COLLISION' },
+    });
+    expect(original.variables[0]?.name).toBe('customerEmail');
+  });
+
+  it('removes unused variables and rejects referenced removal', () => {
+    const original = variableWorkflow();
+    const unused = removeVariable(original, 'unusedFlag');
+    const referenced = removeVariable(original, 'customerEmail');
+
+    expect(unused.ok).toBe(true);
+    if (unused.ok) {
+      expect(unused.workflow.variables.map((item) => item.name)).toEqual([
+        'customerEmail',
+      ]);
+    }
+    expect(referenced).toMatchObject({
+      ok: false,
+      error: {
+        code: 'VARIABLE_HAS_USAGES',
+        usages: [{ stepId: 'step-4' }, { stepId: 'step-5' }],
+      },
+    });
+  });
+
+  it('allows compatible metadata changes and rejects incompatible type changes', () => {
+    const original = variableWorkflow();
+    const compatible = updateVariable(original, 'customerEmail', {
+      ...original.variables[0]!,
+      label: 'Contact email',
+    });
+    const incompatible = updateVariable(original, 'customerEmail', {
+      ...original.variables[0]!,
+      valueType: 'file',
+    });
+
+    expect(compatible).toMatchObject({ ok: true });
+    expect(incompatible).toMatchObject({
+      ok: false,
+      error: { code: 'VARIABLE_TYPE_INCOMPATIBLE' },
+    });
+    expect(original.variables[0]?.valueType).toBe('string');
+  });
+
+  it('updates literal to variable and variable to secret without mutation', () => {
+    const original = variableWorkflow();
+    const variableResult = updateStepValueSource(
+      original,
+      'step-1',
+      'navigate.url',
+      { kind: 'variable', variableName: 'customerEmail' },
+    );
+    expect(variableResult).toMatchObject({ ok: true });
+
+    const literalFill = structuredClone(original);
+    literalFill.steps[3] = {
+      ...literalFill.steps[3]!,
+      type: 'fill',
+      locator: { kind: 'label', value: 'Email' },
+      value: { kind: 'literal', value: 'safe@example.test' },
+    };
+    const secretResult = updateStepValueSource(
+      literalFill,
+      'step-4',
+      'fill.value',
+      { kind: 'secret', secretName: 'crmPassword' },
+    );
+
+    expect(secretResult).toMatchObject({ ok: true });
+    if (secretResult.ok) {
+      expect(secretResult.workflow.steps[3]).toMatchObject({
+        value: { kind: 'secret', secretName: 'crmPassword' },
+      });
+    }
+    expect(original.steps[3]).toMatchObject({
+      value: { kind: 'variable', variableName: 'customerEmail' },
+    });
   });
 });
 

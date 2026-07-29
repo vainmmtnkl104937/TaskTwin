@@ -312,10 +312,132 @@ describe('draft workflow editor integration', () => {
       versions: [{ revision: 3 }],
     });
 
+    const variableDefinition: WorkflowDefinition = {
+      ...firstUpdate,
+      name: final.name,
+      variables: [
+        {
+          name: 'customerEmail',
+          label: 'Customer email',
+          valueType: 'string',
+          required: true,
+        },
+      ],
+      steps: [
+        ...firstUpdate.steps,
+        {
+          id: 'step-customer-email',
+          type: 'fill',
+          name: 'Fill customer email',
+          locator: { kind: 'label', value: 'Email' },
+          value: { kind: 'variable', variableName: 'customerEmail' },
+        },
+      ],
+    };
+    await request(app.getHttpServer())
+      .patch(`/workflow-versions/${draftVersionId}/draft`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ expectedRevision: 3, definition: variableDefinition })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.workflowVersion.revision).toBe(4);
+        expect(body.workflowVersion.definition.variables).toEqual(
+          variableDefinition.variables,
+        );
+      });
+
+    const unknownReference = structuredClone(variableDefinition);
+    const unknownFill = unknownReference.steps.at(-1);
+    if (unknownFill?.type !== 'fill') {
+      throw new Error('Expected variable Fill step.');
+    }
+    unknownFill.value = {
+      kind: 'variable',
+      variableName: 'unknownInput',
+    };
+    await request(app.getHttpServer())
+      .patch(`/workflow-versions/${draftVersionId}/draft`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ expectedRevision: 4, definition: unknownReference })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.code).toBe('WORKFLOW_INPUT_VALIDATION_FAILED');
+        expect(body.issues).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              code: 'UNKNOWN_VARIABLE_REFERENCE',
+            }),
+          ]),
+        );
+      });
+
+    await request(app.getHttpServer())
+      .patch(`/workflow-versions/${draftVersionId}/draft`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({
+        expectedRevision: 4,
+        definition: {
+          ...variableDefinition,
+          variables: [
+            ...variableDefinition.variables,
+            variableDefinition.variables[0],
+          ],
+        },
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.issues).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ code: 'DUPLICATE_VARIABLE_NAME' }),
+          ]),
+        );
+      });
+
+    const secretDefinition: WorkflowDefinition = {
+      ...variableDefinition,
+      steps: [
+        ...variableDefinition.steps,
+        {
+          id: 'step-crm-password',
+          type: 'fill',
+          name: 'Fill CRM password',
+          locator: { kind: 'label', value: 'CRM password' },
+          value: { kind: 'secret', secretName: 'crmPassword' },
+        },
+      ],
+    };
+    await request(app.getHttpServer())
+      .patch(`/workflow-versions/${draftVersionId}/draft`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ expectedRevision: 4, definition: secretDefinition })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.workflowVersion.revision).toBe(5);
+        expect(JSON.stringify(body)).toContain('"secretName":"crmPassword"');
+        expect(JSON.stringify(body)).not.toContain('"secretValue"');
+      });
+
+    const unsafeSecret = structuredClone(secretDefinition);
+    const secretFill = unsafeSecret.steps.at(-1);
+    if (secretFill?.type !== 'fill') {
+      throw new Error('Expected secret Fill step.');
+    }
+    const rawCredential = 'person@example.test';
+    secretFill.value = { kind: 'secret', secretName: rawCredential };
+    await request(app.getHttpServer())
+      .patch(`/workflow-versions/${draftVersionId}/draft`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ expectedRevision: 5, definition: unsafeSecret })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.code).toBe('WORKFLOW_INPUT_VALIDATION_FAILED');
+        expect(JSON.stringify(body)).not.toContain(rawCredential);
+      });
+
     await request(app.getHttpServer())
       .patch(`/workflow-versions/${draftVersionId}/draft`)
       .set('Authorization', `Bearer ${viewer.accessToken}`)
-      .send({ expectedRevision: 3, definition: firstUpdate })
+      .send({ expectedRevision: 5, definition: secretDefinition })
       .expect(403);
     await request(app.getHttpServer())
       .get(`/workflow-versions/${draftVersionId}`)

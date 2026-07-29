@@ -6,15 +6,18 @@ import {
   moveWorkflowStepDown,
   moveWorkflowStepUp,
   removeWorkflowStep,
+  updateStepValueSource,
   updateWorkflowMetadata,
   updateWorkflowStep,
   validateEditorWorkflow,
 } from '@tasktwin/workflow-editor-core';
 import {
   WorkflowDefinitionSchema,
+  type ValueSource,
   type WorkflowDefinition,
   type WorkflowStep,
 } from '@tasktwin/workflow-schema';
+import type { ValueSourceTarget } from '@tasktwin/workflow-inputs';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -24,8 +27,10 @@ import {
   type SaveWorkflowDraftResult,
 } from '@/app/(authenticated)/workspaces/[workspaceId]/workflows/[workflowId]/versions/[versionId]/edit/actions';
 
+import { RunInputsPreview } from './run-inputs-preview';
 import { StepInspector } from './step-inspector';
 import { ValidationPanel } from './validation-panel';
+import { VariablesPanel } from './variables-panel';
 import { WorkflowGraph } from './workflow-graph';
 
 interface WorkflowEditorProps {
@@ -46,6 +51,7 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
     'idle' | 'saving' | 'saved' | 'error' | 'conflict'
   >('idle');
   const [saveMessage, setSaveMessage] = useState('');
+  const [showRunInputs, setShowRunInputs] = useState(false);
   const [pendingDeleteStepId, setPendingDeleteStepId] = useState<string | null>(
     null,
   );
@@ -84,6 +90,27 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
     if (!readOnly) {
       apply(updateWorkflowStep(definition, step.id, step));
     }
+  }
+
+  function updateValueSource(
+    target: ValueSourceTarget,
+    source: ValueSource,
+  ): void {
+    if (readOnly || selectedStep === undefined) {
+      return;
+    }
+    const result = updateStepValueSource(
+      definition,
+      selectedStep.id,
+      target,
+      source,
+    );
+    if (!result.ok) {
+      setSaveState('error');
+      setSaveMessage(result.error.message);
+      return;
+    }
+    apply(result.workflow);
   }
 
   async function save(): Promise<void> {
@@ -179,15 +206,20 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
             {readOnly ? 'Read only' : dirty ? 'Unsaved changes' : 'Saved'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={
-            readOnly || !dirty || issues.length > 0 || saveState === 'saving'
-          }
-        >
-          {saveState === 'saving' ? 'Saving…' : 'Save draft'}
-        </button>
+        <div className="button-group">
+          <button type="button" onClick={() => setShowRunInputs(true)}>
+            Preview run inputs
+          </button>
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={
+              readOnly || !dirty || issues.length > 0 || saveState === 'saving'
+            }
+          >
+            {saveState === 'saving' ? 'Saving…' : 'Save draft'}
+          </button>
+        </div>
       </header>
 
       {readOnly ? (
@@ -241,6 +273,13 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
         </label>
       </section>
 
+      <VariablesPanel
+        definition={definition}
+        readOnly={readOnly}
+        onChange={apply}
+        onSelectStep={setSelectedStepId}
+      />
+
       <div className="editor-grid">
         <section className="panel graph-panel" aria-labelledby="steps-heading">
           <div className="section-heading row-heading">
@@ -271,9 +310,11 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
             <>
               <StepInspector
                 step={selectedStep}
+                variables={definition.variables}
                 readOnly={readOnly}
                 locatorMetadata={detail.locatorMetadata}
                 onChange={updateStep}
+                onValueSourceChange={updateValueSource}
               />
               <div className="step-actions">
                 <button
@@ -340,6 +381,13 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
           </section>
         </div>
       )}
+
+      {showRunInputs ? (
+        <RunInputsPreview
+          definition={definition}
+          onClose={() => setShowRunInputs(false)}
+        />
+      ) : null}
     </main>
   );
 }

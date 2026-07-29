@@ -279,6 +279,71 @@ p {
   padding: 1.25rem;
 }
 
+.variables-panel {
+  margin-top: 1rem;
+  padding: 1.25rem;
+}
+
+.variable-add-row,
+.variables-layout {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.variable-add-row {
+  grid-template-columns: minmax(12rem, 1fr) auto;
+  align-items: end;
+}
+
+.variables-layout {
+  grid-template-columns: minmax(12rem, 0.8fr) minmax(18rem, 1.5fr);
+}
+
+.variable-list,
+.usage-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.variable-list button {
+  display: grid;
+  width: 100%;
+  gap: 0.2rem;
+  border-color: #9ab4aa;
+  background: #f7faf9;
+  color: #234b3d;
+  text-align: left;
+}
+
+.variable-list button[aria-pressed='true'] {
+  border-color: #ed9a3d;
+  box-shadow: 0 0 0 0.15rem rgb(237 154 61 / 18%);
+}
+
+.variable-editor,
+.value-source-field,
+.run-input-field {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.value-source-field {
+  min-width: 0;
+  margin: 0;
+  padding: 0.8rem;
+  border: 1px solid #d7e2de;
+  border-radius: 0.65rem;
+}
+
+.value-source-field legend {
+  padding: 0 0.35rem;
+  font-weight: 800;
+}
+
 .editor-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(18rem, 1fr);
@@ -437,9 +502,25 @@ p {
   box-shadow: 0 1rem 4rem rgb(0 0 0 / 25%);
 }
 
+.run-inputs-dialog {
+  width: min(100%, 42rem);
+  max-height: min(90vh, 52rem);
+  overflow: auto;
+  padding: 1.5rem;
+  border-radius: 0.9rem;
+  background: white;
+  box-shadow: 0 1rem 4rem rgb(0 0 0 / 25%);
+}
+
+.run-inputs-dialog > * + * {
+  margin-top: 1rem;
+}
+
 @media (max-width: 800px) {
   .editor-grid,
-  .workflow-metadata {
+  .workflow-metadata,
+  .variable-add-row,
+  .variables-layout {
     grid-template-columns: 1fr;
   }
 

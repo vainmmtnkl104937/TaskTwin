@@ -8,7 +8,7 @@ then run the approved workflow safely**.
 
 This repository contains the application foundation, framework-independent
 workflow and recording domain models, authenticated control-plane foundation,
-and authenticated draft editor created through Session 11. It provides buildable
+and workflow-input foundation created through Session 12. It provides buildable
 application shells, shared configuration and types, health checks, runtime
 workflow validation, local PostgreSQL development tooling, short-lived
 access-token authentication, organization-scoped workspaces, deterministic
@@ -42,6 +42,7 @@ general-purpose operating-system control are not part of the browser-first MVP.
 | `packages/recording-schema`     | Current recording artifact and sync protocol contracts |
 | `packages/recording-converter`  | Pure recording-to-draft workflow conversion            |
 | `packages/workflow-editor-core` | Pure immutable draft editing and linear graph model    |
+| `packages/workflow-inputs`      | Variable, secret-reference, and run-input analysis     |
 | `packages/database`             | Prisma identity, workflow, and recording persistence   |
 | `packages/config`               | Shared strict TypeScript and ESLint configuration      |
 
@@ -270,3 +271,15 @@ without replacing local or persisted newer changes. VIEWER remains read-only.
 Session 11 does not publish workflows, create new versions, edit locators,
 manage secrets or advanced variables, repair workflows, execute browser
 actions, use AI, or add Playwright.
+
+## Session 12 scope
+
+Session 12 adds deterministic workflow-variable management, reference and type
+validation, derived secret requirements, compatible ValueSource editing, and a
+temporary Run Inputs Preview. Preview values remain only in component memory;
+secret values and file content have no accepted, rendered, persisted, or
+uploaded representation. Workflow variables remain in the versioned
+definition, so no database migration is added.
+
+Session 12 does not execute workflows, persist runs or runtime inputs, store
+secrets, upload files, publish workflows, add Playwright, or use AI.

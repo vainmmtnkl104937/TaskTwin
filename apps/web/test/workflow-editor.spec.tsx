@@ -273,4 +273,206 @@ describe('WorkflowEditor', () => {
       screen.queryByDisplayValue('plaintext-secret'),
     ).not.toBeInTheDocument();
   });
+
+  it('adds, binds, atomically renames, and protects a referenced variable', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkflowEditor detail={detail()} workspaceId={detail().workspaceId} />,
+    );
+
+    await user.type(
+      screen.getByLabelText('New variable name'),
+      'customerEmail',
+    );
+    await user.click(screen.getByRole('button', { name: 'Add variable' }));
+    expect(
+      screen.getByRole('button', { name: /customerEmail.*0 usages/ }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Step 3: fill, Use secret reference',
+      }),
+    );
+    await user.selectOptions(screen.getByLabelText('Value source'), 'variable');
+    expect(screen.getByLabelText('Compatible variable')).toHaveValue(
+      'customerEmail',
+    );
+
+    const name = screen.getByLabelText('Name', { exact: true });
+    await user.clear(name);
+    await user.type(name, 'contactEmail');
+    await user.click(
+      screen.getByRole('button', { name: 'Rename and update references' }),
+    );
+
+    expect(screen.getByLabelText('Compatible variable')).toHaveValue(
+      'contactEmail',
+    );
+    expect(screen.getByText('Used by 1 step(s)')).toBeInTheDocument();
+    expect(screen.getByText(/Remove is blocked/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Remove unused variable' }),
+    ).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Type'), 'file');
+    expect(
+      screen.getByText(/incompatible with one or more usages/i),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Type')).toHaveValue('string');
+  });
+
+  it('removes an unused variable only after confirmation', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkflowEditor detail={detail()} workspaceId={detail().workspaceId} />,
+    );
+
+    await user.type(screen.getByLabelText('New variable name'), 'unusedInput');
+    await user.click(screen.getByRole('button', { name: 'Add variable' }));
+    await user.click(
+      screen.getByRole('button', { name: 'Remove unused variable' }),
+    );
+    expect(
+      screen.getByRole('button', { name: 'Confirm remove' }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Confirm remove' }));
+    expect(
+      screen.queryByRole('button', { name: /unusedInput/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps preview inputs in memory only, clears them on close, and retains safe file metadata', async () => {
+    const user = userEvent.setup();
+    const previewDetail = detail();
+    previewDetail.workflowVersion.definition.variables = [
+      {
+        name: 'customerEmail',
+        label: 'Customer email',
+        valueType: 'string',
+        required: true,
+      },
+      {
+        name: 'scheduledOn',
+        valueType: 'date',
+        required: false,
+      },
+      {
+        name: 'attachment',
+        valueType: 'file',
+        required: false,
+      },
+    ];
+    const localStorageWrite = vi.spyOn(Storage.prototype, 'setItem');
+    const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    render(
+      <WorkflowEditor
+        detail={previewDetail}
+        workspaceId={previewDetail.workspaceId}
+      />,
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Preview run inputs' }),
+    );
+    const dialog = screen.getByRole('dialog', {
+      name: 'Run Inputs Preview',
+    });
+    const email = within(dialog).getByLabelText(/Customer email/);
+    await user.type(email, 'private@example.test');
+    await user.click(
+      within(dialog).getByRole('button', {
+        name: 'Validate temporary inputs',
+      }),
+    );
+    expect(
+      within(dialog).getByText('Temporary inputs are valid.'),
+    ).toBeInTheDocument();
+
+    const file = new File(['safe fixture'], 'private-name.txt', {
+      type: 'text/plain',
+    });
+    fireEvent.change(within(dialog).getByLabelText('attachment'), {
+      target: { files: [file] },
+    });
+    expect(within(dialog).getByText(/12 bytes/)).toBeInTheDocument();
+    expect(
+      within(dialog).queryByText('private-name.txt'),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Close and clear' }),
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole('button', { name: 'Preview run inputs' }),
+    );
+    expect(screen.getByLabelText(/Customer email/)).toHaveValue('');
+    expect(localStorageWrite).not.toHaveBeenCalled();
+    expect(consoleLog).not.toHaveBeenCalled();
+    expect(JSON.stringify(localStorage)).not.toContain('private@example.test');
+    expect(JSON.stringify(sessionStorage)).not.toContain(
+      'private@example.test',
+    );
+
+    consoleLog.mockRestore();
+    localStorageWrite.mockRestore();
+  });
+
+  it('saves variable declarations and references in the Draft definition', async () => {
+    const user = userEvent.setup();
+    saveDraft.mockImplementation(
+      async (
+        _versionId: string,
+        _revision: number,
+        savedDefinition: WorkflowDefinition,
+      ) => ({
+        status: 'success',
+        revision: 2,
+        definition: savedDefinition,
+        updatedAt: '2026-07-30T00:00:00.000Z',
+      }),
+    );
+    render(
+      <WorkflowEditor detail={detail()} workspaceId={detail().workspaceId} />,
+    );
+
+    await user.type(
+      screen.getByLabelText('New variable name'),
+      'customerEmail',
+    );
+    await user.click(screen.getByRole('button', { name: 'Add variable' }));
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Step 3: fill, Use secret reference',
+      }),
+    );
+    await user.selectOptions(screen.getByLabelText('Value source'), 'variable');
+    await user.click(screen.getByRole('button', { name: 'Save draft' }));
+
+    expect(saveDraft).toHaveBeenCalledWith(
+      detail().workflowVersion.id,
+      1,
+      expect.objectContaining({
+        variables: [
+          expect.objectContaining({
+            name: 'customerEmail',
+            valueType: 'string',
+          }),
+        ],
+        steps: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'step-secret',
+            value: {
+              kind: 'variable',
+              variableName: 'customerEmail',
+            },
+          }),
+        ]),
+      }),
+    );
+    expect(
+      await screen.findByText(/Draft saved at revision 2/),
+    ).toBeInTheDocument();
+  });
 });

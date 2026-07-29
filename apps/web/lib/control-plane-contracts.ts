@@ -85,6 +85,21 @@ export const WorkflowConflictResponseSchema = z
   })
   .passthrough();
 
+export const WorkflowDraftValidationErrorResponseSchema = z.strictObject({
+  code: z.literal('WORKFLOW_INPUT_VALIDATION_FAILED'),
+  message: z.string().min(1).max(240),
+  issues: z.array(
+    z.strictObject({
+      code: z.string().min(1).max(80),
+      message: z.string().min(1).max(240),
+      path: z.array(z.union([z.string(), z.number().int().nonnegative()])),
+      stepId: z.string().min(1).optional(),
+      stepIndex: z.number().int().nonnegative().optional(),
+      variableName: z.string().min(1).optional(),
+    }),
+  ),
+});
+
 export type WorkspaceListResponse = z.infer<typeof WorkspaceListResponseSchema>;
 export type WorkspaceWorkflowListResponse = z.infer<
   typeof WorkspaceWorkflowListResponseSchema
