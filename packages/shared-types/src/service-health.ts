@@ -1,4 +1,4 @@
-export type ServiceHealthStatus = 'healthy';
+export type ServiceHealthStatus = 'healthy' | 'unhealthy';
 
 export interface ServiceHealthResponse {
   service: string;

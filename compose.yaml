@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17.10-alpine
+    environment:
+      POSTGRES_USER: tasktwin
+      POSTGRES_PASSWORD: tasktwin104
+      POSTGRES_DB: tasktwin
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+    volumes:
+      - tasktwin-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  tasktwin-postgres-data:
