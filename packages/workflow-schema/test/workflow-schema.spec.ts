@@ -7,25 +7,30 @@ import {
   MAX_WAIT_DURATION_MS,
   RunStatusSchema,
   RunStepStatusSchema,
+  SetCheckedStepSchema,
   ValueSourceSchema,
   WorkflowDefinitionSchema,
 } from '../src/index.js';
 
-const fixtureUrl = new URL(
+const legacyFixtureUrl = new URL(
   '../fixtures/valid-workflow.v1.json',
   import.meta.url,
 );
+const setCheckedFixtureUrl = new URL(
+  '../fixtures/valid-set-checked-workflow.v1.json',
+  import.meta.url,
+);
 
-function readValidFixture(): unknown {
+function readFixture(fixtureUrl: URL): unknown {
   return JSON.parse(readFileSync(fixtureUrl, 'utf8')) as unknown;
 }
 
 function parseValidFixture() {
-  return WorkflowDefinitionSchema.parse(readValidFixture());
+  return WorkflowDefinitionSchema.parse(readFixture(legacyFixtureUrl));
 }
 
 describe('WorkflowDefinitionSchema', () => {
-  it('parses a complete valid version 1 workflow fixture', () => {
+  it('keeps the legacy Session 02 workflow fixture valid', () => {
     const workflow = parseValidFixture();
 
     expect(workflow.schemaVersion).toBe(1);
@@ -33,7 +38,7 @@ describe('WorkflowDefinitionSchema', () => {
     expect(workflow.version).toBe(1);
   });
 
-  it('supports every workflow step type in execution order', () => {
+  it('preserves the legacy workflow step order', () => {
     const workflow = parseValidFixture();
 
     expect(workflow.steps.map((step) => step.type)).toEqual([
@@ -46,6 +51,82 @@ describe('WorkflowDefinitionSchema', () => {
       'verify',
       'approval',
     ]);
+  });
+
+  it('parses deterministic checked and unchecked state steps', () => {
+    const workflow = WorkflowDefinitionSchema.parse(
+      readFixture(setCheckedFixtureUrl),
+    );
+
+    expect(workflow.steps).toEqual([
+      {
+        id: 'enableWelcomeEmail',
+        type: 'setChecked',
+        name: 'Enable Send welcome email',
+        locator: {
+          kind: 'label',
+          value: 'Send welcome email',
+          exact: true,
+        },
+        checked: true,
+      },
+      {
+        id: 'disableArchiveCopy',
+        type: 'setChecked',
+        name: 'Disable Keep an archive copy',
+        locator: {
+          kind: 'testId',
+          attribute: 'data-testid',
+          value: 'archive-copy',
+        },
+        checked: false,
+      },
+    ]);
+  });
+
+  it('rejects a setChecked step without the required checked state', () => {
+    expect(
+      SetCheckedStepSchema.safeParse({
+        id: 'missingCheckedState',
+        type: 'setChecked',
+        name: 'Set missing checked state',
+        locator: {
+          kind: 'label',
+          value: 'Send welcome email',
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects a setChecked step with an invalid locator', () => {
+    expect(
+      SetCheckedStepSchema.safeParse({
+        id: 'invalidCheckedLocator',
+        type: 'setChecked',
+        name: 'Set invalid checked locator',
+        locator: {
+          kind: 'css',
+          selector: '   ',
+        },
+        checked: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects unexpected setChecked properties', () => {
+    expect(
+      SetCheckedStepSchema.safeParse({
+        id: 'strictCheckedState',
+        type: 'setChecked',
+        name: 'Set strict checked state',
+        locator: {
+          kind: 'label',
+          value: 'Send welcome email',
+        },
+        checked: true,
+        toggle: true,
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects an unsupported schema version', () => {

@@ -4,6 +4,7 @@ import {
   getRequiredDatabaseUrl,
   IdentityRepository,
   RecordingRepository,
+  RecordingWorkflowConversionRepository,
   type PrismaClient,
 } from '@tasktwin/database';
 
@@ -31,7 +32,17 @@ import { PrismaService } from './prisma.service.js';
       inject: [DATABASE_CLIENT],
       useFactory: (client: PrismaClient) => new RecordingRepository(client),
     },
+    {
+      provide: RecordingWorkflowConversionRepository,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: PrismaClient) =>
+        new RecordingWorkflowConversionRepository(client),
+    },
   ],
-  exports: [IdentityRepository, RecordingRepository],
+  exports: [
+    IdentityRepository,
+    RecordingRepository,
+    RecordingWorkflowConversionRepository,
+  ],
 })
 export class DatabaseModule {}

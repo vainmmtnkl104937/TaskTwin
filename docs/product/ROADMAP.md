@@ -118,16 +118,30 @@ orchestration with a mock. Extension authentication, production HTTP sync,
 automatic retry scheduling, recording review UI, workflow conversion,
 screenshots, AI, and execution remain out of scope.
 
+## Session 10: deterministic recording-to-workflow conversion
+
+- Framework-independent recording converter and strict conversion contracts
+- Deterministic event-to-step mappings, IDs, names, and provenance
+- Draft-only `setChecked` support for checkbox and radio state
+- Required variables for masked personal input
+- Secret-reference-only handling for replayable blocked passwords
+- Explicit unresolved events, warnings, deduplication, and publishable status
+- Transactional Workflow, WorkflowVersion, and conversion-receipt persistence
+- Authenticated organization-scoped, idempotent draft-creation endpoint
+
+Session 10 converts completed recordings into version 1 draft workflows. It
+does not add workflow editing, publishing, execution, Playwright, AI,
+screenshots, locator repair, wait/assertion inference, or local-runner changes.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their
 requirements and safety boundaries are approved:
 
-1. Translation from reviewed recording events to workflow drafts
-2. Reviewable workflow representation and editing
-3. Policy and authorization decisions
-4. Deterministic local browser execution
-5. Control-plane coordination and durable product data
+1. Reviewable workflow representation and editing
+2. Policy and authorization decisions
+3. Deterministic local browser execution
+4. Control-plane coordination and durable product data
 
 The sequence is intentionally review-led: recording, planning, approval, and
 execution are separate concerns.

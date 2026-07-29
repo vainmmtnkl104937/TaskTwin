@@ -35,6 +35,9 @@ importers:
       '@tasktwin/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@tasktwin/recording-converter':
+        specifier: workspace:*
+        version: link:../../packages/recording-converter
       '@tasktwin/recording-schema':
         specifier: workspace:*
         version: link:../../packages/recording-schema
@@ -53,6 +56,9 @@ importers:
       rxjs:
         specifier: 7.8.2
         version: 7.8.2
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@nestjs/cli':
         specifier: 11.0.24
@@ -63,6 +69,9 @@ importers:
       '@tasktwin/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@tasktwin/workflow-schema':
+        specifier: workspace:*
+        version: link:../../packages/workflow-schema
       '@types/node':
         specifier: 22.19.1
         version: 22.19.1
@@ -205,6 +214,9 @@ importers:
       '@prisma/client':
         specifier: 7.9.1
         version: 7.9.1(prisma@7.9.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3)
+      '@tasktwin/recording-converter':
+        specifier: workspace:*
+        version: link:../recording-converter
       '@tasktwin/recording-schema':
         specifier: workspace:*
         version: link:../recording-schema
@@ -264,6 +276,40 @@ importers:
 
   packages/privacy-engine:
     dependencies:
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@tasktwin/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 22.19.1
+        version: 22.19.1
+      eslint:
+        specifier: 9.39.5
+        version: 9.39.5(jiti@2.7.0)
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@22.19.1)(happy-dom@20.11.1)(vite@8.1.5(@types/node@22.19.1)(jiti@2.7.0)(terser@5.49.0))
+
+  packages/recording-converter:
+    dependencies:
+      '@tasktwin/locator-engine':
+        specifier: workspace:*
+        version: link:../locator-engine
+      '@tasktwin/privacy-engine':
+        specifier: workspace:*
+        version: link:../privacy-engine
+      '@tasktwin/recording-schema':
+        specifier: workspace:*
+        version: link:../recording-schema
+      '@tasktwin/workflow-schema':
+        specifier: workspace:*
+        version: link:../workflow-schema
       zod:
         specifier: 4.4.3
         version: 4.4.3

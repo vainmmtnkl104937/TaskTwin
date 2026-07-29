@@ -19,11 +19,21 @@ export type {
 export { normalizeEmail } from './identity/normalize-email.js';
 export { createCanonicalJsonDigest } from './recording/canonical-json.js';
 export {
+  RecordingWorkflowConversionRepositoryError,
+  type RecordingWorkflowConversionRepositoryErrorCode,
+} from './recording-conversion/recording-workflow-conversion-errors.js';
+export type {
+  CreateRecordingWorkflowConversionResult,
+  RecordingWorkflowConversionRecord,
+} from './recording-conversion/recording-workflow-conversion-records.js';
+export { RecordingWorkflowConversionRepository } from './recording-conversion/recording-workflow-conversion.repository.js';
+export {
   RecordingRepositoryError,
   type RecordingRepositoryErrorCode,
 } from './recording/recording-errors.js';
 export type {
   CompleteRecordingSessionResult,
+  CompletedRecordingArtifactRecord,
   CreateRecordingSessionResult,
   IngestRecordingBatchResult,
   OrganizationAccessRecord,

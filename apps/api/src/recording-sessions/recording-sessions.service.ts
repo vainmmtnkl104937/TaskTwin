@@ -42,6 +42,7 @@ function rethrowRepositoryError(error: unknown): never {
     case 'BATCH_CONFLICT':
     case 'SESSION_COMPLETED':
     case 'INCOMPLETE_RECORDING':
+    case 'RECORDING_NOT_COMPLETED':
       throw new ConflictException(error.message);
     case 'SERIALIZATION_FAILURE':
       throw new ServiceUnavailableException(error.message);

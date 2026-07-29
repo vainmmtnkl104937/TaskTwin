@@ -36,15 +36,16 @@ enum RecordingSessionStatus {
 }
 
 model User {
-  id                       String               @id @default(uuid()) @db.Uuid
-  email                    String               @unique(map: "users_email_key") @db.VarChar(254)
-  passwordHash             String               @map("password_hash") @db.VarChar(255)
-  displayName              String               @map("display_name") @db.VarChar(100)
-  isActive                 Boolean              @default(true) @map("is_active")
-  createdAt                DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organizationMemberships  OrganizationMember[]
-  createdRecordingSessions RecordingSession[]   @relation("RecordingSessionCreator")
+  id                         String                        @id @default(uuid()) @db.Uuid
+  email                      String                        @unique(map: "users_email_key") @db.VarChar(254)
+  passwordHash               String                        @map("password_hash") @db.VarChar(255)
+  displayName                String                        @map("display_name") @db.VarChar(100)
+  isActive                   Boolean                       @default(true) @map("is_active")
+  createdAt                  DateTime                      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organizationMemberships    OrganizationMember[]
+  createdRecordingSessions   RecordingSession[]            @relation("RecordingSessionCreator")
+  createdWorkflowConversions RecordingWorkflowConversion[] @relation("RecordingWorkflowConversionCreator")
 
   @@map("users")
 }
@@ -91,29 +92,31 @@ model Workspace {
 }
 
 model Workflow {
-  id          String            @id
-  workspaceId String            @map("workspace_id") @db.Uuid
-  name        String
-  description String?
-  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
-  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  versions    WorkflowVersion[]
+  id                   String                        @id
+  workspaceId          String                        @map("workspace_id") @db.Uuid
+  name                 String
+  description          String?
+  createdAt            DateTime                      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace            Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  versions             WorkflowVersion[]
+  recordingConversions RecordingWorkflowConversion[]
 
   @@index([workspaceId], map: "workflows_workspace_id_idx")
   @@map("workflows")
 }
 
 model WorkflowVersion {
-  id            String                  @id @default(uuid()) @db.Uuid
-  workflowId    String                  @map("workflow_id")
-  version       Int
-  status        WorkflowLifecycleStatus
-  schemaVersion Int                     @map("schema_version")
-  definition    Json                    @db.JsonB
-  createdAt     DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
-  workflow      Workflow                @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  id                  String                       @id @default(uuid()) @db.Uuid
+  workflowId          String                       @map("workflow_id")
+  version             Int
+  status              WorkflowLifecycleStatus
+  schemaVersion       Int                          @map("schema_version")
+  definition          Json                         @db.JsonB
+  createdAt           DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workflow            Workflow                     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  recordingConversion RecordingWorkflowConversion?
 
   @@unique([workflowId, version], map: "workflow_versions_workflow_id_version_key")
   @@index([status], map: "workflow_versions_status_idx")
@@ -121,29 +124,30 @@ model WorkflowVersion {
 }
 
 model RecordingSession {
-  id                  String                 @id @default(uuid()) @db.Uuid
-  workspaceId         String                 @map("workspace_id") @db.Uuid
-  createdByUserId     String                 @map("created_by_user_id") @db.Uuid
-  clientSessionId     String                 @unique(map: "recording_sessions_client_session_id_key") @map("client_session_id") @db.Uuid
-  schemaVersion       Int                    @map("schema_version")
-  targetOrigin        String                 @map("target_origin") @db.VarChar(512)
-  startedAt           DateTime               @map("started_at") @db.Timestamptz(3)
-  stoppedAt           DateTime               @map("stopped_at") @db.Timestamptz(3)
-  eventCount          Int                    @map("event_count")
-  lastSequence        Int                    @map("last_sequence")
-  privacySummary      Json                   @map("privacy_summary") @db.JsonB
-  metadataDigest      String                 @map("metadata_digest") @db.Char(64)
-  status              RecordingSessionStatus @default(receiving)
-  receivedEventCount  Int                    @default(0) @map("received_event_count")
-  receivedMinSequence Int?                   @map("received_min_sequence")
-  receivedMaxSequence Int?                   @map("received_max_sequence")
-  completedAt         DateTime?              @map("completed_at") @db.Timestamptz(3)
-  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
-  workspace           Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  createdBy           User                   @relation("RecordingSessionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  id                  String                        @id @default(uuid()) @db.Uuid
+  workspaceId         String                        @map("workspace_id") @db.Uuid
+  createdByUserId     String                        @map("created_by_user_id") @db.Uuid
+  clientSessionId     String                        @unique(map: "recording_sessions_client_session_id_key") @map("client_session_id") @db.Uuid
+  schemaVersion       Int                           @map("schema_version")
+  targetOrigin        String                        @map("target_origin") @db.VarChar(512)
+  startedAt           DateTime                      @map("started_at") @db.Timestamptz(3)
+  stoppedAt           DateTime                      @map("stopped_at") @db.Timestamptz(3)
+  eventCount          Int                           @map("event_count")
+  lastSequence        Int                           @map("last_sequence")
+  privacySummary      Json                          @map("privacy_summary") @db.JsonB
+  metadataDigest      String                        @map("metadata_digest") @db.Char(64)
+  status              RecordingSessionStatus        @default(receiving)
+  receivedEventCount  Int                           @default(0) @map("received_event_count")
+  receivedMinSequence Int?                          @map("received_min_sequence")
+  receivedMaxSequence Int?                          @map("received_max_sequence")
+  completedAt         DateTime?                     @map("completed_at") @db.Timestamptz(3)
+  createdAt           DateTime                      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace           Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  createdBy           User                          @relation("RecordingSessionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   events              RecordingEvent[]
   syncBatches         RecordingSyncBatch[]
+  workflowConversions RecordingWorkflowConversion[]
 
   @@index([workspaceId, status, createdAt], map: "recording_sessions_workspace_id_status_created_at_idx")
   @@index([createdByUserId, createdAt], map: "recording_sessions_created_by_user_id_created_at_idx")
@@ -180,4 +184,26 @@ model RecordingSyncBatch {
   @@unique([recordingSessionId, clientBatchId], map: "recording_sync_batches_recording_session_id_client_batch_id_key")
   @@index([recordingSessionId, processedAt], map: "recording_sync_batches_recording_session_id_processed_at_idx")
   @@map("recording_sync_batches")
+}
+
+model RecordingWorkflowConversion {
+  id                 String   @id @default(uuid()) @db.Uuid
+  recordingSessionId String   @map("recording_session_id") @db.Uuid
+  clientConversionId String   @map("client_conversion_id") @db.Uuid
+  workflowId         String   @map("workflow_id")
+  workflowVersionId  String   @unique(map: "recording_workflow_conversions_workflow_version_id_key") @map("workflow_version_id") @db.Uuid
+  createdById        String   @map("created_by_id") @db.Uuid
+  conversionReport   Json     @map("conversion_report") @db.JsonB
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  recordingSession RecordingSession @relation(fields: [recordingSessionId], references: [id], onDelete: Restrict)
+  workflow         Workflow         @relation(fields: [workflowId], references: [id], onDelete: Restrict)
+  workflowVersion  WorkflowVersion  @relation(fields: [workflowVersionId], references: [id], onDelete: Restrict)
+  createdBy        User             @relation("RecordingWorkflowConversionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([recordingSessionId, clientConversionId], map: "recording_workflow_conversions_session_client_key")
+  @@index([recordingSessionId, createdAt], map: "recording_workflow_conversions_session_created_idx")
+  @@index([workflowId], map: "recording_workflow_conversions_workflow_id_idx")
+  @@index([createdById, createdAt], map: "recording_workflow_conversions_created_by_id_created_at_idx")
+  @@map("recording_workflow_conversions")
 }

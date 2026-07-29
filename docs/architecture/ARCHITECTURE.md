@@ -33,8 +33,9 @@ drive a browser directly.
 The web application remains a static landing page. The API exposes its original
 `GET /health` liveness endpoint and `GET /health/database` for database
 readiness. Session 04 adds registration, login, current-user, and
-membership-scoped workspace reads. There is still no workflow CRUD, queue,
-web authentication UI, or API-to-runner connection.
+membership-scoped workspace reads. Session 10 adds one recording-to-draft
+workflow creation endpoint, not general workflow CRUD. There is still no
+workflow editor, queue, web authentication UI, or API-to-runner connection.
 
 ## Control-plane persistence
 
@@ -53,6 +54,9 @@ versioned workflows:
 - `Workflow` is the stable identity and current descriptive metadata.
 - `WorkflowVersion` is an append-only revision containing lifecycle status,
   schema version, and the complete workflow definition as PostgreSQL `JSONB`.
+- `RecordingWorkflowConversion` links a completed source recording and client
+  idempotency key to the created workflow, version, actor, and validated
+  conversion report.
 
 `(workflowId, version)` is unique, so a second record cannot overwrite the same
 revision. The repository exposes creation but no update operation. A workflow
@@ -64,9 +68,12 @@ Every new workflow must belong to a workspace. Existing workflows cannot be
 assigned safely without tenant knowledge, so the Session 04 migration refuses
 to run if the pre-Session-04 workflow table is non-empty.
 
-Deleting a `Workflow` cascades to its versions. This is an explicit relational
-choice for future administrative deletion, not a CRUD feature exposed in this
-session. Normal version writes remain immutable.
+The `Workflow` relation cascades to versions only when no conversion receipt
+depends on them. Conversion receipts use restrictive foreign keys for the
+recording, workflow, version, and creator, so persisted provenance cannot be
+orphaned by deleting a converted workflow. No administrative deletion or
+workflow CRUD is exposed in this session, and normal version writes remain
+immutable.
 
 PostgreSQL belongs only to the control plane. The Chrome extension and local
 runner do not connect to it, and browser execution remains local.
@@ -238,6 +245,10 @@ message; it has no browser automation dependency and executes no workflow.
   privacy summaries, immutable artifacts, bounded batch/completion contracts,
   and safe sync responses. It reuses locator and privacy schemas while
   remaining independent from Chrome, DOM, NestJS, Prisma, Playwright, and AI.
+- `packages/recording-converter` owns pure deterministic translation from a
+  validated recording artifact to a draft workflow and conversion report. It
+  reuses recording, workflow, locator, and privacy contracts without depending
+  on NestJS, Prisma, Chrome, DOM, Playwright, storage, network, or AI.
 - Application packages own framework bootstrapping and presentation, without
   introducing domain behavior.
 
@@ -259,6 +270,10 @@ Workflow definition version 1 is a strict, JSON-serializable object. Its
 sources, and assertions are discriminated unions, which gives each variant a
 stable discriminator and variant-specific required fields. Unknown variants
 and unexpected object properties are rejected.
+
+Session 10 adds the backward-compatible `setChecked` step. It records the
+desired boolean state of a checkbox or radio rather than representing a
+stateful control as an ambiguous click.
 
 `schemaVersion` versions the shape of the contract. The separate positive
 workflow `version` identifies revisions of a workflow. Published-version
@@ -307,6 +322,51 @@ Recording API resources are resolved through the current user's
 `OrganizationMember` relation. OWNER, ADMIN, and MEMBER can create, upload,
 complete, and read; VIEWER can read safe metadata only. Role and workspace
 authority are current database state, not JWT claims.
+
+## Recording-to-workflow conversion
+
+A completed recording remains immutable source evidence. It is reconstructed
+from ordered persisted events and parsed as a complete `RecordingArtifact`
+before conversion. `@tasktwin/recording-converter` then applies fixed rules:
+
+```text
+Completed RecordingArtifact
+  -> complete runtime validation
+  -> deterministic event mapping in sequence order
+  -> draft WorkflowDefinition + RecordingConversionReport
+  -> workflow-schema validation
+  -> one transaction:
+       Workflow
+       WorkflowVersion(version 1, draft)
+       RecordingWorkflowConversion receipt
+```
+
+The converter does not read the clock or generate random IDs. The persistence
+layer supplies the workflow ID; step IDs, safe names, variable names, mappings,
+deduplication, and issue order depend only on the validated artifact and
+conversion options.
+
+Click, allowed fill, select, checkbox, and selected-radio events map to explicit
+workflow actions. Checkbox and radio use `setChecked`. Masked personal input
+uses a required variable without reconstructing its value. A replayable
+blocked password may use a secret reference name, never a secret value.
+Unsupported, truncated, or unsafe events remain represented as unresolved
+entries. Exact consecutive redundant state-setting events may be deduplicated,
+but their provenance remains in the report.
+
+The report maps every event ID and sequence to a generated step, retained step,
+or unresolved issue. Recorded locator fallbacks and confidence stay in this
+validated report because workflow steps currently store only their executable
+primary locator. A blocking issue sets `publishable: false`; it does not
+publish, execute, or silently repair the draft.
+
+The conversion endpoint is authenticated and resolves the source recording
+through current organization membership. OWNER, ADMIN, and MEMBER may convert;
+VIEWER may not. The workflow workspace is copied from the source recording,
+never accepted from the request. The unique
+`(recordingSessionId, clientConversionId)` receipt key backs exact retry
+idempotency, and Workflow, WorkflowVersion, and receipt share one serializable
+transaction.
 
 ## Safety and trust boundaries
 

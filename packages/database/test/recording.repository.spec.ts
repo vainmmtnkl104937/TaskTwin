@@ -650,6 +650,133 @@ describe('RecordingRepository', () => {
     expect(findMany).not.toHaveBeenCalled();
   });
 
+  it('reconstructs a completed artifact for an authorized conversion', async () => {
+    const artifact = await readValidArtifact();
+    const findMany = vi.fn().mockResolvedValue(
+      artifact.events.map((event) => ({
+        clientEventId: event.eventId,
+        sequence: event.sequence,
+        event,
+      })),
+    );
+    const transactionClient = createTransactionClient({
+      recordingSession: {
+        findFirst: vi.fn().mockResolvedValue(
+          sessionRow(artifact, {
+            status: 'completed',
+            completedAt: updatedAt,
+            receivedEventCount: artifact.eventCount,
+            receivedMinSequence: 1,
+            receivedMaxSequence: artifact.lastSequence,
+          }),
+        ),
+        update: vi.fn(),
+      },
+      recordingEvent: {
+        findFirst: vi.fn(),
+        createMany: vi.fn(),
+        findMany,
+      },
+    });
+    const { repository } = createRepository(transactionClient);
+
+    const result = await repository.getCompletedArtifactForConversion(
+      actorUserId,
+      recordingSessionId,
+    );
+
+    expect(result).toEqual({
+      recordingSessionId,
+      workspaceId,
+      artifact,
+    });
+    expect(transactionClient.recordingSession.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspace: {
+            organization: {
+              members: {
+                some: {
+                  userId: actorUserId,
+                  role: { in: ['OWNER', 'ADMIN', 'MEMBER'] },
+                },
+              },
+            },
+          },
+        }),
+      }),
+    );
+    expect(findMany).toHaveBeenCalledOnce();
+  });
+
+  it('rejects conversion before loading events when recording is not completed', async () => {
+    const artifact = await readValidArtifact();
+    const findMany = vi.fn();
+    const transactionClient = createTransactionClient({
+      recordingSession: {
+        findFirst: vi.fn().mockResolvedValue(sessionRow(artifact)),
+        update: vi.fn(),
+      },
+      recordingEvent: {
+        findFirst: vi.fn(),
+        createMany: vi.fn(),
+        findMany,
+      },
+    });
+    const { repository } = createRepository(transactionClient);
+
+    await expectRepositoryErrorCode(
+      repository.getCompletedArtifactForConversion(
+        actorUserId,
+        recordingSessionId,
+      ),
+      'RECORDING_NOT_COMPLETED',
+    );
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid persisted event data when reconstructing for conversion', async () => {
+    const artifact = await readValidArtifact();
+    const firstEvent = artifact.events[0];
+    if (firstEvent === undefined) {
+      throw new Error('Expected a recording event fixture');
+    }
+    const transactionClient = createTransactionClient({
+      recordingSession: {
+        findFirst: vi.fn().mockResolvedValue(
+          sessionRow(artifact, {
+            status: 'completed',
+            completedAt: updatedAt,
+          }),
+        ),
+        update: vi.fn(),
+      },
+      recordingEvent: {
+        findFirst: vi.fn(),
+        createMany: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([
+          {
+            clientEventId: firstEvent.eventId,
+            sequence: firstEvent.sequence,
+            event: {
+              ...firstEvent,
+              sessionId: '12121212-1212-4121-8121-121212121212',
+            },
+          },
+        ]),
+      },
+    });
+    const { repository } = createRepository(transactionClient);
+
+    await expectRepositoryErrorCode(
+      repository.getCompletedArtifactForConversion(
+        actorUserId,
+        recordingSessionId,
+      ),
+      'PERSISTED_RECORDING_INVALID',
+    );
+  });
+
   it('supports completing an empty 0/0 artifact', async () => {
     const source = await readValidArtifact();
     const emptyArtifact = RecordingArtifactSchema.parse({

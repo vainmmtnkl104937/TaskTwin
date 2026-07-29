@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "workflowId": "setCheckedExample",
+  "version": 1,
+  "name": "Set checked state example",
+  "description": "Reusable fixture for deterministic checkbox and radio state steps.",
+  "status": "draft",
+  "variables": [],
+  "steps": [
+    {
+      "id": "enableWelcomeEmail",
+      "type": "setChecked",
+      "name": "Enable Send welcome email",
+      "locator": {
+        "kind": "label",
+        "value": "Send welcome email",
+        "exact": true
+      },
+      "checked": true
+    },
+    {
+      "id": "disableArchiveCopy",
+      "type": "setChecked",
+      "name": "Disable Keep an archive copy",
+      "locator": {
+        "kind": "testId",
+        "attribute": "data-testid",
+        "value": "archive-copy"
+      },
+      "checked": false
+    }
+  ]
+}

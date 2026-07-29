@@ -5,15 +5,21 @@ import {
   RecordingPrivacySummarySchema,
   RecordingSessionCompleteRequestSchema,
   RecordingSessionCreateRequestSchema,
+  type RecordingArtifact,
   type RecordingEventBatch,
   type RecordingSessionCreateRequest,
 } from '@tasktwin/recording-schema';
 
-import { Prisma, type PrismaClient } from '../generated/prisma/client.js';
+import {
+  OrganizationRole,
+  Prisma,
+  type PrismaClient,
+} from '../generated/prisma/client.js';
 import { createCanonicalJsonDigest } from './canonical-json.js';
 import { RecordingRepositoryError } from './recording-errors.js';
 import type {
   CompleteRecordingSessionResult,
+  CompletedRecordingArtifactRecord,
   CreateRecordingSessionResult,
   IngestRecordingBatchResult,
   OrganizationAccessRecord,
@@ -21,6 +27,11 @@ import type {
 } from './recording-records.js';
 
 const MAX_SERIALIZABLE_ATTEMPTS = 3;
+const RECORDING_CONVERSION_ROLES = [
+  OrganizationRole.OWNER,
+  OrganizationRole.ADMIN,
+  OrganizationRole.MEMBER,
+] as const;
 
 const recordingSessionMetadataSelect = {
   id: true,
@@ -275,43 +286,12 @@ export class RecordingRepository {
         };
       }
 
-      const storedRows = await transaction.recordingEvent.findMany({
-        where: { recordingSessionId: session.id },
-        select: {
-          clientEventId: true,
-          sequence: true,
-          event: true,
-        },
-        orderBy: [{ sequence: 'asc' }, { clientEventId: 'asc' }],
-      });
-
-      const events = storedRows.map((row) => {
-        const storedEvent = RecordingEventSchema.safeParse(row.event);
-        if (
-          !storedEvent.success ||
-          storedEvent.data.eventId !== row.clientEventId ||
-          storedEvent.data.sequence !== row.sequence ||
-          storedEvent.data.sessionId !== session.clientSessionId
-        ) {
-          throw new RecordingRepositoryError('PERSISTED_RECORDING_INVALID');
-        }
-        return storedEvent.data;
-      });
-
-      const artifact = RecordingArtifactSchema.safeParse({
-        schemaVersion: session.schemaVersion,
-        clientSessionId: session.clientSessionId,
-        targetOrigin: session.targetOrigin,
-        startedAt: session.startedAt.toISOString(),
-        stoppedAt: session.stoppedAt.toISOString(),
-        eventCount: session.eventCount,
-        lastSequence: session.lastSequence,
-        events,
-        privacySummary: session.privacySummary,
-      });
-      if (!artifact.success) {
-        throw new RecordingRepositoryError('INCOMPLETE_RECORDING');
-      }
+      const artifact = await this.reconstructValidatedArtifact(
+        transaction,
+        session,
+        'INCOMPLETE_RECORDING',
+      );
+      const events = artifact.events;
 
       const completedAt = new Date();
       await transaction.recordingSession.update({
@@ -329,9 +309,38 @@ export class RecordingRepository {
         recordingSessionId: session.id,
         clientSessionId: session.clientSessionId,
         status: 'completed',
-        eventCount: artifact.data.eventCount,
-        lastSequence: artifact.data.lastSequence,
+        eventCount: artifact.eventCount,
+        lastSequence: artifact.lastSequence,
         idempotent: false,
+      };
+    });
+  }
+
+  async getCompletedArtifactForConversion(
+    actorUserId: string,
+    recordingSessionId: string,
+  ): Promise<CompletedRecordingArtifactRecord> {
+    return this.runSerializable(async (transaction) => {
+      const session = await this.findConversionAccessibleSession(
+        transaction,
+        actorUserId,
+        recordingSessionId,
+      );
+      if (session === null) {
+        throw new RecordingRepositoryError('RECORDING_NOT_FOUND');
+      }
+      if (session.status !== 'completed') {
+        throw new RecordingRepositoryError('RECORDING_NOT_COMPLETED');
+      }
+
+      return {
+        recordingSessionId: session.id,
+        workspaceId: session.workspaceId,
+        artifact: await this.reconstructValidatedArtifact(
+          transaction,
+          session,
+          'PERSISTED_RECORDING_INVALID',
+        ),
       };
     });
   }
@@ -568,6 +577,76 @@ export class RecordingRepository {
       },
       select: recordingSessionPersistenceSelect,
     });
+  }
+
+  private findConversionAccessibleSession(
+    transaction: Prisma.TransactionClient,
+    actorUserId: string,
+    recordingSessionId: string,
+  ): Promise<SessionPersistenceRow | null> {
+    return transaction.recordingSession.findFirst({
+      where: {
+        id: recordingSessionId,
+        workspace: {
+          organization: {
+            members: {
+              some: {
+                userId: actorUserId,
+                role: { in: [...RECORDING_CONVERSION_ROLES] },
+              },
+            },
+          },
+        },
+      },
+      select: recordingSessionPersistenceSelect,
+    });
+  }
+
+  private async reconstructValidatedArtifact(
+    transaction: Prisma.TransactionClient,
+    session: SessionPersistenceRow,
+    invalidArtifactErrorCode:
+      'INCOMPLETE_RECORDING' | 'PERSISTED_RECORDING_INVALID',
+  ): Promise<RecordingArtifact> {
+    const storedRows = await transaction.recordingEvent.findMany({
+      where: { recordingSessionId: session.id },
+      select: {
+        clientEventId: true,
+        sequence: true,
+        event: true,
+      },
+      orderBy: [{ sequence: 'asc' }, { clientEventId: 'asc' }],
+    });
+
+    const events = storedRows.map((row) => {
+      const storedEvent = RecordingEventSchema.safeParse(row.event);
+      if (
+        !storedEvent.success ||
+        storedEvent.data.eventId !== row.clientEventId ||
+        storedEvent.data.sequence !== row.sequence ||
+        storedEvent.data.sessionId !== session.clientSessionId
+      ) {
+        throw new RecordingRepositoryError('PERSISTED_RECORDING_INVALID');
+      }
+      return storedEvent.data;
+    });
+
+    const artifact = RecordingArtifactSchema.safeParse({
+      schemaVersion: session.schemaVersion,
+      clientSessionId: session.clientSessionId,
+      targetOrigin: session.targetOrigin,
+      startedAt: session.startedAt.toISOString(),
+      stoppedAt: session.stoppedAt.toISOString(),
+      eventCount: session.eventCount,
+      lastSequence: session.lastSequence,
+      events,
+      privacySummary: session.privacySummary,
+    });
+    if (!artifact.success) {
+      throw new RecordingRepositoryError(invalidArtifactErrorCode);
+    }
+
+    return artifact.data;
   }
 
   private async runSerializable<Result>(
