@@ -7,11 +7,13 @@ then run the approved workflow safely**.
 > Show it once. Review the plan. Run it safely.
 
 This repository contains the application foundation, framework-independent
-workflow domain model, and authenticated control-plane foundation created
-through Session 04. It provides buildable application shells, shared
-configuration and types, health checks, runtime workflow validation, local
-PostgreSQL development tooling, short-lived access-token authentication, and
-organization-scoped workspaces. It does not yet record or execute workflows.
+workflow domain model, authenticated control-plane foundation, and extension
+recorder coordination created through Session 05. It provides buildable
+application shells, shared configuration and types, health checks, runtime
+workflow validation, local PostgreSQL development tooling, short-lived
+access-token authentication, organization-scoped workspaces, and deterministic
+recorder state handling. It does not yet capture interactions or execute
+workflows.
 
 ## Browser-first MVP
 
@@ -27,7 +29,7 @@ general-purpose operating-system control are not part of the browser-first MVP.
 | -------------------------- | -------------------------------------------------------- |
 | `apps/web`                 | Next.js landing page and web health indicator            |
 | `apps/api`                 | NestJS health, authentication, and workspace endpoints   |
-| `apps/extension`           | Manifest V3 popup shell with disabled recorder controls  |
+| `apps/extension`           | Manifest V3 recorder state and coordination foundation   |
 | `apps/local-runner`        | Node.js startup and health/status shell                  |
 | `packages/shared-types`    | Shared service health contract                           |
 | `packages/workflow-schema` | Versioned workflow contracts and runtime validation      |
@@ -149,3 +151,14 @@ mappers.
 This session does not add refresh tokens, logout, password recovery, email
 verification, invitations, organization or workspace CRUD, workflow CRUD, UI
 authentication, browser automation, or production deployment.
+
+## Session 05 scope
+
+Session 05 adds a deterministic recorder state machine, a Manifest V3 service
+worker, session-scoped state restoration, active-tab/origin binding,
+state-driven popup controls, and a minimal content-script acknowledgement
+boundary. It requests only `activeTab`, `scripting`, and `storage`, with no host
+permissions.
+
+The extension still captures no click, input, change, submit, keyboard, form,
+page-content, screenshot, or locator data and does not generate workflows.

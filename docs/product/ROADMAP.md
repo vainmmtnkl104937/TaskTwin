@@ -46,6 +46,19 @@ Session 04 deliberately excludes refresh tokens, recovery and verification
 flows, invitations, tenant-management CRUD, UI authentication, and workflow
 HTTP endpoints.
 
+## Session 05: recorder state and extension coordination
+
+- Deterministic recording-state machine
+- Runtime-validated popup, service-worker, and content-script messages
+- Session-scoped Chrome storage and popup-reopen restoration
+- Active-tab and origin binding
+- State-driven start, pause, resume, stop, and reset controls
+- Least-privilege dynamic content-script injection
+
+Session 05 coordinates recorder state only. It does not capture interactions,
+inspect page content, generate workflows, synchronize with the backend, or
+communicate with the local runner.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their
