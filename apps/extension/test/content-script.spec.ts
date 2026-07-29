@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { ContentScriptController } from '../src/content-script-controller.js';
+import {
+  ContentScriptController,
+  type EventCaptureLifecycle,
+} from '../src/content-script-controller.js';
 import {
   createInitialRecordingState,
   transitionRecordingState,
@@ -41,29 +44,42 @@ function createRecordingNotification() {
 }
 
 describe('ContentScriptController', () => {
-  it('validates and acknowledges state notifications', () => {
-    const controller = new ContentScriptController();
+  function createController() {
+    const capture = {
+      start: vi.fn(),
+      stopWithoutFlush: vi.fn(),
+      suspendAndFlush: vi.fn().mockResolvedValue(true),
+      isCapturing: vi.fn().mockReturnValue(true),
+    } satisfies EventCaptureLifecycle;
+    return { capture, controller: new ContentScriptController(capture) };
+  }
 
-    expect(controller.handle(createRecordingNotification())).toEqual({
+  it('validates and acknowledges state notifications', async () => {
+    const { controller, capture } = createController();
+
+    await expect(
+      controller.handle(createRecordingNotification()),
+    ).resolves.toEqual({
       success: true,
       receivedStatus: 'recording',
     });
+    expect(capture.start).toHaveBeenCalledOnce();
     expect(controller.isRecorderActive()).toBe(true);
     expect(controller.getStatus()).toBe('recording');
   });
 
-  it('rejects malformed messages without changing its active state', () => {
-    const controller = new ContentScriptController();
-    controller.handle(createRecordingNotification());
+  it('rejects malformed messages without changing its active state', async () => {
+    const { controller } = createController();
+    await controller.handle(createRecordingNotification());
 
-    expect(
+    await expect(
       controller.handle({
         type: 'recorder/state-changed',
         state: { status: 'idle' },
       }),
-    ).toMatchObject({
+    ).resolves.toMatchObject({
       success: false,
-      error: { code: 'UNKNOWN_ERROR' },
+      error: { code: 'EVENT_REJECTED' },
     });
     expect(controller.isRecorderActive()).toBe(true);
     expect(controller.getStatus()).toBe('recording');

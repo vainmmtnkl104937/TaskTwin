@@ -7,6 +7,7 @@ import type {
   RecorderClock,
   RecorderIdGenerator,
   RecordingStateStore,
+  RecordingTimelineStore,
 } from '../src/recorder/ports.js';
 import {
   createInitialRecordingState,
@@ -17,6 +18,7 @@ import type {
   RecordingSessionState,
 } from '../src/recorder/contracts.js';
 import { RecorderController } from '../src/recorder/controller.js';
+import type { RecordingTimeline } from '../src/recorder/event-contracts.js';
 
 const timestamp = '2026-07-29T10:00:00.000Z';
 const sessionId = '57a1a7d4-5ada-4bc8-ac17-10c84746a567';
@@ -45,12 +47,30 @@ class FakeStateStore implements RecordingStateStore {
   }
 }
 
+class FakeTimelineStore implements RecordingTimelineStore {
+  readonly saves: RecordingTimeline[] = [];
+  stored: unknown | undefined;
+
+  load(): Promise<unknown | undefined> {
+    return Promise.resolve(this.stored);
+  }
+
+  save(timeline: RecordingTimeline): Promise<void> {
+    this.stored = structuredClone(timeline);
+    this.saves.push(structuredClone(timeline));
+    return Promise.resolve();
+  }
+}
+
 function createController(options?: {
   stored?: unknown;
+  storedTimeline?: unknown;
   activeTab?: ActiveTab | null;
   notifyResponse?: unknown;
 }) {
   const store = new FakeStateStore(options?.stored);
+  const timelineStore = new FakeTimelineStore();
+  timelineStore.stored = options?.storedTimeline;
   const activeTabProvider = {
     getActiveTab: vi.fn().mockResolvedValue(
       options?.activeTab === undefined
@@ -75,6 +95,10 @@ function createController(options?: {
             },
           ),
       ),
+    flushPending: vi.fn().mockResolvedValue({
+      success: true,
+      flushed: true,
+    }),
   } satisfies ContentScriptCoordinator;
   const clock = { now: () => timestamp } satisfies RecorderClock;
   const idGenerator = {
@@ -83,10 +107,12 @@ function createController(options?: {
 
   return {
     store,
+    timelineStore,
     activeTabProvider,
     contentScript,
     controller: new RecorderController(
       store,
+      timelineStore,
       activeTabProvider,
       contentScript,
       clock,
@@ -123,7 +149,29 @@ function createRecordingState(): RecordingSessionState {
 
 describe('RecorderController', () => {
   it('starts with a supported active tab and stores only its origin', async () => {
-    const { controller, store, contentScript } = createController();
+    const { controller, store, timelineStore, contentScript } =
+      createController({
+        storedTimeline: {
+          schemaVersion: 1,
+          sessionId: '00000000-0000-4000-8000-000000000000',
+          nextSequence: 2,
+          events: [
+            {
+              schemaVersion: 1,
+              sessionId: '00000000-0000-4000-8000-000000000000',
+              eventId: '00000000-0000-4000-8000-000000000001',
+              sequence: 1,
+              tabId: 1,
+              origin: 'https://old.example',
+              occurredAt: timestamp,
+              recordedAt: timestamp,
+              eventType: 'click',
+              target: { tagName: 'button' },
+              payload: { activation: 'primary' },
+            },
+          ],
+        },
+      });
 
     const response = await controller.handle({ type: 'recorder/start' });
 
@@ -140,6 +188,14 @@ describe('RecorderController', () => {
       'recording',
     ]);
     expect(contentScript.prepare).toHaveBeenCalledWith(42);
+    expect(timelineStore.saves).toEqual([
+      {
+        schemaVersion: 1,
+        sessionId,
+        nextSequence: 1,
+        events: [],
+      },
+    ]);
     expect(contentScript.notify).toHaveBeenCalledWith(
       42,
       expect.objectContaining({
@@ -262,6 +318,11 @@ describe('RecorderController', () => {
       state: { status: 'paused' },
     });
     expect(store.saves.map((state) => state.status)).toEqual(['paused']);
+    expect(contentScript.flushPending).toHaveBeenCalledWith(42, {
+      type: 'recorder/flush-pending',
+      sessionId,
+      reason: 'pause',
+    });
     expect(contentScript.notify).toHaveBeenCalledWith(
       42,
       expect.objectContaining({
@@ -294,6 +355,11 @@ describe('RecorderController', () => {
       'stopping',
       'idle',
     ]);
+    expect(contentScript.flushPending).toHaveBeenCalledWith(42, {
+      type: 'recorder/flush-pending',
+      sessionId,
+      reason: 'stop',
+    });
     expect(contentScript.notify).toHaveBeenCalledTimes(2);
   });
 

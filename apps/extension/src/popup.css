@@ -42,6 +42,31 @@ h1 {
   background: #e8efec;
 }
 
+.timeline-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.timeline-summary div {
+  padding: 0.65rem;
+  border: 1px solid #d5dfdb;
+  border-radius: 0.5rem;
+  background: #ffffff;
+}
+
+.timeline-summary dt {
+  color: #65716d;
+  font-size: 0.7rem;
+}
+
+.timeline-summary dd {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .controls {
   display: grid;
   gap: 0.5rem;

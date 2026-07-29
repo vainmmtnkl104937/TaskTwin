@@ -9,6 +9,10 @@ import {
   RecordingSessionStateSchema,
   type RecorderStateChangedNotification,
 } from './contracts.js';
+import {
+  FlushPendingResponseSchema,
+  type FlushPendingReason,
+} from './event-contracts.js';
 import type {
   ActiveTab,
   ActiveTabProvider,
@@ -16,6 +20,7 @@ import type {
   RecorderClock,
   RecorderIdGenerator,
   RecordingStateStore,
+  RecordingTimelineStore,
 } from './ports.js';
 import { RecorderIntegrationError } from './ports.js';
 import {
@@ -23,6 +28,7 @@ import {
   transitionRecordingState,
   type RecorderTransitionEvent,
 } from './state-machine.js';
+import { createRecordingTimeline } from './timeline.js';
 
 type StateLoadResult =
   | { success: true; state: RecordingSessionState }
@@ -53,6 +59,7 @@ function getSupportedOrigin(urlValue: string): string | null {
 export class RecorderController {
   constructor(
     private readonly stateStore: RecordingStateStore,
+    private readonly timelineStore: RecordingTimelineStore,
     private readonly activeTabProvider: ActiveTabProvider,
     private readonly contentScript: ContentScriptCoordinator,
     private readonly clock: RecorderClock,
@@ -170,6 +177,18 @@ export class RecorderController {
       return starting.response;
     }
 
+    if (starting.state.sessionId === null) {
+      return this.failOperation(starting.state, 'UNKNOWN_ERROR');
+    }
+
+    try {
+      await this.timelineStore.save(
+        createRecordingTimeline(starting.state.sessionId),
+      );
+    } catch {
+      return this.failOperation(starting.state, 'STORAGE_FAILURE');
+    }
+
     let activeTab: ActiveTab | null;
     try {
       activeTab = await this.activeTabProvider.getActiveTab();
@@ -221,7 +240,16 @@ export class RecorderController {
     initialState: RecordingSessionState,
     event: Extract<RecorderTransitionEvent, { type: 'pause' | 'resume' }>,
   ): Promise<RecorderCommandResponse> {
-    const changed = await this.persistTransition(initialState, event);
+    let transitionState = initialState;
+    if (event.type === 'pause') {
+      const flushed = await this.flushBeforeTransition(initialState, 'pause');
+      if (!flushed.success) {
+        return flushed.response;
+      }
+      transitionState = flushed.state;
+    }
+
+    const changed = await this.persistTransition(transitionState, event);
     if (!changed.success) {
       return changed.response;
     }
@@ -237,7 +265,12 @@ export class RecorderController {
   private async stop(
     initialState: RecordingSessionState,
   ): Promise<RecorderCommandResponse> {
-    const stopping = await this.persistTransition(initialState, {
+    const flushed = await this.flushBeforeTransition(initialState, 'stop');
+    if (!flushed.success) {
+      return flushed.response;
+    }
+
+    const stopping = await this.persistTransition(flushed.state, {
       type: 'stop',
     });
     if (!stopping.success) {
@@ -268,6 +301,61 @@ export class RecorderController {
     }
 
     return { success: true, state: idle.state };
+  }
+
+  private async flushBeforeTransition(
+    initialState: RecordingSessionState,
+    reason: FlushPendingReason,
+  ): Promise<
+    | { success: true; state: RecordingSessionState }
+    | { success: false; response: RecorderCommandResponse }
+  > {
+    if (initialState.activeTabId === null || initialState.sessionId === null) {
+      return {
+        success: false,
+        response: failureResponse('INVALID_TRANSITION', initialState),
+      };
+    }
+
+    let response: unknown;
+    try {
+      response = await this.contentScript.flushPending(
+        initialState.activeTabId,
+        {
+          type: 'recorder/flush-pending',
+          sessionId: initialState.sessionId,
+          reason,
+        },
+      );
+    } catch {
+      response = undefined;
+    }
+
+    const reloaded = await this.loadState();
+    if (!reloaded.success) {
+      return reloaded;
+    }
+
+    if (reloaded.state.status === 'error') {
+      return {
+        success: false,
+        response: failureResponse(
+          reloaded.state.error?.code ?? 'UNKNOWN_ERROR',
+          reloaded.state,
+        ),
+      };
+    }
+
+    const parsedResponse = FlushPendingResponseSchema.safeParse(response);
+    if (!parsedResponse.success || !parsedResponse.data.success) {
+      const failed = await this.failOperation(
+        reloaded.state,
+        'CONTENT_SCRIPT_UNAVAILABLE',
+      );
+      return { success: false, response: failed };
+    }
+
+    return { success: true, state: reloaded.state };
   }
 
   private async reset(

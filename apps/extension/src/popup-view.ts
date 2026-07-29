@@ -16,6 +16,8 @@ const STATUS_LABELS = {
 export class DomPopupView implements PopupView {
   private readonly statusElement: HTMLElement;
   private readonly errorElement: HTMLElement;
+  private readonly eventCountElement: HTMLElement;
+  private readonly latestEventElement: HTMLElement;
   private readonly buttons: ReadonlyMap<PopupAction, HTMLButtonElement>;
 
   constructor(document: Document) {
@@ -24,6 +26,12 @@ export class DomPopupView implements PopupView {
     );
     const errorElement = document.querySelector<HTMLElement>(
       '[data-recorder-error]',
+    );
+    const eventCountElement = document.querySelector<HTMLElement>(
+      '[data-recorder-event-count]',
+    );
+    const latestEventElement = document.querySelector<HTMLElement>(
+      '[data-recorder-latest-event]',
     );
     const buttons = new Map<PopupAction, HTMLButtonElement>();
 
@@ -43,12 +51,19 @@ export class DomPopupView implements PopupView {
       buttons.set(action, button);
     }
 
-    if (statusElement === null || errorElement === null) {
+    if (
+      statusElement === null ||
+      errorElement === null ||
+      eventCountElement === null ||
+      latestEventElement === null
+    ) {
       throw new Error('Recorder popup status elements are missing.');
     }
 
     this.statusElement = statusElement;
     this.errorElement = errorElement;
+    this.eventCountElement = eventCountElement;
+    this.latestEventElement = latestEventElement;
     this.buttons = buttons;
   }
 
@@ -68,6 +83,8 @@ export class DomPopupView implements PopupView {
 
     this.errorElement.textContent = presentation.errorMessage ?? '';
     this.errorElement.hidden = presentation.errorMessage === null;
+    this.eventCountElement.textContent = String(presentation.eventCount);
+    this.latestEventElement.textContent = presentation.latestEventSummary;
   }
 
   private getButton(action: PopupAction): HTMLButtonElement {

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TaskTwin Recorder Fixture</title>
+    <style>
+      body {
+        max-width: 42rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        font-family: system-ui, sans-serif;
+      }
+
+      form {
+        display: grid;
+        gap: 1rem;
+      }
+
+      label,
+      fieldset {
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      button,
+      input,
+      select {
+        min-height: 2.5rem;
+        font: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>TaskTwin Recorder Fixture</h1>
+      <form>
+        <button type="button" data-testid="nested-action">
+          <span aria-hidden="true">★</span>
+          <span>Run fixture action</span>
+        </button>
+
+        <label>
+          Text input
+          <input
+            id="fixture-text"
+            name="fixtureText"
+            type="text"
+            placeholder="Type several characters"
+          />
+        </label>
+
+        <label>
+          Password
+          <input
+            id="fixture-password"
+            name="fixturePassword"
+            type="password"
+            autocomplete="current-password"
+          />
+        </label>
+
+        <label>
+          One-time code
+          <input
+            id="fixture-otp"
+            name="fixtureOtp"
+            type="text"
+            autocomplete="one-time-code"
+          />
+        </label>
+
+        <label>
+          Select an option
+          <select id="fixture-select" name="fixtureSelect">
+            <option value="first">First option</option>
+            <option value="second">Second option</option>
+          </select>
+        </label>
+
+        <label>
+          <input id="fixture-checkbox" name="fixtureCheckbox" type="checkbox" />
+          Enable fixture option
+        </label>
+
+        <fieldset>
+          <legend>Radio group</legend>
+          <label>
+            <input type="radio" name="fixtureRadio" value="alpha" />
+            Alpha
+          </label>
+          <label>
+            <input type="radio" name="fixtureRadio" value="beta" />
+            Beta
+          </label>
+        </fieldset>
+      </form>
+    </main>
+  </body>
+</html>

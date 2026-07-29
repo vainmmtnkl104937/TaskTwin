@@ -16,6 +16,9 @@ export const RecorderErrorCodeSchema = z.enum([
   'MISSING_PERMISSION',
   'STORAGE_FAILURE',
   'CONTENT_SCRIPT_UNAVAILABLE',
+  'INVALID_EVENT',
+  'EVENT_REJECTED',
+  'EVENT_LIMIT_REACHED',
   'UNKNOWN_ERROR',
 ]);
 
@@ -27,6 +30,10 @@ export const RECORDER_ERROR_MESSAGES = {
   STORAGE_FAILURE: 'TaskTwin could not save the recorder state.',
   CONTENT_SCRIPT_UNAVAILABLE:
     'TaskTwin could not communicate with the selected page.',
+  INVALID_EVENT: 'TaskTwin rejected an invalid recording event.',
+  EVENT_REJECTED: 'TaskTwin rejected an event outside the active recording.',
+  EVENT_LIMIT_REACHED:
+    'The recording event limit was reached. The captured timeline was preserved.',
   UNKNOWN_ERROR: 'TaskTwin could not complete the recorder action.',
 } as const satisfies Record<RecorderErrorCode, string>;
 
