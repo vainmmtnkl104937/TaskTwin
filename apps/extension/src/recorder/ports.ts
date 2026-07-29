@@ -3,6 +3,10 @@ import type {
   RecorderStateChangedNotification,
   RecordingSessionState,
 } from './contracts.js';
+import type {
+  FlushPendingNotification,
+  RecordingTimeline,
+} from './event-contracts.js';
 
 export interface ActiveTab {
   id: number;
@@ -15,6 +19,11 @@ export interface RecordingStateStore {
   save(state: RecordingSessionState): Promise<void>;
 }
 
+export interface RecordingTimelineStore {
+  load(): Promise<unknown | undefined>;
+  save(timeline: RecordingTimeline): Promise<void>;
+}
+
 export interface ActiveTabProvider {
   getActiveTab(): Promise<ActiveTab | null>;
 }
@@ -25,6 +34,10 @@ export interface ContentScriptCoordinator {
     tabId: number,
     notification: RecorderStateChangedNotification,
   ): Promise<unknown>;
+  flushPending(
+    tabId: number,
+    notification: FlushPendingNotification,
+  ): Promise<unknown>;
 }
 
 export interface RecorderClock {
@@ -33,6 +46,10 @@ export interface RecorderClock {
 
 export interface RecorderIdGenerator {
   createSessionId(): string;
+}
+
+export interface EventIdGenerator {
+  createEventId(): string;
 }
 
 export class RecorderIntegrationError extends Error {

@@ -8,12 +8,12 @@ then run the approved workflow safely**.
 
 This repository contains the application foundation, framework-independent
 workflow domain model, authenticated control-plane foundation, and extension
-recorder coordination created through Session 05. It provides buildable
+recorder timeline created through Session 06. It provides buildable
 application shells, shared configuration and types, health checks, runtime
 workflow validation, local PostgreSQL development tooling, short-lived
-access-token authentication, organization-scoped workspaces, and deterministic
-recorder state handling. It does not yet capture interactions or execute
-workflows.
+access-token authentication, organization-scoped workspaces, deterministic
+recorder state, and privacy-bounded browser event capture. It does not yet
+generate or execute workflows.
 
 ## Browser-first MVP
 
@@ -29,7 +29,7 @@ general-purpose operating-system control are not part of the browser-first MVP.
 | -------------------------- | -------------------------------------------------------- |
 | `apps/web`                 | Next.js landing page and web health indicator            |
 | `apps/api`                 | NestJS health, authentication, and workspace endpoints   |
-| `apps/extension`           | Manifest V3 recorder state and coordination foundation   |
+| `apps/extension`           | Manifest V3 recorder state and bounded event timeline    |
 | `apps/local-runner`        | Node.js startup and health/status shell                  |
 | `packages/shared-types`    | Shared service health contract                           |
 | `packages/workflow-schema` | Versioned workflow contracts and runtime validation      |
@@ -162,3 +162,16 @@ permissions.
 
 The extension still captures no click, input, change, submit, keyboard, form,
 page-content, screenshot, or locator data and does not generate workflows.
+
+## Session 06 scope
+
+Session 06 adds runtime-validated candidates for actionable clicks, debounced
+text input, selects, checkboxes, and radios. The service worker verifies the
+recording session boundary, assigns immutable event identity and sequence, and
+persists a bounded session timeline. Pending text input is flushed before blur,
+pause, and stop. Password and one-time-code values are represented only as
+masked null values.
+
+The popup shows only event count and a fixed action-category summary. This
+session does not generate locators or workflows, synchronize with the backend,
+execute browser actions, capture arbitrary DOM data, or add broad host access.

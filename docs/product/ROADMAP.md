@@ -59,12 +59,26 @@ Session 05 coordinates recorder state only. It does not capture interactions,
 inspect page content, generate workflows, synchronize with the backend, or
 communicate with the local runner.
 
+## Session 06: privacy-bounded browser event capture
+
+- Strict event-candidate, accepted-event, and timeline contracts
+- Service-worker-owned event identity, ordering, and persistence
+- Actionable click, debounced text-input, select, checkbox, and radio capture
+- Password and one-time-code value masking
+- Bounded target metadata and event timeline
+- Safe popup event count and action summary
+- Local manual recorder fixture
+
+Session 06 records only the approved minimal interaction categories. It does
+not generate locators or workflows, sync events, execute actions, capture
+arbitrary attributes or DOM, or request broad host permissions.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their
 requirements and safety boundaries are approved:
 
-1. Explicit browser recording controls and a minimal event contract
+1. Translation from reviewed recording events to workflow drafts
 2. Reviewable workflow representation and editing
 3. Policy and authorization decisions
 4. Deterministic local browser execution

@@ -100,10 +100,29 @@ environment rather than in a remote cloud browser.
 
 Session 05 makes the extension service worker the authoritative recorder-state
 coordinator. The popup sends validated commands and renders state, while a
-dynamically injected content script only receives validated state
-notifications. Recorder state uses session-scoped Chrome storage so popup
-closure and service-worker suspension do not lose it. The extension still
-captures no browser events or page content.
+dynamically injected content script receives validated state notifications.
+Recorder state uses session-scoped Chrome storage so popup closure and
+service-worker suspension do not lose it.
+
+Session 06 keeps the service worker authoritative for the event timeline.
+The content script uses document-level delegated listeners to construct strict,
+sanitized event candidates. The worker accepts candidates only while recording
+and only from the bound top-level tab and origin. It then assigns session ID,
+tab ID, event ID, and monotonically increasing sequence before persisting the
+accepted event. Candidates cannot choose authoritative envelope fields.
+
+The capture boundary supports actionable primary clicks, debounced text-input
+changes, single selects, checkboxes, and selected radios. Pending input is
+flushed before blur, pause, and stop. Password and one-time-code values are
+stored as masked nulls; hidden and file inputs are ignored. Target snapshots
+use a bounded allowlist rather than DOM serialization or arbitrary attributes.
+The popup receives only event count and a fixed event-category summary.
+
+The event timeline shares the recorder's `chrome.storage.session` lifecycle.
+It has a hard capacity. Reaching the limit changes the recorder to an explicit
+error instead of silently discarding older or newer events. Starting a new
+recording explicitly replaces the prior session timeline; stopping preserves
+the completed timeline for popup inspection until the next start.
 
 The extension requests only `activeTab`, `scripting`, and `storage`.
 `activeTab` limits page access to the tab explicitly selected when the user
@@ -165,10 +184,13 @@ Prisma, and Playwright so every plane can consume the same domain contract.
   are never logged or stored; password hashes are never selected by normal user
   reads or returned from API responses.
 - No browser event, screenshot, cookie, access token, password, or OTP is
-  captured.
-- Recorder storage contains only versioned state, tab/window IDs, an HTTP(S)
-  origin, timestamps, and safe typed errors. Complete page URLs and message
-  payloads are not logged.
+  captured as a plaintext secret. Password and OTP input events may be retained
+  only with a null value and a fixed masking reason.
+- Recorder storage contains versioned state and a bounded interaction timeline.
+  The timeline uses allowlisted, length-bounded target metadata and event
+  payloads. Complete page URLs, full DOM, outerHTML, arbitrary attributes, raw
+  inbound messages, and input values in the popup are excluded from logs and
+  presentation.
 - Workflow secret value sources store only a validated reference name, never a
   secret value.
 - Database credentials come from environment configuration. URLs and passwords

@@ -8,6 +8,15 @@ class ChromePopupMessenger implements PopupMessenger {
   send(command: RecorderCommand): Promise<unknown> {
     return chrome.runtime.sendMessage(command);
   }
+
+  subscribe(handler: (message: unknown) => void): void {
+    chrome.runtime.onMessage.addListener((message, sender) => {
+      if (sender.id === chrome.runtime.id && sender.tab === undefined) {
+        handler(message);
+      }
+      return false;
+    });
+  }
 }
 
 const popupController = new PopupController(

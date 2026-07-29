@@ -5,6 +5,7 @@
   "scripts": {
     "build": "tsc --noEmit && vite build && vite build --mode service-worker && vite build --mode content-script",
     "dev": "vite",
+    "fixture:serve": "node scripts/serve-fixture.mjs",
     "lint": "eslint .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
@@ -16,6 +17,7 @@
     "@tasktwin/config": "workspace:*",
     "@types/chrome": "0.2.2",
     "eslint": "9.39.5",
+    "happy-dom": "20.11.1",
     "typescript": "5.9.3",
     "vite": "8.1.5",
     "vitest": "4.1.10"

@@ -5,36 +5,73 @@ import {
   type ContentScriptResponse,
   type RecorderStatus,
 } from './recorder/contracts.js';
+import {
+  FlushPendingNotificationSchema,
+  FlushPendingResponseSchema,
+  type FlushPendingResponse,
+} from './recorder/event-contracts.js';
+
+export interface EventCaptureLifecycle {
+  start(): void;
+  stopWithoutFlush(): void;
+  suspendAndFlush(): Promise<boolean>;
+  isCapturing(): boolean;
+}
 
 export class ContentScriptController {
-  private active = false;
   private currentStatus: RecorderStatus = 'idle';
+  private currentSessionId: string | null = null;
 
-  handle(message: unknown): ContentScriptResponse {
-    const notification =
+  constructor(private readonly capture: EventCaptureLifecycle) {}
+
+  async handle(
+    message: unknown,
+  ): Promise<ContentScriptResponse | FlushPendingResponse> {
+    const stateNotification =
       RecorderStateChangedNotificationSchema.safeParse(message);
 
-    if (!notification.success) {
+    if (stateNotification.success) {
+      this.currentStatus = stateNotification.data.state.status;
+      this.currentSessionId = stateNotification.data.state.sessionId;
+
+      if (this.currentStatus === 'recording') {
+        this.capture.start();
+      } else {
+        this.capture.stopWithoutFlush();
+      }
+
       return ContentScriptResponseSchema.parse({
-        success: false,
-        error: createRecorderError('UNKNOWN_ERROR'),
+        success: true,
+        receivedStatus: this.currentStatus,
       });
     }
 
-    this.currentStatus = notification.data.state.status;
-    this.active =
-      this.currentStatus === 'recording' ||
-      this.currentStatus === 'paused' ||
-      this.currentStatus === 'stopping';
+    const flushNotification = FlushPendingNotificationSchema.safeParse(message);
+    if (
+      !flushNotification.success ||
+      flushNotification.data.sessionId !== this.currentSessionId ||
+      (this.currentStatus !== 'recording' && this.currentStatus !== 'paused')
+    ) {
+      return FlushPendingResponseSchema.parse({
+        success: false,
+        error: createRecorderError('EVENT_REJECTED'),
+      });
+    }
 
-    return ContentScriptResponseSchema.parse({
-      success: true,
-      receivedStatus: this.currentStatus,
-    });
+    const flushed = await this.capture.suspendAndFlush();
+    return flushed
+      ? FlushPendingResponseSchema.parse({
+          success: true,
+          flushed: true,
+        })
+      : FlushPendingResponseSchema.parse({
+          success: false,
+          error: createRecorderError('EVENT_REJECTED'),
+        });
   }
 
   isRecorderActive(): boolean {
-    return this.active;
+    return this.capture.isCapturing();
   }
 
   getStatus(): RecorderStatus {

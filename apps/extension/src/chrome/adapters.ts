@@ -2,17 +2,24 @@ import {
   type RecorderStateChangedNotification,
   type RecordingSessionState,
 } from '../recorder/contracts.js';
+import type {
+  FlushPendingNotification,
+  RecordingTimeline,
+} from '../recorder/event-contracts.js';
 import {
   type ActiveTab,
   type ActiveTabProvider,
   type ContentScriptCoordinator,
+  type EventIdGenerator,
   type RecorderClock,
   type RecorderIdGenerator,
   RecorderIntegrationError,
   type RecordingStateStore,
+  type RecordingTimelineStore,
 } from '../recorder/ports.js';
 
 const RECORDING_STATE_STORAGE_KEY = 'tasktwin.recorder.session.v1';
+const RECORDING_TIMELINE_STORAGE_KEY = 'tasktwin.recorder.timeline.v1';
 
 export class ChromeSessionRecordingStateStore implements RecordingStateStore {
   async load(): Promise<unknown | undefined> {
@@ -25,6 +32,21 @@ export class ChromeSessionRecordingStateStore implements RecordingStateStore {
   save(state: RecordingSessionState): Promise<void> {
     return chrome.storage.session.set({
       [RECORDING_STATE_STORAGE_KEY]: state,
+    });
+  }
+}
+
+export class ChromeSessionRecordingTimelineStore implements RecordingTimelineStore {
+  async load(): Promise<unknown | undefined> {
+    const stored = await chrome.storage.session.get(
+      RECORDING_TIMELINE_STORAGE_KEY,
+    );
+    return stored[RECORDING_TIMELINE_STORAGE_KEY];
+  }
+
+  save(timeline: RecordingTimeline): Promise<void> {
+    return chrome.storage.session.set({
+      [RECORDING_TIMELINE_STORAGE_KEY]: timeline,
     });
   }
 }
@@ -76,6 +98,17 @@ export class ChromeContentScriptCoordinator implements ContentScriptCoordinator 
       throw new RecorderIntegrationError('CONTENT_SCRIPT_UNAVAILABLE');
     }
   }
+
+  async flushPending(
+    tabId: number,
+    notification: FlushPendingNotification,
+  ): Promise<unknown> {
+    try {
+      return await chrome.tabs.sendMessage(tabId, notification);
+    } catch {
+      throw new RecorderIntegrationError('CONTENT_SCRIPT_UNAVAILABLE');
+    }
+  }
 }
 
 export class SystemRecorderClock implements RecorderClock {
@@ -86,6 +119,12 @@ export class SystemRecorderClock implements RecorderClock {
 
 export class CryptoRecorderIdGenerator implements RecorderIdGenerator {
   createSessionId(): string {
+    return crypto.randomUUID();
+  }
+}
+
+export class CryptoEventIdGenerator implements EventIdGenerator {
+  createEventId(): string {
     return crypto.randomUUID();
   }
 }
