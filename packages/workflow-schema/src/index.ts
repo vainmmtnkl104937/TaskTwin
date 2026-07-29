@@ -108,6 +108,8 @@ export type {
 } from './workflow-step.js';
 
 export {
+  MAX_WORKFLOW_VARIABLE_DESCRIPTION_LENGTH,
+  MAX_WORKFLOW_VARIABLE_LABEL_LENGTH,
   WorkflowVariableSchema,
   WorkflowVariableValueTypeSchema,
 } from './workflow-variable.js';

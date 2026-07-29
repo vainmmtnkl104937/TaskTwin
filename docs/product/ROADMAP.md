@@ -148,6 +148,20 @@ Session 11 deliberately excludes publishing, workflow-version creation,
 branching, arbitrary graph connections, advanced variables, locator repair,
 collaboration, auto-save, execution, Playwright, AI, and refresh tokens.
 
+## Session 12: workflow variables and temporary run inputs
+
+- Deterministic variable and secret-reference usage analysis
+- Explicit variable-to-step compatibility rules
+- Immutable variable management and atomic reference rename
+- Compatible ValueSource selection in the Draft editor
+- Component-memory-only Run Inputs Preview
+- Safe file metadata without file upload
+- Structured semantic validation before Draft persistence
+
+Session 12 does not create workflow runs, persist runtime inputs, collect
+secret values, resolve secrets, upload files, publish workflows, execute
+browser actions, use Playwright, or add AI behavior.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

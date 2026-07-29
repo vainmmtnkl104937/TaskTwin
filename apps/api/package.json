@@ -27,6 +27,7 @@
     "@tasktwin/recording-schema": "workspace:*",
     "@tasktwin/shared-types": "workspace:*",
     "@tasktwin/workflow-editor-core": "workspace:*",
+    "@tasktwin/workflow-inputs": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",

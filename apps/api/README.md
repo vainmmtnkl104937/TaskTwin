@@ -14,6 +14,12 @@ A successful update increments revision and synchronizes Workflow name and
 description in one serializable transaction. A stale revision returns HTTP 409
 with `WORKFLOW_DRAFT_REVISION_CONFLICT`.
 
+Before persistence, the PATCH boundary validates the complete workflow and
+performs deterministic variable and secret-reference analysis. Blocking
+cross-reference or compatibility issues return HTTP 400 with
+`WORKFLOW_INPUT_VALIDATION_FAILED` and bounded structured issues. Error
+responses do not contain runtime values or rejected secret-like strings.
+
 Run the opt-in database E2E check with:
 
 ```powershell

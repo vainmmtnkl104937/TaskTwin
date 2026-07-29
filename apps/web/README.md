@@ -18,3 +18,12 @@ not be copied into localStorage, sessionStorage, client props, logs, or URLs.
 React Flow renders the `steps` array as a fixed linear view. Reordering uses
 explicit Move buttons and changes the array; canvas layout never changes
 execution order.
+
+The Variables panel manages Draft declarations and displays their step usages.
+ValueSource selectors offer only compatible variables and ask for a secret
+alias, never a secret value.
+
+Run Inputs Preview is local UI validation only. Its values stay in component
+memory, are cleared when the dialog closes, and are never put in localStorage,
+sessionStorage, API requests, or logs. File content and filenames are not read
+or uploaded.

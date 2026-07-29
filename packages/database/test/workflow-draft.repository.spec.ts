@@ -181,6 +181,25 @@ describe('WorkflowDraftRepository', () => {
     ).rejects.toMatchObject({ code: 'WORKFLOW_VERSION_IMMUTABLE' });
   });
 
+  it('rejects unknown variable references before opening a transaction', async () => {
+    const { repository, prisma } = createRepository();
+    const invalid = definition();
+    invalid.steps = [
+      {
+        id: 'step-1',
+        type: 'fill',
+        name: 'Invalid fill',
+        locator: { kind: 'label', value: 'Email' },
+        value: { kind: 'variable', variableName: 'missingVariable' },
+      },
+    ];
+
+    await expect(
+      repository.updateDraft(actorUserId, workflowVersionId, 1, invalid),
+    ).rejects.toMatchObject({ code: 'WORKFLOW_DEFINITION_INVALID' });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('propagates metadata failure so the transaction can roll back', async () => {
     const { repository, transaction } = createRepository();
     transaction.workflow.update.mockRejectedValueOnce(

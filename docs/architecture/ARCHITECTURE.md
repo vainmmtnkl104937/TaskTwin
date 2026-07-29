@@ -449,3 +449,22 @@ pnpm manages workspace dependencies through a single lockfile. Turborepo
 orders tasks so shared packages build before consumers. Each application and
 package exposes its own build, lint, and typecheck scripts where applicable,
 while root commands validate the repository consistently.
+
+## Workflow input boundary
+
+`packages/workflow-inputs` sits between the versioned workflow contract and
+framework consumers. It scans only allowlisted ValueSource properties in
+`steps` array order. The package owns variable usage, secret requirement,
+cross-reference, compatibility, temporary runtime-input contracts, and safe
+count summaries.
+
+Structural workflow validation remains in `workflow-schema`. Semantic input
+validation is repeated by the API before Draft persistence, while the
+database repository keeps its existing defense-in-depth complete-definition
+validation. Variables remain JSON inside `WorkflowVersion.definition`; no
+additional persistence model is introduced.
+
+The web editor holds temporary run-input values only in the mounted preview
+component. Secret values have no contract or UI field. File content is never
+read or uploaded; only bounded size and media-type metadata may exist until
+the preview closes.

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@tasktwin/workflow-editor-core": "workspace:*",
+    "@tasktwin/workflow-inputs": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "@xyflow/react": "12.11.2",
     "next": "16.2.12",

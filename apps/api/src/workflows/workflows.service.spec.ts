@@ -109,6 +109,127 @@ describe('WorkflowsService', () => {
     expect(updateDraft).not.toHaveBeenCalled();
   });
 
+  it('saves valid variables and rejects unknown references safely', async () => {
+    const validDefinition = definition();
+    validDefinition.variables = [
+      {
+        name: 'customerEmail',
+        valueType: 'string',
+        required: true,
+      },
+    ];
+    validDefinition.steps = [
+      {
+        id: 'step-1',
+        type: 'fill',
+        name: 'Fill customer email',
+        locator: { kind: 'label', value: 'Email' },
+        value: { kind: 'variable', variableName: 'customerEmail' },
+      },
+    ];
+    const updateDraft = vi.fn().mockResolvedValue({
+      workflowVersion: {
+        ...detail(),
+        definition: validDefinition,
+      },
+    });
+    const service = new WorkflowsService({
+      updateDraft,
+    } as unknown as WorkflowDraftRepository);
+
+    await expect(
+      service.updateDraft(userId, versionId, {
+        expectedRevision: 1,
+        definition: validDefinition,
+      }),
+    ).resolves.toMatchObject({
+      workflowVersion: { definition: validDefinition },
+    });
+
+    const invalidDefinition = structuredClone(validDefinition);
+    const fill = invalidDefinition.steps[0]!;
+    if (fill.type !== 'fill') {
+      throw new Error('Expected Fill step');
+    }
+    fill.value = {
+      kind: 'variable',
+      variableName: 'missingVariable',
+    };
+
+    await expect(
+      service.updateDraft(userId, versionId, {
+        expectedRevision: 1,
+        definition: invalidDefinition,
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'WORKFLOW_INPUT_VALIDATION_FAILED',
+        issues: [
+          expect.objectContaining({
+            code: 'UNKNOWN_VARIABLE_REFERENCE',
+            variableName: 'missingVariable',
+          }),
+        ],
+      },
+    });
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects duplicate variables and unsafe secret aliases without echoing raw data', async () => {
+    const updateDraft = vi.fn();
+    const service = new WorkflowsService({
+      updateDraft,
+    } as unknown as WorkflowDraftRepository);
+    const duplicate = definition();
+    duplicate.variables = [
+      { name: 'customerEmail', valueType: 'string', required: true },
+      { name: 'customerEmail', valueType: 'string', required: false },
+    ];
+
+    await expect(
+      service.updateDraft(userId, versionId, {
+        expectedRevision: 1,
+        definition: duplicate,
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'WORKFLOW_INPUT_VALIDATION_FAILED',
+        issues: [expect.objectContaining({ code: 'DUPLICATE_VARIABLE_NAME' })],
+      },
+    });
+
+    const unsafe = definition();
+    unsafe.steps = [
+      {
+        id: 'step-1',
+        type: 'fill',
+        name: 'Fill secret',
+        locator: { kind: 'label', value: 'Secret' },
+        value: {
+          kind: 'secret',
+          secretName: 'person@example.com',
+        },
+      },
+    ];
+    let caught: unknown;
+    try {
+      await service.updateDraft(userId, versionId, {
+        expectedRevision: 1,
+        definition: unsafe,
+      });
+    } catch (error: unknown) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({
+      response: {
+        code: 'WORKFLOW_INPUT_VALIDATION_FAILED',
+        issues: [expect.objectContaining({ code: 'UNSAFE_SECRET_REFERENCE' })],
+      },
+    });
+    expect(JSON.stringify(caught)).not.toContain('person@example.com');
+    expect(updateDraft).not.toHaveBeenCalled();
+  });
+
   it('maps stale, non-draft and forbidden writes to safe HTTP errors', async () => {
     const updateDraft = vi
       .fn()

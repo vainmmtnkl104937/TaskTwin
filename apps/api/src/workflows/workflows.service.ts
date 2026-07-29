@@ -12,6 +12,7 @@ import {
   WorkflowDraftRepositoryError,
 } from '@tasktwin/database';
 import { validateEditorWorkflow } from '@tasktwin/workflow-editor-core';
+import { analyzeWorkflowInputs } from '@tasktwin/workflow-inputs';
 
 import {
   UpdateWorkflowDraftRequestSchema,
@@ -117,11 +118,56 @@ export class WorkflowsService {
     input: unknown,
   ): Promise<WorkflowVersionDetailResponse> {
     const request = UpdateWorkflowDraftRequestSchema.safeParse(input);
-    if (
-      !request.success ||
-      validateEditorWorkflow(request.success ? request.data.definition : input)
-        .length > 0
-    ) {
+    const definitionInput =
+      typeof input === 'object' && input !== null && 'definition' in input
+        ? input.definition
+        : input;
+    const inputAnalysis = analyzeWorkflowInputs(definitionInput);
+    const editorIssues = request.success
+      ? validateEditorWorkflow(request.data.definition)
+      : [];
+    const validationIssues = [
+      ...inputAnalysis.issues
+        .filter((issue) => issue.severity === 'blocking')
+        .map((issue) => ({
+          code: issue.code,
+          message: issue.message,
+          path: issue.path,
+          ...(issue.stepId === undefined ? {} : { stepId: issue.stepId }),
+          ...(issue.stepIndex === undefined
+            ? {}
+            : { stepIndex: issue.stepIndex }),
+          ...(issue.variableName === undefined
+            ? {}
+            : { variableName: issue.variableName }),
+        })),
+      ...editorIssues
+        .filter(
+          (issue) =>
+            !inputAnalysis.issues.some(
+              (inputIssue) =>
+                inputIssue.code === issue.code &&
+                JSON.stringify(inputIssue.path) === JSON.stringify(issue.path),
+            ),
+        )
+        .map((issue) => ({
+          code: issue.code,
+          message: issue.message,
+          path: issue.path,
+          ...(issue.stepId === undefined ? {} : { stepId: issue.stepId }),
+          ...(issue.stepIndex === undefined
+            ? {}
+            : { stepIndex: issue.stepIndex }),
+        })),
+    ];
+    if (!request.success || validationIssues.length > 0) {
+      if (validationIssues.length > 0) {
+        throw new BadRequestException({
+          code: 'WORKFLOW_INPUT_VALIDATION_FAILED',
+          message: 'The workflow contains invalid input references.',
+          issues: validationIssues,
+        });
+      }
       throw new BadRequestException({
         code: 'WORKFLOW_DEFINITION_INVALID',
         message: 'The workflow draft request is invalid.',

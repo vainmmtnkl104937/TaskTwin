@@ -14,6 +14,21 @@ export const UpdateWorkflowDraftRequestSchema = z.strictObject({
   definition: WorkflowDefinitionSchema,
 });
 
+export const WorkflowDraftValidationIssueSchema = z.strictObject({
+  code: z.string().trim().min(1).max(80),
+  message: z.string().trim().min(1).max(240),
+  path: z.array(z.union([z.string(), z.number().int().nonnegative()])),
+  stepId: z.string().trim().min(1).optional(),
+  stepIndex: z.number().int().nonnegative().optional(),
+  variableName: z.string().trim().min(1).optional(),
+});
+
+export const WorkflowDraftValidationErrorResponseSchema = z.strictObject({
+  code: z.literal('WORKFLOW_INPUT_VALIDATION_FAILED'),
+  message: z.string().trim().min(1).max(240),
+  issues: z.array(WorkflowDraftValidationIssueSchema).min(1),
+});
+
 export const WorkflowListItemResponseSchema = z.strictObject({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1),
@@ -65,4 +80,7 @@ export type WorkspaceWorkflowListResponse = z.infer<
 >;
 export type WorkflowVersionDetailResponse = z.infer<
   typeof WorkflowVersionDetailResponseSchema
+>;
+export type WorkflowDraftValidationErrorResponse = z.infer<
+  typeof WorkflowDraftValidationErrorResponseSchema
 >;

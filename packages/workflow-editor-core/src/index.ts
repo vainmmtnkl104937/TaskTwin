@@ -28,3 +28,17 @@ export type {
 
 export { findDuplicateStepIds, validateEditorWorkflow } from './validation.js';
 export type { WorkflowEditorIssue } from './validation.js';
+
+export {
+  addVariable,
+  findVariableUsages,
+  removeVariable,
+  renameVariable,
+  updateStepValueSource,
+  updateVariable,
+} from './variable-operations.js';
+export type {
+  WorkflowVariableOperationError,
+  WorkflowVariableOperationErrorCode,
+  WorkflowVariableOperationResult,
+} from './variable-operations.js';

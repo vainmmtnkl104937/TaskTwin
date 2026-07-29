@@ -10,6 +10,7 @@ import {
   SetCheckedStepSchema,
   ValueSourceSchema,
   WorkflowDefinitionSchema,
+  WorkflowVariableSchema,
 } from '../src/index.js';
 
 const legacyFixtureUrl = new URL(
@@ -337,6 +338,32 @@ describe('WorkflowDefinitionSchema', () => {
       WorkflowDefinitionSchema.safeParse({
         ...workflow,
         variables: [firstVariable, firstVariable],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('supports bounded labels plus date and file variable declarations', () => {
+    expect(
+      WorkflowVariableSchema.safeParse({
+        name: 'scheduledOn',
+        label: 'Scheduled date',
+        valueType: 'date',
+        required: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      WorkflowVariableSchema.safeParse({
+        name: 'attachment',
+        valueType: 'file',
+        required: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      WorkflowVariableSchema.safeParse({
+        name: 'tooLong',
+        label: 'x'.repeat(121),
+        valueType: 'string',
+        required: false,
       }).success,
     ).toBe(false);
   });

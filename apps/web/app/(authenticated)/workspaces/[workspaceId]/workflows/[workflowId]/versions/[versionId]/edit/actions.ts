@@ -3,7 +3,10 @@
 import { validateEditorWorkflow } from '@tasktwin/workflow-editor-core';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
 
-import { WorkflowConflictResponseSchema } from '@/lib/control-plane-contracts';
+import {
+  WorkflowConflictResponseSchema,
+  WorkflowDraftValidationErrorResponseSchema,
+} from '@/lib/control-plane-contracts';
 import { getAccessToken } from '@/lib/server/auth-session';
 import {
   ControlPlaneError,
@@ -81,6 +84,17 @@ export async function saveWorkflowDraftAction(
           ...(conflict.data.currentRevision === undefined
             ? {}
             : { currentRevision: conflict.data.currentRevision }),
+        };
+      }
+    }
+    if (error instanceof ControlPlaneError && error.status === 400) {
+      const validation = WorkflowDraftValidationErrorResponseSchema.safeParse(
+        error.body,
+      );
+      if (validation.success) {
+        return {
+          status: 'error',
+          message: `${validation.data.issues.length} workflow input validation issue(s) must be fixed.`,
         };
       }
     }

@@ -1,20 +1,26 @@
 'use client';
 
 import { summarizeNavigateUrl } from '@tasktwin/workflow-editor-core';
+import type { ValueSourceTarget } from '@tasktwin/workflow-inputs';
 import type {
   ElementLocator,
   ValueSource,
   VerifyStep,
   WorkflowStep,
+  WorkflowVariable,
 } from '@tasktwin/workflow-schema';
 
 import type { WorkflowVersionDetailResponse } from '@/lib/control-plane-contracts';
 
+import { ValueSourceField } from './value-source-field';
+
 interface StepInspectorProps {
   step: WorkflowStep;
+  variables: WorkflowVariable[];
   readOnly: boolean;
   locatorMetadata: WorkflowVersionDetailResponse['locatorMetadata'];
   onChange(step: WorkflowStep): void;
+  onValueSourceChange(target: ValueSourceTarget, source: ValueSource): void;
 }
 
 function locatorForStep(step: WorkflowStep): ElementLocator | null {
@@ -32,78 +38,18 @@ function locatorForStep(step: WorkflowStep): ElementLocator | null {
   }
 }
 
-function ValueSourceField({
-  label,
-  source,
-  readOnly,
-  onChange,
-}: {
-  label: string;
-  source: ValueSource;
-  readOnly: boolean;
-  onChange(source: ValueSource): void;
-}) {
-  if (source.kind === 'variable') {
-    return (
-      <p className="reference-summary">
-        {label}: Variable reference <code>{source.variableName}</code>
-      </p>
-    );
-  }
-  if (source.kind === 'secret') {
-    return (
-      <p className="reference-summary">
-        {label}: Secret reference <code>{source.secretName}</code>. Secret value
-        is never displayed.
-      </p>
-    );
-  }
-  if (typeof source.value === 'boolean') {
-    return (
-      <label className="checkbox-field">
-        <input
-          type="checkbox"
-          checked={source.value}
-          disabled={readOnly}
-          onChange={(event) =>
-            onChange({ kind: 'literal', value: event.currentTarget.checked })
-          }
-        />
-        {label}
-      </label>
-    );
-  }
-
-  return (
-    <label>
-      {label}
-      <input
-        type={typeof source.value === 'number' ? 'number' : 'text'}
-        value={source.value}
-        disabled={readOnly}
-        maxLength={typeof source.value === 'string' ? 1_024 : undefined}
-        onChange={(event) =>
-          onChange({
-            kind: 'literal',
-            value:
-              typeof source.value === 'number'
-                ? Number(event.currentTarget.value)
-                : event.currentTarget.value,
-          })
-        }
-      />
-    </label>
-  );
-}
-
 function VerifyFields({
   step,
+  variables,
   readOnly,
   onChange,
+  onValueSourceChange,
 }: {
   step: VerifyStep;
+  variables: WorkflowVariable[];
   readOnly: boolean;
   onChange(step: VerifyStep): void;
+  onValueSourceChange(target: ValueSourceTarget, source: ValueSource): void;
 }) {
   const assertion = step.assertion;
   if (assertion.kind === 'visible' || assertion.kind === 'hidden') {
@@ -135,12 +81,11 @@ function VerifyFields({
       <ValueSourceField
         label="Expected value"
         source={assertion.expected}
+        target={`verify.${assertion.kind}.expected`}
+        variables={variables}
         readOnly={readOnly}
         onChange={(expected) =>
-          onChange({
-            ...step,
-            assertion: { ...assertion, expected },
-          })
+          onValueSourceChange(`verify.${assertion.kind}.expected`, expected)
         }
       />
     </div>
@@ -149,9 +94,11 @@ function VerifyFields({
 
 export function StepInspector({
   step,
+  variables,
   readOnly,
   locatorMetadata,
   onChange,
+  onValueSourceChange,
 }: StepInspectorProps) {
   const locator = locatorForStep(step);
   const evidence = locatorMetadata.find((item) => item.stepId === step.id);
@@ -189,36 +136,30 @@ export function StepInspector({
       )}
 
       {step.type === 'navigate' ? (
-        step.url.kind === 'literal' && typeof step.url.value === 'string' ? (
-          <label>
-            URL
-            <input
-              type="url"
-              value={summarizeNavigateUrl(step.url.value)}
-              disabled={readOnly}
-              maxLength={2_048}
-              onChange={(event) =>
-                onChange({
-                  ...step,
-                  url: { kind: 'literal', value: event.currentTarget.value },
-                })
-              }
-            />
-            <small>Query values and fragments are not displayed.</small>
-          </label>
-        ) : (
-          <p className="reference-summary">
-            Navigate URL uses a {step.url.kind} reference and is read-only.
-          </p>
-        )
+        <ValueSourceField
+          label="URL"
+          source={step.url}
+          target="navigate.url"
+          variables={variables}
+          readOnly={readOnly}
+          summarizeStringLiteral={summarizeNavigateUrl}
+          onChange={(source) => onValueSourceChange('navigate.url', source)}
+        />
       ) : null}
 
       {step.type === 'fill' || step.type === 'select' ? (
         <ValueSourceField
           label={step.type === 'fill' ? 'Value' : 'Selected value'}
           source={step.value}
+          target={step.type === 'fill' ? 'fill.value' : 'select.value'}
+          variables={variables}
           readOnly={readOnly}
-          onChange={(value) => onChange({ ...step, value })}
+          onChange={(source) =>
+            onValueSourceChange(
+              step.type === 'fill' ? 'fill.value' : 'select.value',
+              source,
+            )
+          }
         />
       ) : null}
 
@@ -290,7 +231,13 @@ export function StepInspector({
       ) : null}
 
       {step.type === 'verify' ? (
-        <VerifyFields step={step} readOnly={readOnly} onChange={onChange} />
+        <VerifyFields
+          step={step}
+          variables={variables}
+          readOnly={readOnly}
+          onChange={onChange}
+          onValueSourceChange={onValueSourceChange}
+        />
       ) : null}
     </section>
   );
