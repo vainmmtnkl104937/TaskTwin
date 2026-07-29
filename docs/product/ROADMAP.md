@@ -26,6 +26,26 @@ implementation details before they are needed.
 Session 02 defines deterministic, versioned workflow data. It does not add
 recording, persistence, editing, policy evaluation, or execution behavior.
 
+## Session 03: control-plane persistence
+
+- Local PostgreSQL and Prisma 7 foundation
+- Immutable workflow-version persistence
+- Runtime schema validation at the write boundary
+- Database readiness endpoint and opt-in integration check
+
+## Session 04: authentication and workspace foundation
+
+- User registration and login with Argon2id password hashing
+- Short-lived JWT access tokens
+- User, Organization, OrganizationMember, and Workspace persistence
+- Atomic OWNER organization and default workspace provisioning
+- Protected current-user and membership-scoped workspace endpoints
+- Reusable organization-role authorization guard
+
+Session 04 deliberately excludes refresh tokens, recovery and verification
+flows, invitations, tenant-management CRUD, UI authentication, and workflow
+HTTP endpoints.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

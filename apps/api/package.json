@@ -8,23 +8,31 @@
     "dev": "nest start --watch",
     "lint": "eslint .",
     "start": "node dist/main.js",
-    "test": "vitest run",
+    "test": "vitest run --exclude test/**/*.integration.spec.ts",
+    "test:integration": "vitest run test/auth.integration.spec.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@nestjs/common": "11.1.28",
     "@nestjs/core": "11.1.28",
+    "@nestjs/jwt": "11.0.2",
     "@nestjs/platform-express": "11.1.28",
+    "@node-rs/argon2": "2.0.2",
     "@tasktwin/database": "workspace:*",
     "@tasktwin/shared-types": "workspace:*",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.15.1",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2"
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.24",
+    "@nestjs/testing": "11.1.28",
     "@tasktwin/config": "workspace:*",
     "@types/node": "22.19.1",
+    "@types/supertest": "7.2.1",
     "eslint": "9.39.5",
+    "supertest": "7.2.2",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   }

@@ -16,14 +16,30 @@ export interface PersistedWorkflowVersion {
 export class WorkflowVersionRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async create(definitionInput: unknown): Promise<PersistedWorkflowVersion> {
+  async create(
+    workspaceId: string,
+    definitionInput: unknown,
+  ): Promise<PersistedWorkflowVersion> {
     const definition = WorkflowDefinitionSchema.parse(definitionInput);
 
     return this.prisma.$transaction(async (transaction) => {
+      const existingWorkflow = await transaction.workflow.findUnique({
+        where: { id: definition.workflowId },
+        select: { workspaceId: true },
+      });
+
+      if (
+        existingWorkflow !== null &&
+        existingWorkflow.workspaceId !== workspaceId
+      ) {
+        throw new Error('Workflow belongs to a different workspace');
+      }
+
       await transaction.workflow.upsert({
         where: { id: definition.workflowId },
         create: {
           id: definition.workflowId,
+          workspaceId,
           name: definition.name,
           description: definition.description ?? null,
         },

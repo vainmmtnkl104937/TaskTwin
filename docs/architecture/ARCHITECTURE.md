@@ -32,8 +32,9 @@ drive a browser directly.
 
 The web application remains a static landing page. The API exposes its original
 `GET /health` liveness endpoint and `GET /health/database` for database
-readiness. Session 03 adds only workflow definition persistence; there is still
-no authentication, queue, workflow CRUD, or API-to-runner connection.
+readiness. Session 04 adds registration, login, current-user, and
+membership-scoped workspace reads. There is still no workflow CRUD, queue,
+web authentication UI, or API-to-runner connection.
 
 ## Control-plane persistence
 
@@ -41,8 +42,14 @@ no authentication, queue, workflow CRUD, or API-to-runner connection.
 and persistence code. It is a framework-independent package: NestJS dependency
 injection and HTTP health behavior stay in `apps/api`.
 
-The control-plane database stores two concepts:
+The control-plane database stores identity and tenancy concepts alongside
+versioned workflows:
 
+- `User` stores a normalized unique email, Argon2id password hash, display name,
+  and active state.
+- `Organization` is the tenant boundary.
+- `OrganizationMember` links a user to an organization with one exact role.
+- `Workspace` belongs to one organization and scopes workflows.
 - `Workflow` is the stable identity and current descriptive metadata.
 - `WorkflowVersion` is an append-only revision containing lifecycle status,
   schema version, and the complete workflow definition as PostgreSQL `JSONB`.
@@ -53,12 +60,37 @@ definition is parsed with `WorkflowDefinitionSchema` before a transaction or
 write begins; TypeScript alone is not trusted at this boundary. Application
 validation enforces positive workflow and schema versions.
 
+Every new workflow must belong to a workspace. Existing workflows cannot be
+assigned safely without tenant knowledge, so the Session 04 migration refuses
+to run if the pre-Session-04 workflow table is non-empty.
+
 Deleting a `Workflow` cascades to its versions. This is an explicit relational
 choice for future administrative deletion, not a CRUD feature exposed in this
 session. Normal version writes remain immutable.
 
 PostgreSQL belongs only to the control plane. The Chrome extension and local
 runner do not connect to it, and browser execution remains local.
+
+## Authentication and organization authorization
+
+Registration normalizes email through the shared database-package boundary,
+hashes the password with Argon2id, and creates the User, Organization, OWNER
+membership, and Default Workspace in one Prisma transaction. Explicit response
+mappers expose only safe user fields.
+
+Login returns a short-lived HS256 access token. The application payload
+contains only `sub`, the immutable user ID; standard `iat` and `exp` claims are
+added by the JWT library. Organization roles and mutable workspace permissions
+are not embedded in the token. Protected requests verify the token, then load
+the current active user from the database.
+
+`GET /workspaces` does not trust an organization ID from the client. Its
+database query reaches workspaces only through organizations for which the
+current user has an `OrganizationMember` record. A reusable role decorator and
+guard operate only on an internally attached, verified organization context.
+No Session 04 endpoint needs an organization role decision beyond the
+membership-scoped query, so the role guard is provided and independently
+tested without being attached to an artificial route.
 
 ## Local execution plane
 
@@ -114,13 +146,18 @@ Prisma, and Playwright so every plane can consume the same domain contract.
 ## Safety and trust boundaries
 
 - The extension uses least privilege and currently requests no permissions.
-- No service accepts or stores credentials in Session 01.
+- Passwords cross only registration and login boundaries. Plaintext passwords
+  are never logged or stored; password hashes are never selected by normal user
+  reads or returned from API responses.
 - No browser event, screenshot, cookie, access token, password, or OTP is
   captured.
 - Workflow secret value sources store only a validated reference name, never a
   secret value.
 - Database credentials come from environment configuration. URLs and passwords
   are not returned by health endpoints or written to application logs.
+- JWT signing configuration comes only from validated environment values. The
+  access-token lifetime is bounded and the signing secret must be at least 32
+  characters.
 - The normal unit-test suite mocks persistence and does not silently skip or
   connect to PostgreSQL. The real integration check is opt-in and fails when
   configuration, connectivity, or migrations are missing.

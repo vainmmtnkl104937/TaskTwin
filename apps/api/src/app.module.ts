@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
 
+import { AuthModule } from './auth/auth.module.js';
+import { AuthorizationModule } from './authorization/authorization.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthController } from './health/health.controller.js';
 import { HealthService } from './health/health.service.js';
+import { WorkspacesModule } from './workspaces/workspaces.module.js';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [AuthModule, AuthorizationModule, DatabaseModule, WorkspacesModule],
   controllers: [HealthController],
   providers: [HealthService],
 })
