@@ -34,3 +34,9 @@ editable status. Testing, Published, and Archived are read-only; future edits
 start by cloning a Published or Archived version into a new Draft. Publish and
 Archive require explicit confirmation. These controls do not execute or deploy
 the workflow.
+
+Session 14 adds `/runner-pairing` and Workspace runner-device lists. Pairing
+inspection and approval continue through the HTTP-only user-token server
+boundary. The web application never receives a runner device code, runner
+credential, or database digest. Only OWNER and ADMIN workspaces appear as
+approval targets and revoke controls require confirmation.

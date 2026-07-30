@@ -41,6 +41,9 @@ importers:
       '@tasktwin/recording-schema':
         specifier: workspace:*
         version: link:../../packages/recording-schema
+      '@tasktwin/runner-protocol':
+        specifier: workspace:*
+        version: link:../../packages/runner-protocol
       '@tasktwin/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
@@ -139,6 +142,9 @@ importers:
 
   apps/local-runner:
     dependencies:
+      '@tasktwin/runner-protocol':
+        specifier: workspace:*
+        version: link:../../packages/runner-protocol
       '@tasktwin/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
@@ -161,6 +167,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@tasktwin/runner-protocol':
+        specifier: workspace:*
+        version: link:../../packages/runner-protocol
       '@tasktwin/workflow-editor-core':
         specifier: workspace:*
         version: link:../../packages/workflow-editor-core
@@ -271,6 +280,9 @@ importers:
       '@tasktwin/recording-schema':
         specifier: workspace:*
         version: link:../recording-schema
+      '@tasktwin/runner-protocol':
+        specifier: workspace:*
+        version: link:../runner-protocol
       '@tasktwin/workflow-editor-core':
         specifier: workspace:*
         version: link:../workflow-editor-core
@@ -395,6 +407,28 @@ importers:
       '@tasktwin/privacy-engine':
         specifier: workspace:*
         version: link:../privacy-engine
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@tasktwin/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 22.19.1
+        version: 22.19.1
+      eslint:
+        specifier: 9.39.5
+        version: 9.39.5(jiti@2.7.0)
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@22.19.1)(happy-dom@20.11.1)(vite@8.1.5(@types/node@22.19.1)(jiti@2.7.0)(terser@5.49.0))
+
+  packages/runner-protocol:
+    dependencies:
       zod:
         specifier: 4.4.3
         version: 4.4.3

@@ -45,3 +45,21 @@ caller-generated UUID `clientCreationId` and a Published or Archived
 ```powershell
 pnpm workflow-lifecycle:check
 ```
+
+Session 14 adds public pairing creation/polling, authenticated Workspace
+approval and runner management, separate runner authentication, and heartbeat:
+
+- `POST /runner-pairing/sessions`
+- `POST /runner-pairing/token`
+- `POST /runner-pairing/inspect`
+- `POST /workspaces/:workspaceId/runner-pairing/approve`
+- `POST /runner-pairing/deny`
+- `GET /workspaces/:workspaceId/runner-devices`
+- `POST /runner-devices/:runnerDeviceId/revoke`
+- `POST /runner/heartbeat`
+
+Runner heartbeat uses
+`TaskTwinRunner <runnerDeviceId>.<credential>`, never the user JWT. Pairing
+codes, credentials, and complete Authorization headers must not be logged.
+Production verification and runner origins require HTTPS; loopback HTTP is
+development-only.

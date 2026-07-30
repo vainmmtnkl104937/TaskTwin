@@ -4,6 +4,10 @@ import type { z } from 'zod';
 
 import {
   LoginResponseSchema,
+  PairingActionResponseSchema,
+  PairingInspectionResponseSchema,
+  RunnerDeviceListResponseSchema,
+  RunnerDeviceRevokeResponseSchema,
   WorkflowLifecycleActionResponseSchema,
   WorkflowVersionDetailResponseSchema,
   WorkflowVersionHistoryResponseSchema,
@@ -59,6 +63,68 @@ export function listWorkspaces(accessToken: string) {
     method: 'GET',
     headers: { authorization: `Bearer ${accessToken}` },
   });
+}
+
+export function inspectRunnerPairing(accessToken: string, userCode: string) {
+  return request('/runner-pairing/inspect', PairingInspectionResponseSchema, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ schemaVersion: 1, userCode }),
+  });
+}
+
+export function approveRunnerPairing(
+  accessToken: string,
+  workspaceId: string,
+  userCode: string,
+) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/runner-pairing/approve`,
+    PairingActionResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ schemaVersion: 1, userCode }),
+    },
+  );
+}
+
+export function denyRunnerPairing(
+  accessToken: string,
+  workspaceId: string,
+  userCode: string,
+) {
+  return request('/runner-pairing/deny', PairingActionResponseSchema, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ schemaVersion: 1, workspaceId, userCode }),
+  });
+}
+
+export function listRunnerDevices(accessToken: string, workspaceId: string) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/runner-devices`,
+    RunnerDeviceListResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function revokeRunnerDevice(
+  accessToken: string,
+  runnerDeviceId: string,
+) {
+  return request(
+    `/runner-devices/${encodeURIComponent(runnerDeviceId)}/revoke`,
+    RunnerDeviceRevokeResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: '{}',
+    },
+  );
 }
 
 export function listWorkflows(accessToken: string, workspaceId: string) {

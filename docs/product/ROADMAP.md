@@ -178,6 +178,18 @@ the workflow, and publishing does not deploy or execute it. Execution,
 Playwright, environment promotion, version diffing, rollback, and AI review
 remain outside this session.
 
+## Session 14: Local Runner foundation and secure pairing
+
+- Framework-independent runner protocol and pairing state
+- Human one-time code plus undisplayed high-entropy device code
+- Workspace-scoped OWNER/ADMIN approval and runner revocation
+- Separate opaque runner identity and credential authentication
+- Local atomic credential storage and heartbeat CLI
+- Web pairing approval and runner-device status
+
+Session 14 establishes runner identity and connectivity only. It does not
+install Playwright, poll for jobs, launch a browser, or execute a workflow.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

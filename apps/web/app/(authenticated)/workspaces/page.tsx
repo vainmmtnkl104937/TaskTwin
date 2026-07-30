@@ -26,6 +26,11 @@ export default async function WorkspacesPage() {
         <p className="eyebrow">Control Plane</p>
         <h1>Workspaces</h1>
         <p>Select a workspace to review its workflows.</p>
+        {result.workspaces.some((workspace) => workspace.canManageRunners) ? (
+          <Link className="button-link" href="/runner-pairing">
+            Pair a Local Runner
+          </Link>
+        ) : null}
       </section>
       <section className="card-grid" aria-label="Available workspaces">
         {result.workspaces.map((workspace) => (
@@ -36,6 +41,12 @@ export default async function WorkspacesPage() {
           >
             <h2>{workspace.name}</h2>
             <p>{workspace.slug}</p>
+            <p className="metadata">
+              Role: {workspace.role} ·{' '}
+              {workspace.canManageRunners
+                ? 'Runner management enabled'
+                : 'Runner management read only'}
+            </p>
           </Link>
         ))}
         {result.workspaces.length === 0 ? (

@@ -218,8 +218,17 @@ The extension requests only `activeTab`, `scripting`, and `storage`.
 invokes the extension. There are no host permissions or static content
 scripts.
 
-The runner continues to report a typed health status and log a safe startup
-message; it has no browser automation dependency and executes no workflow.
+Session 14 gives the runner a secure control-plane identity without giving it a
+user JWT. Pairing uses a displayed one-time user code and an undisplayed
+high-entropy device code. An OWNER or ADMIN binds the request to one Workspace.
+The server persists only keyed code digests and a credential hash.
+
+The runner stores its opaque credential locally through an atomic
+credential-store abstraction and authenticates with the separate
+`TaskTwinRunner` scheme. Heartbeats update last-seen and credential-last-used
+timestamps. Online/offline is derived from last-seen; revocation invalidates
+both device and credential. This foundation still has no Playwright, browser
+launch, job polling, arbitrary command channel, or workflow execution.
 
 ## Package boundaries
 
@@ -249,6 +258,11 @@ message; it has no browser automation dependency and executes no workflow.
   validated recording artifact to a draft workflow and conversion report. It
   reuses recording, workflow, locator, and privacy contracts without depending
   on NestJS, Prisma, Chrome, DOM, Playwright, storage, network, or AI.
+- `packages/runner-protocol` owns strict runner metadata, pairing, polling,
+  authentication-header, heartbeat, connection-status, and local credential
+  record contracts plus deterministic state rules. It has no filesystem,
+  network, NestJS, Prisma, React, Next.js, Chrome, Playwright, or execution
+  behavior.
 - Application packages own framework bootstrapping and presentation, without
   introducing domain behavior.
 
@@ -481,7 +495,8 @@ WorkflowVersion resource.
   connect to PostgreSQL. The real integration check is opt-in and fails when
   configuration, connectivity, or migrations are missing.
 - There is no AI behavior, policy bypass, or silent workflow repair.
-- Local execution is a responsibility boundary only; it is not implemented.
+- Runner pairing and heartbeat exist, but local browser execution is not
+  implemented.
 
 ## Build architecture
 

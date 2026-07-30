@@ -7,6 +7,7 @@ import { Reflector } from '@nestjs/core';
 import {
   OrganizationRole,
   type RecordingRepository,
+  type RunnerRepository,
   type WorkflowDraftRepository,
   type WorkflowLifecycleRepository,
 } from '@tasktwin/database';
@@ -61,7 +62,8 @@ function createReflector(
     | 'workspace'
     | 'recordingSession'
     | 'workflow'
-    | 'workflowVersion' = 'workspace',
+    | 'workflowVersion'
+    | 'runnerDevice' = 'workspace',
   parameterName = 'workspaceId',
 ): Reflector {
   return {
@@ -79,6 +81,9 @@ describe('OrganizationResourceContextGuard', () => {
   const workflowLifecycleRepository = {
     resolveWorkflowAccess: vi.fn(),
   } as unknown as WorkflowLifecycleRepository;
+  const runnerRepository = {
+    resolveRunnerDeviceAccess: vi.fn(),
+  } as unknown as RunnerRepository;
 
   it('resolves membership and attaches trusted organization context', async () => {
     const request = createRequest();
@@ -94,6 +99,7 @@ describe('OrganizationResourceContextGuard', () => {
       } as unknown as RecordingRepository,
       workflowDraftRepository,
       workflowLifecycleRepository,
+      runnerRepository,
     );
 
     await expect(
@@ -114,6 +120,7 @@ describe('OrganizationResourceContextGuard', () => {
       } as unknown as RecordingRepository,
       workflowDraftRepository,
       workflowLifecycleRepository,
+      runnerRepository,
     );
 
     await expect(
@@ -130,6 +137,7 @@ describe('OrganizationResourceContextGuard', () => {
       } as unknown as RecordingRepository,
       workflowDraftRepository,
       workflowLifecycleRepository,
+      runnerRepository,
     );
 
     await expect(
@@ -152,6 +160,7 @@ describe('OrganizationResourceContextGuard', () => {
         resolveWorkflowVersionAccess,
       } as unknown as WorkflowDraftRepository,
       workflowLifecycleRepository,
+      runnerRepository,
     );
 
     await expect(
@@ -181,6 +190,7 @@ describe('OrganizationResourceContextGuard', () => {
       {
         resolveWorkflowAccess,
       } as unknown as WorkflowLifecycleRepository,
+      runnerRepository,
     );
 
     await expect(

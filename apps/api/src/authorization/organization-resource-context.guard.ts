@@ -9,6 +9,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import {
   RecordingRepository,
+  RunnerRepository,
   WorkflowDraftRepository,
   WorkflowLifecycleRepository,
 } from '@tasktwin/database';
@@ -42,6 +43,7 @@ export class OrganizationResourceContextGuard implements CanActivate {
     private readonly recordingRepository: RecordingRepository,
     private readonly workflowDraftRepository: WorkflowDraftRepository,
     private readonly workflowLifecycleRepository: WorkflowLifecycleRepository,
+    private readonly runnerRepository: RunnerRepository,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -99,6 +101,12 @@ export class OrganizationResourceContextGuard implements CanActivate {
             user.id,
             resourceId,
           );
+        break;
+      case 'runnerDevice':
+        access = await this.runnerRepository.resolveRunnerDeviceAccess(
+          user.id,
+          resourceId,
+        );
         break;
     }
 

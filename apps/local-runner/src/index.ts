@@ -1,5 +1,10 @@
-import { getRunnerStatus } from './status.js';
+import { runCli } from './cli.js';
 
-const status = getRunnerStatus();
-
-console.info(`TaskTwin local runner started safely. Status: ${status.status}.`);
+void runCli(process.argv.slice(2)).catch((error: unknown) => {
+  const message =
+    error instanceof Error
+      ? error.message
+      : 'The Local Runner could not complete the command.';
+  console.error(message);
+  process.exitCode = 1;
+});

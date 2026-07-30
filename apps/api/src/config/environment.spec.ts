@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { getApiPort, getJwtAccessConfiguration } from './environment.js';
+import {
+  getApiPort,
+  getJwtAccessConfiguration,
+  getRunnerSecurityConfiguration,
+} from './environment.js';
 
 const originalEnvironment = { ...process.env };
 
@@ -40,6 +44,28 @@ describe('environment configuration', () => {
     process.env.API_PORT = '70000';
     expect(() => getApiPort()).toThrow(
       'API_PORT must be an integer between 1 and 65535',
+    );
+  });
+
+  it('validates runner peppers and the verification origin', () => {
+    process.env.RUNNER_PAIRING_CODE_PEPPER = 'p'.repeat(32);
+    process.env.RUNNER_CREDENTIAL_PEPPER = 'c'.repeat(32);
+    process.env.TASKTWIN_WEB_BASE_URL = 'https://tasktwin.example';
+
+    expect(getRunnerSecurityConfiguration()).toEqual({
+      pairingCodePepper: 'p'.repeat(32),
+      credentialPepper: 'c'.repeat(32),
+      webOrigin: 'https://tasktwin.example',
+    });
+  });
+
+  it('rejects insecure non-loopback runner verification origins', () => {
+    process.env.RUNNER_PAIRING_CODE_PEPPER = 'p'.repeat(32);
+    process.env.RUNNER_CREDENTIAL_PEPPER = 'c'.repeat(32);
+    process.env.TASKTWIN_WEB_BASE_URL = 'http://tasktwin.example';
+
+    expect(() => getRunnerSecurityConfiguration()).toThrow(
+      'TASKTWIN_WEB_BASE_URL must use HTTPS outside local development',
     );
   });
 });

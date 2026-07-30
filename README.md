@@ -17,8 +17,10 @@ recorder state, privacy-bounded browser event capture, semantic locator
 ranking, deterministic privacy classification, redaction-plan contracts, a
 local recording outbox, idempotent recording persistence, and deterministic
 draft workflow generation, linear draft visualization, immutable editing
-operations, and revision-protected draft saving. It does not publish or execute
-workflows or capture screenshots.
+operations, and revision-protected draft saving. Session 14 also adds secure
+Local Runner pairing, separate runner credentials, heartbeat, revocation, and
+local atomic credential storage. It does not execute workflows or capture
+screenshots.
 
 ## Browser-first MVP
 
@@ -46,6 +48,7 @@ general-purpose operating-system control are not part of the browser-first MVP.
 | `packages/workflow-inputs`      | Variable, secret-reference, and run-input analysis     |
 | `packages/database`             | Prisma identity, workflow, and recording persistence   |
 | `packages/config`               | Shared strict TypeScript and ESLint configuration      |
+| `packages/runner-protocol`      | Local Runner pairing and heartbeat contracts           |
 
 The architectural direction is documented in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
@@ -101,6 +104,11 @@ The API also requires `JWT_ACCESS_SECRET` (at least 32 characters).
 pnpm auth:check
 pnpm workflow-editor:check
 ```
+
+Local Runner pairing additionally requires `RUNNER_PAIRING_CODE_PEPPER` and
+`RUNNER_CREDENTIAL_PEPPER`, each at least 32 characters, and
+`TASKTWIN_WEB_BASE_URL`. Plain HTTP is supported only for loopback
+development.
 
 Useful development commands:
 
@@ -297,3 +305,13 @@ transactions, a Workflow row lock, idempotent creation keys, and a PostgreSQL
 partial unique index that permits at most one current Published version per
 Workflow. Testing is review state only: this session does not execute or
 deploy workflows, use Playwright or AI, show diffs, or implement rollback.
+
+## Session 14 scope
+
+Session 14 adds short-lived device-style pairing, Workspace OWNER/ADMIN
+approval, an opaque runner credential separate from the user JWT, heartbeat,
+online/offline status, revocation, CLI pairing/status/start/unpair commands,
+and atomic local credential persistence.
+
+It does not add Playwright, workflow polling or execution, browser launch,
+WebSocket, arbitrary commands, cloud runners, or native keychain integration.

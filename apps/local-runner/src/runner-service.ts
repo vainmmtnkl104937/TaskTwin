@@ -1,0 +1,190 @@
+import { randomUUID } from 'node:crypto';
+
+import {
+  StoredRunnerCredentialSchema,
+  type RunnerDeviceMetadata,
+  type StoredRunnerCredential,
+} from '@tasktwin/runner-protocol';
+
+import {
+  ControlPlaneClientError,
+  type RunnerControlPlaneTransport,
+} from './control-plane-client.js';
+import type { RunnerCredentialStore } from './credential-store.js';
+
+export interface RunnerOutput {
+  write(message: string): void;
+}
+
+export interface RunnerClock {
+  now(): Date;
+  sleep(milliseconds: number, signal?: AbortSignal): Promise<void>;
+}
+
+export class RunnerRevokedError extends Error {
+  constructor() {
+    super('Runner authentication was rejected.');
+    this.name = 'RunnerRevokedError';
+  }
+}
+
+export class LocalRunnerService {
+  constructor(
+    private readonly store: RunnerCredentialStore,
+    private readonly transport: RunnerControlPlaneTransport,
+    private readonly output: RunnerOutput,
+    private readonly clock: RunnerClock,
+    private readonly runnerVersion: string,
+  ) {}
+
+  async pair(input: {
+    origin: string;
+    displayName: string;
+    platform: RunnerDeviceMetadata['platform'];
+    architecture: RunnerDeviceMetadata['architecture'];
+  }): Promise<void> {
+    const installationId = randomUUID();
+    const session = await this.transport.createPairingSession(input.origin, {
+      schemaVersion: 1,
+      metadata: {
+        displayName: input.displayName,
+        platform: input.platform,
+        architecture: input.architecture,
+        runnerVersion: this.runnerVersion,
+        installationId,
+      },
+    });
+    this.output.write(`Verification URL: ${session.verificationUri}`);
+    this.output.write(`Pairing code: ${session.userCode}`);
+    let intervalSeconds = session.intervalSeconds;
+    for (;;) {
+      await this.clock.sleep(intervalSeconds * 1_000);
+      const result = await this.transport.pollPairing(
+        input.origin,
+        session.deviceCode,
+      );
+      switch (result.status) {
+        case 'authorization_pending':
+        case 'slow_down':
+          intervalSeconds = result.intervalSeconds;
+          break;
+        case 'access_denied':
+          throw new Error('Pairing was denied.');
+        case 'expired':
+          throw new Error('Pairing expired.');
+        case 'paired': {
+          const credential = StoredRunnerCredentialSchema.parse({
+            schemaVersion: 1,
+            controlPlaneOrigin: input.origin,
+            runnerDeviceId: result.runnerDeviceId,
+            workspaceId: result.workspaceId,
+            installationId,
+            credential: result.credential,
+            savedAt: this.clock.now().toISOString(),
+          });
+          await this.store.save(credential);
+          await this.sendHeartbeat(credential);
+          this.output.write('TaskTwin Local Runner paired successfully.');
+          return;
+        }
+      }
+    }
+  }
+
+  async status(): Promise<void> {
+    const credential = await this.store.load();
+    if (credential === null) {
+      this.output.write('Local status: not paired.');
+      return;
+    }
+    try {
+      await this.sendHeartbeat(credential);
+      this.output.write('Local status: paired. Remote status: online.');
+    } catch (error: unknown) {
+      if (error instanceof RunnerRevokedError) {
+        this.output.write(
+          'Local status: paired. Remote authentication: rejected or revoked.',
+        );
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async start(signal: AbortSignal): Promise<void> {
+    const credential = await this.requireCredential();
+    this.output.write('TaskTwin Local Runner started safely.');
+    let nextIntervalSeconds = await this.sendHeartbeat(credential);
+    while (!signal.aborted) {
+      await this.clock
+        .sleep(nextIntervalSeconds * 1_000, signal)
+        .catch(() => undefined);
+      if (signal.aborted) {
+        break;
+      }
+      try {
+        nextIntervalSeconds = await this.sendHeartbeat(credential);
+      } catch (error: unknown) {
+        if (error instanceof RunnerRevokedError) {
+          this.output.write(
+            'Runner authentication was rejected; heartbeat stopped.',
+          );
+          return;
+        }
+        throw error;
+      }
+    }
+    this.output.write('TaskTwin Local Runner stopped safely.');
+  }
+
+  async unpair(): Promise<void> {
+    await this.store.clear();
+    this.output.write(
+      'Local credential removed. Remote revocation is a separate administrative action.',
+    );
+  }
+
+  private async requireCredential(): Promise<StoredRunnerCredential> {
+    const credential = await this.store.load();
+    if (credential === null) {
+      throw new Error('The Local Runner is not paired.');
+    }
+    return credential;
+  }
+
+  private async sendHeartbeat(
+    credential: StoredRunnerCredential,
+  ): Promise<number> {
+    try {
+      const response = await this.transport.heartbeat(
+        credential,
+        this.runnerVersion,
+      );
+      return response.nextHeartbeatInSeconds;
+    } catch (error: unknown) {
+      if (
+        error instanceof ControlPlaneClientError &&
+        (error.status === 401 || error.status === 403)
+      ) {
+        throw new RunnerRevokedError();
+      }
+      throw error;
+    }
+  }
+}
+
+export const systemClock: RunnerClock = {
+  now: () => new Date(),
+  sleep: (milliseconds, signal) =>
+    new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(resolve, milliseconds);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timeout);
+          reject(new Error('Heartbeat wait aborted.'));
+        },
+        { once: true },
+      );
+    }),
+};

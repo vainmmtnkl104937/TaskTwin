@@ -6,7 +6,7 @@ import type {
   CreateRegistrationInput,
   CreateRegistrationResult,
   SafeUserRecord,
-  WorkspaceRecord,
+  WorkspaceAccessRecord,
 } from './identity-records.js';
 
 const safeUserSelect = {
@@ -101,8 +101,10 @@ export class IdentityRepository {
     });
   }
 
-  listReachableWorkspaces(userId: string): Promise<WorkspaceRecord[]> {
-    return this.prisma.workspace.findMany({
+  async listReachableWorkspaces(
+    userId: string,
+  ): Promise<WorkspaceAccessRecord[]> {
+    const rows = await this.prisma.workspace.findMany({
       where: {
         organization: {
           members: {
@@ -110,8 +112,35 @@ export class IdentityRepository {
           },
         },
       },
-      select: workspaceSelect,
+      select: {
+        ...workspaceSelect,
+        organization: {
+          select: {
+            members: {
+              where: { userId },
+              select: { role: true },
+              take: 1,
+            },
+          },
+        },
+      },
       orderBy: [{ organizationId: 'asc' }, { name: 'asc' }, { id: 'asc' }],
+    });
+    return rows.flatMap((row) => {
+      const membership = row.organization.members[0];
+      return membership === undefined
+        ? []
+        : [
+            {
+              id: row.id,
+              organizationId: row.organizationId,
+              name: row.name,
+              slug: row.slug,
+              createdAt: row.createdAt,
+              updatedAt: row.updatedAt,
+              role: membership.role,
+            },
+          ];
     });
   }
 

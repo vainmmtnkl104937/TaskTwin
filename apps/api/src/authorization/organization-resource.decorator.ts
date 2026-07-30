@@ -3,7 +3,11 @@ import { SetMetadata } from '@nestjs/common';
 export const ORGANIZATION_RESOURCE_METADATA = 'tasktwin:organization-resource';
 
 export type OrganizationResourceKind =
-  'workspace' | 'recordingSession' | 'workflow' | 'workflowVersion';
+  | 'workspace'
+  | 'recordingSession'
+  | 'workflow'
+  | 'workflowVersion'
+  | 'runnerDevice';
 
 export interface OrganizationResourceMetadata {
   kind: OrganizationResourceKind;

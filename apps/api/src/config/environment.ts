@@ -6,10 +6,17 @@ const DEFAULT_ACCESS_TOKEN_LIFETIME_SECONDS = 900;
 const MINIMUM_ACCESS_TOKEN_LIFETIME_SECONDS = 60;
 const MAXIMUM_ACCESS_TOKEN_LIFETIME_SECONDS = 3_600;
 const MINIMUM_JWT_SECRET_LENGTH = 32;
+const MINIMUM_RUNNER_PEPPER_LENGTH = 32;
 
 export interface JwtAccessConfiguration {
   secret: string;
   expiresInSeconds: number;
+}
+
+export interface RunnerSecurityConfiguration {
+  pairingCodePepper: string;
+  credentialPepper: string;
+  webOrigin: string;
 }
 
 export function loadRootEnvironment(): void {
@@ -64,4 +71,58 @@ export function getJwtAccessConfiguration(): JwtAccessConfiguration {
   }
 
   return { secret, expiresInSeconds };
+}
+
+function getRequiredSecret(name: string): string {
+  const value = process.env[name];
+  if (
+    value === undefined ||
+    value.trim().length < MINIMUM_RUNNER_PEPPER_LENGTH
+  ) {
+    throw new Error(
+      `${name} must contain at least ${MINIMUM_RUNNER_PEPPER_LENGTH} characters`,
+    );
+  }
+  return value;
+}
+
+function getHttpOrigin(name: string, fallback?: string): string {
+  const configured = process.env[name] ?? fallback;
+  if (configured === undefined) {
+    throw new Error(`${name} is required`);
+  }
+  let url: URL;
+  try {
+    url = new URL(configured);
+  } catch {
+    throw new Error(`${name} must be a valid HTTP(S) origin`);
+  }
+  if (
+    (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.pathname !== '/' ||
+    url.search !== '' ||
+    url.hash !== ''
+  ) {
+    throw new Error(
+      `${name} must be an HTTP(S) origin without credentials or a path`,
+    );
+  }
+  const isLoopback =
+    url.hostname === 'localhost' ||
+    url.hostname === '127.0.0.1' ||
+    url.hostname === '::1';
+  if (url.protocol !== 'https:' && !isLoopback) {
+    throw new Error(`${name} must use HTTPS outside local development`);
+  }
+  return url.origin;
+}
+
+export function getRunnerSecurityConfiguration(): RunnerSecurityConfiguration {
+  return {
+    pairingCodePepper: getRequiredSecret('RUNNER_PAIRING_CODE_PEPPER'),
+    credentialPepper: getRequiredSecret('RUNNER_CREDENTIAL_PEPPER'),
+    webOrigin: getHttpOrigin('TASKTWIN_WEB_BASE_URL', 'http://127.0.0.1:3000'),
+  };
 }

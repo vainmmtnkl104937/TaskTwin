@@ -1,5 +1,11 @@
 import { PublishReadinessReportSchema } from '@tasktwin/workflow-lifecycle';
 import {
+  PairingActionResponseSchema,
+  PairingInspectionResponseSchema,
+  RunnerDeviceListResponseSchema,
+  RunnerDeviceRevokeResponseSchema,
+} from '@tasktwin/runner-protocol';
+import {
   WorkflowDefinitionSchema,
   WorkflowLifecycleStatusSchema,
 } from '@tasktwin/workflow-schema';
@@ -35,6 +41,8 @@ export const WorkspaceListResponseSchema = z.strictObject({
       slug: z.string().min(1),
       createdAt: IsoDateSchema,
       updatedAt: IsoDateSchema,
+      role: RoleSchema,
+      canManageRunners: z.boolean(),
     }),
   ),
 });
@@ -164,3 +172,15 @@ export type WorkflowLifecycleActionResponse = z.infer<
 export type WorkflowVersionHistoryResponse = z.infer<
   typeof WorkflowVersionHistoryResponseSchema
 >;
+export {
+  PairingActionResponseSchema,
+  PairingInspectionResponseSchema,
+  RunnerDeviceListResponseSchema,
+  RunnerDeviceRevokeResponseSchema,
+};
+export type {
+  PairingActionResponse,
+  PairingInspectionResponse,
+  RunnerDeviceListResponse,
+  RunnerDeviceRevokeResponse,
+} from '@tasktwin/runner-protocol';

@@ -36,6 +36,16 @@ enum RecordingSessionStatus {
   @@map("recording_session_status")
 }
 
+enum RunnerPairingStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CONSUMED
+  EXPIRED
+
+  @@map("runner_pairing_status")
+}
+
 model User {
   id                         String                        @id @default(uuid()) @db.Uuid
   email                      String                        @unique(map: "users_email_key") @db.VarChar(254)
@@ -49,6 +59,9 @@ model User {
   createdWorkflowConversions RecordingWorkflowConversion[] @relation("RecordingWorkflowConversionCreator")
   publishedWorkflowVersions  WorkflowVersion[]              @relation("WorkflowVersionPublisher")
   archivedWorkflowVersions   WorkflowVersion[]              @relation("WorkflowVersionArchiver")
+  approvedRunnerPairings     RunnerPairingSession[]          @relation("RunnerPairingApprover")
+  deniedRunnerPairings       RunnerPairingSession[]          @relation("RunnerPairingDenier")
+  revokedRunnerDevices       RunnerDevice[]                  @relation("RunnerDeviceRevoker")
 
   @@map("users")
 }
@@ -89,9 +102,83 @@ model Workspace {
   organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   workflows         Workflow[]
   recordingSessions RecordingSession[]
+  runnerPairingSessions RunnerPairingSession[]
+  runnerDevices         RunnerDevice[]
 
   @@unique([organizationId, slug], map: "workspaces_organization_id_slug_key")
   @@map("workspaces")
+}
+
+model RunnerPairingSession {
+  id                          String              @id @default(uuid()) @db.Uuid
+  deviceCodeHash              String              @unique(map: "runner_pairing_sessions_device_code_hash_key") @map("device_code_hash") @db.Char(64)
+  userCodeDigest              String              @unique(map: "runner_pairing_sessions_user_code_digest_key") @map("user_code_digest") @db.Char(64)
+  status                      RunnerPairingStatus @default(PENDING)
+  displayName                 String              @map("display_name") @db.VarChar(100)
+  platform                    String              @db.VarChar(16)
+  architecture                String              @db.VarChar(16)
+  runnerVersion               String              @map("runner_version") @db.VarChar(32)
+  installationId              String              @map("installation_id") @db.Uuid
+  expiresAt                   DateTime            @map("expires_at") @db.Timestamptz(3)
+  pollIntervalSeconds         Int                 @map("poll_interval_seconds")
+  lastPolledAt                DateTime?           @map("last_polled_at") @db.Timestamptz(3)
+  workspaceId                 String?             @map("workspace_id") @db.Uuid
+  approvedById                String?             @map("approved_by_id") @db.Uuid
+  approvedAt                  DateTime?           @map("approved_at") @db.Timestamptz(3)
+  deniedById                  String?             @map("denied_by_id") @db.Uuid
+  deniedAt                    DateTime?           @map("denied_at") @db.Timestamptz(3)
+  consumedAt                  DateTime?           @map("consumed_at") @db.Timestamptz(3)
+  credentialDeliveryExpiresAt DateTime?           @map("credential_delivery_expires_at") @db.Timestamptz(3)
+  createdAt                   DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace                   Workspace?          @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  approvedBy                  User?               @relation("RunnerPairingApprover", fields: [approvedById], references: [id], onDelete: Restrict)
+  deniedBy                    User?               @relation("RunnerPairingDenier", fields: [deniedById], references: [id], onDelete: Restrict)
+  runnerDevice                RunnerDevice?
+
+  @@index([status, expiresAt], map: "runner_pairing_sessions_status_expires_at_idx")
+  @@index([workspaceId, status], map: "runner_pairing_sessions_workspace_id_status_idx")
+  @@index([approvedById], map: "runner_pairing_sessions_approved_by_id_idx")
+  @@index([deniedById], map: "runner_pairing_sessions_denied_by_id_idx")
+  @@map("runner_pairing_sessions")
+}
+
+model RunnerDevice {
+  id               String               @id @default(uuid()) @db.Uuid
+  workspaceId      String               @map("workspace_id") @db.Uuid
+  pairingSessionId String               @unique(map: "runner_devices_pairing_session_id_key") @map("pairing_session_id") @db.Uuid
+  installationId   String               @unique(map: "runner_devices_installation_id_key") @map("installation_id") @db.Uuid
+  displayName      String               @map("display_name") @db.VarChar(100)
+  platform         String               @db.VarChar(16)
+  architecture     String               @db.VarChar(16)
+  runnerVersion    String               @map("runner_version") @db.VarChar(32)
+  lastSeenAt       DateTime?            @map("last_seen_at") @db.Timestamptz(3)
+  revokedAt        DateTime?            @map("revoked_at") @db.Timestamptz(3)
+  revokedById      String?              @map("revoked_by_id") @db.Uuid
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace        Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  pairingSession   RunnerPairingSession @relation(fields: [pairingSessionId], references: [id], onDelete: Restrict)
+  revokedBy        User?                @relation("RunnerDeviceRevoker", fields: [revokedById], references: [id], onDelete: Restrict)
+  credential       RunnerCredential?
+
+  @@index([workspaceId, revokedAt, lastSeenAt], map: "runner_devices_workspace_id_revoked_at_last_seen_at_idx")
+  @@index([revokedById], map: "runner_devices_revoked_by_id_idx")
+  @@map("runner_devices")
+}
+
+model RunnerCredential {
+  id             String       @id @default(uuid()) @db.Uuid
+  runnerDeviceId String       @unique(map: "runner_credentials_runner_device_id_key") @map("runner_device_id") @db.Uuid
+  credentialHash String       @unique(map: "runner_credentials_credential_hash_key") @map("credential_hash") @db.Char(64)
+  lastUsedAt     DateTime?    @map("last_used_at") @db.Timestamptz(3)
+  revokedAt      DateTime?    @map("revoked_at") @db.Timestamptz(3)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  runnerDevice   RunnerDevice @relation(fields: [runnerDeviceId], references: [id], onDelete: Restrict)
+
+  @@index([revokedAt, lastUsedAt], map: "runner_credentials_revoked_at_last_used_at_idx")
+  @@map("runner_credentials")
 }
 
 model Workflow {

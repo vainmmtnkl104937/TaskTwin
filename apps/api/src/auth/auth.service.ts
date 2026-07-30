@@ -80,7 +80,7 @@ export class AuthService {
           ...toOrganizationResponse(result.organization),
           role: 'OWNER',
         },
-        workspace: toWorkspaceResponse(result.workspace),
+        workspace: toWorkspaceResponse(result.workspace, 'OWNER'),
         accessToken: await this.signAccessToken(result.user.id),
       };
     } catch (error: unknown) {

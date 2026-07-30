@@ -39,6 +39,8 @@ export interface WorkspaceResponse {
   slug: string;
   createdAt: Date;
   updatedAt: Date;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
+  canManageRunners: boolean;
 }
 
 export interface RegisterResponse {
@@ -86,6 +88,7 @@ export function toOrganizationResponse(
 
 export function toWorkspaceResponse(
   workspace: WorkspaceRecord,
+  role: WorkspaceResponse['role'],
 ): WorkspaceResponse {
   return {
     id: workspace.id,
@@ -94,5 +97,7 @@ export function toWorkspaceResponse(
     slug: workspace.slug,
     createdAt: workspace.createdAt,
     updatedAt: workspace.updatedAt,
+    role,
+    canManageRunners: role === 'OWNER' || role === 'ADMIN',
   };
 }
