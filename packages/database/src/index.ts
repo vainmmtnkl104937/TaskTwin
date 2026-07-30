@@ -56,3 +56,14 @@ export type {
   WorkspaceWorkflowListRecord,
 } from './workflow-draft/workflow-draft-records.js';
 export { WorkflowDraftRepository } from './workflow-draft/workflow-draft.repository.js';
+export {
+  WorkflowLifecycleRepositoryError,
+  type WorkflowLifecycleRepositoryErrorCode,
+} from './workflow-lifecycle/workflow-lifecycle-errors.js';
+export type {
+  CreateWorkflowVersionResult,
+  WorkflowLifecycleActionResult,
+  WorkflowVersionHistoryItemRecord,
+  WorkflowVersionHistoryRecord,
+} from './workflow-lifecycle/workflow-lifecycle-records.js';
+export { WorkflowLifecycleRepository } from './workflow-lifecycle/workflow-lifecycle.repository.js';

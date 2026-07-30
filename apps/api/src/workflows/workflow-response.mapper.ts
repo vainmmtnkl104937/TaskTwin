@@ -7,6 +7,7 @@ import type {
   WorkflowVersionDetailRecord,
   WorkspaceWorkflowListRecord,
 } from '@tasktwin/database';
+import { analyzePublishReadiness } from '@tasktwin/workflow-lifecycle';
 
 import {
   WorkflowVersionDetailResponseSchema,
@@ -92,8 +93,15 @@ export function toWorkflowVersionDetailResponse(
       status: record.status,
       schemaVersion: record.schemaVersion,
       definition,
+      createdFromVersionId: record.createdFromVersionId,
+      publishedAt: record.publishedAt?.toISOString() ?? null,
+      publishedById: record.publishedById,
+      archivedAt: record.archivedAt?.toISOString() ?? null,
+      archivedById: record.archivedById,
+      createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
     },
     locatorMetadata: toSafeLocatorMetadata(definition, record.conversionReport),
+    publishReadiness: analyzePublishReadiness(definition),
   });
 }

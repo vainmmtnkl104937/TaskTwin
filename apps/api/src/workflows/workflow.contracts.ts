@@ -1,9 +1,11 @@
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import { WorkflowLifecycleStatusSchema } from '@tasktwin/workflow-schema';
+import { PublishReadinessReportSchema } from '@tasktwin/workflow-lifecycle';
 import { z } from 'zod';
 
 const UuidSchema = z.string().uuid();
 const OrganizationRoleSchema = z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']);
-const WorkflowStatusSchema = z.enum(['draft', 'published', 'archived']);
+const WorkflowStatusSchema = WorkflowLifecycleStatusSchema;
 const AccessSchema = z.strictObject({
   role: OrganizationRoleSchema,
   canEdit: z.boolean(),
@@ -61,6 +63,12 @@ export const WorkflowVersionResponseSchema = z.strictObject({
   status: WorkflowStatusSchema,
   schemaVersion: z.literal(1),
   definition: WorkflowDefinitionSchema,
+  createdFromVersionId: UuidSchema.nullable(),
+  publishedAt: z.string().datetime({ offset: true }).nullable(),
+  publishedById: UuidSchema.nullable(),
+  archivedAt: z.string().datetime({ offset: true }).nullable(),
+  archivedById: UuidSchema.nullable(),
+  createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
 });
 
@@ -70,6 +78,7 @@ export const WorkflowVersionDetailResponseSchema = z.strictObject({
   access: AccessSchema,
   workflowVersion: WorkflowVersionResponseSchema,
   locatorMetadata: z.array(SafeLocatorMetadataSchema),
+  publishReadiness: PublishReadinessReportSchema,
 });
 
 export type UpdateWorkflowDraftRequest = z.infer<

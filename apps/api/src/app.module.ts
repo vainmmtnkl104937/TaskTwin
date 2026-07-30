@@ -8,6 +8,7 @@ import { HealthService } from './health/health.service.js';
 import { RecordingSessionsModule } from './recording-sessions/recording-sessions.module.js';
 import { RecordingWorkflowDraftsModule } from './recording-workflow-drafts/recording-workflow-drafts.module.js';
 import { WorkspacesModule } from './workspaces/workspaces.module.js';
+import { WorkflowLifecycleModule } from './workflow-lifecycle/workflow-lifecycle.module.js';
 import { WorkflowsModule } from './workflows/workflows.module.js';
 
 @Module({
@@ -18,6 +19,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     RecordingSessionsModule,
     RecordingWorkflowDraftsModule,
     WorkspacesModule,
+    WorkflowLifecycleModule,
     WorkflowsModule,
   ],
   controllers: [HealthController],

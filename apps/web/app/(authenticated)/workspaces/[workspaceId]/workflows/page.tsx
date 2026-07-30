@@ -49,14 +49,22 @@ export default async function WorkflowsPage({
                 {workflow.status}
               </p>
             </div>
-            <Link
-              className="button-link"
-              href={`/workspaces/${workspaceId}/workflows/${encodeURIComponent(workflow.id)}/versions/${workflow.latestVersionId}/edit`}
-            >
-              {workflow.status === 'draft' && result.access.canEdit
-                ? 'Edit draft'
-                : 'View'}
-            </Link>
+            <div className="button-group">
+              <Link
+                className="button-link"
+                href={`/workspaces/${workspaceId}/workflows/${encodeURIComponent(workflow.id)}/versions`}
+              >
+                Version history
+              </Link>
+              <Link
+                className="button-link"
+                href={`/workspaces/${workspaceId}/workflows/${encodeURIComponent(workflow.id)}/versions/${workflow.latestVersionId}/edit`}
+              >
+                {workflow.status === 'draft' && result.access.canEdit
+                  ? 'Edit draft'
+                  : 'View'}
+              </Link>
+            </div>
           </article>
         ))}
         {result.workflows.length === 0 ? (

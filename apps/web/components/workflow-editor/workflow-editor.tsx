@@ -18,6 +18,7 @@ import {
   type WorkflowStep,
 } from '@tasktwin/workflow-schema';
 import type { ValueSourceTarget } from '@tasktwin/workflow-inputs';
+import { analyzePublishReadiness } from '@tasktwin/workflow-lifecycle';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -27,6 +28,9 @@ import {
   type SaveWorkflowDraftResult,
 } from '@/app/(authenticated)/workspaces/[workspaceId]/workflows/[workflowId]/versions/[versionId]/edit/actions';
 
+import { LifecycleActions } from '../workflow-lifecycle/lifecycle-actions';
+import { LifecycleStatusBadge } from '../workflow-lifecycle/lifecycle-status-badge';
+import { PublishReadinessPanel } from '../workflow-lifecycle/publish-readiness-panel';
 import { RunInputsPreview } from './run-inputs-preview';
 import { StepInspector } from './step-inspector';
 import { ValidationPanel } from './validation-panel';
@@ -61,6 +65,12 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
     () => validateEditorWorkflow(definition),
     [definition],
   );
+  const publishReadiness = useMemo(
+    () => analyzePublishReadiness(definition),
+    [definition],
+  );
+  const canPublish =
+    detail.access.role === 'OWNER' || detail.access.role === 'ADMIN';
   const selectedIndex = definition.steps.findIndex(
     (step) => step.id === selectedStepId,
   );
@@ -184,7 +194,7 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
     <main className="editor-page">
       <nav aria-label="Breadcrumb">
         <Link
-          href={`/workspaces/${workspaceId}/workflows`}
+          href={`/workspaces/${workspaceId}/workflows/${encodeURIComponent(detail.workflowVersion.workflowId)}/versions`}
           onClick={(event) => {
             if (
               dirty &&
@@ -194,17 +204,18 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
             }
           }}
         >
-          Workflows
+          Version history
         </Link>
       </nav>
       <header className="editor-header">
         <div>
-          <p className="eyebrow">Draft workflow editor</p>
+          <p className="eyebrow">Workflow version</p>
           <h1>{definition.name || 'Unnamed workflow'}</h1>
           <p className="metadata">
-            Version {definition.version} · Draft revision {revision} ·{' '}
+            Version {definition.version} · Revision {revision} ·{' '}
             {readOnly ? 'Read only' : dirty ? 'Unsaved changes' : 'Saved'}
           </p>
+          <LifecycleStatusBadge status={detail.workflowVersion.status} />
         </div>
         <div className="button-group">
           <button type="button" onClick={() => setShowRunInputs(true)}>
@@ -222,9 +233,23 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
         </div>
       </header>
 
+      <LifecycleActions
+        workflowId={detail.workflowVersion.workflowId}
+        workspaceId={workspaceId}
+        versionId={detail.workflowVersion.id}
+        revision={revision}
+        status={detail.workflowVersion.status}
+        canEdit={detail.access.role !== 'VIEWER'}
+        canPublish={canPublish}
+        dirty={dirty}
+        readiness={publishReadiness}
+      />
+
       {readOnly ? (
         <p className="info-banner" role="status">
-          You have read-only access to this workflow version.
+          {detail.workflowVersion.status === 'draft'
+            ? 'You have read-only access to this Draft.'
+            : `${detail.workflowVersion.status} versions are immutable. Create or return to a Draft to edit.`}
         </p>
       ) : null}
       {saveMessage === '' ? null : (
@@ -352,6 +377,7 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
       </div>
 
       <ValidationPanel issues={issues} />
+      <PublishReadinessPanel report={publishReadiness} />
 
       {pendingDeleteStepId === null ? null : (
         <div className="dialog-backdrop">

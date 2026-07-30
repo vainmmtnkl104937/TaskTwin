@@ -27,3 +27,10 @@ Run Inputs Preview is local UI validation only. Its values stay in component
 memory, are cleared when the dialog closes, and are never put in localStorage,
 sessionStorage, API requests, or logs. File content and filenames are not read
 or uploaded.
+
+Session 13 adds workflow version history, lifecycle badges, deterministic
+publish-readiness issues, and role-aware lifecycle actions. Draft is the only
+editable status. Testing, Published, and Archived are read-only; future edits
+start by cloning a Published or Archived version into a new Draft. Publish and
+Archive require explicit confirmation. These controls do not execute or deploy
+the workflow.

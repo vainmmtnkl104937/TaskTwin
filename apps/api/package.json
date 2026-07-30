@@ -9,11 +9,12 @@
     "lint": "eslint .",
     "start": "node dist/main.js",
     "test": "vitest run --exclude test/**/*.integration.spec.ts",
-    "test:integration": "vitest run test",
+    "test:integration": "vitest run test --maxWorkers=1 --no-file-parallelism",
     "test:integration:auth": "vitest run test/auth.integration.spec.ts",
     "test:integration:conversion": "vitest run test/recording-conversion.integration.spec.ts",
     "test:integration:recording": "vitest run test/recording.integration.spec.ts",
     "test:integration:workflow-editor": "vitest run test/workflow-editor.integration.spec.ts",
+    "test:integration:workflow-lifecycle": "vitest run test/workflow-lifecycle.integration.spec.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -28,6 +29,7 @@
     "@tasktwin/shared-types": "workspace:*",
     "@tasktwin/workflow-editor-core": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",
+    "@tasktwin/workflow-lifecycle": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",

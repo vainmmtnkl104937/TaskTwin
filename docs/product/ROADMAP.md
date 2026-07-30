@@ -162,6 +162,22 @@ Session 12 does not create workflow runs, persist runtime inputs, collect
 secret values, resolve secrets, upload files, publish workflows, execute
 browser actions, use Playwright, or add AI behavior.
 
+## Session 13: workflow versioning and publish lifecycle
+
+- Framework-independent lifecycle transitions and publish-readiness analysis
+- Draft, Testing, Published, and Archived version states
+- Immutable Published definitions and revision-preserving lifecycle metadata
+- New Draft creation from Published or Archived source versions
+- Version history and role-aware web lifecycle controls
+- PostgreSQL-enforced single current Published version
+- Optimistic revision checks, serializable transactions, Workflow row locks,
+  bounded retries, and idempotent Draft creation
+
+Session 13 establishes review and publication state only. Testing does not run
+the workflow, and publishing does not deploy or execute it. Execution,
+Playwright, environment promotion, version diffing, rollback, and AI review
+remain outside this session.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

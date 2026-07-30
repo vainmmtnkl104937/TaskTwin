@@ -6,6 +6,7 @@ import {
   RecordingRepository,
   RecordingWorkflowConversionRepository,
   WorkflowDraftRepository,
+  WorkflowLifecycleRepository,
   type PrismaClient,
 } from '@tasktwin/database';
 
@@ -44,12 +45,19 @@ import { PrismaService } from './prisma.service.js';
       inject: [DATABASE_CLIENT],
       useFactory: (client: PrismaClient) => new WorkflowDraftRepository(client),
     },
+    {
+      provide: WorkflowLifecycleRepository,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: PrismaClient) =>
+        new WorkflowLifecycleRepository(client),
+    },
   ],
   exports: [
     IdentityRepository,
     RecordingRepository,
     RecordingWorkflowConversionRepository,
     WorkflowDraftRepository,
+    WorkflowLifecycleRepository,
   ],
 })
 export class DatabaseModule {}

@@ -42,5 +42,11 @@ export default async function WorkflowEditorPage({
     notFound();
   }
 
-  return <WorkflowEditor detail={detail} workspaceId={workspaceId} />;
+  return (
+    <WorkflowEditor
+      key={`${detail.workflowVersion.id}-${detail.workflowVersion.status}-${detail.workflowVersion.revision}`}
+      detail={detail}
+      workspaceId={workspaceId}
+    />
+  );
 }

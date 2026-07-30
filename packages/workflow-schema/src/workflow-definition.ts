@@ -6,6 +6,7 @@ import { WorkflowVariableSchema } from './workflow-variable.js';
 
 export const WorkflowLifecycleStatusSchema = z.enum([
   'draft',
+  'testing',
   'published',
   'archived',
 ]);

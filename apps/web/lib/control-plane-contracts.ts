@@ -1,10 +1,14 @@
-import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import { PublishReadinessReportSchema } from '@tasktwin/workflow-lifecycle';
+import {
+  WorkflowDefinitionSchema,
+  WorkflowLifecycleStatusSchema,
+} from '@tasktwin/workflow-schema';
 import { z } from 'zod';
 
 const UuidSchema = z.string().uuid();
 const IsoDateSchema = z.string().datetime({ offset: true });
 const RoleSchema = z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']);
-const StatusSchema = z.enum(['draft', 'published', 'archived']);
+const StatusSchema = WorkflowLifecycleStatusSchema;
 const AccessSchema = z.strictObject({
   role: RoleSchema,
   canEdit: z.boolean(),
@@ -43,6 +47,12 @@ const WorkflowVersionSchema = z.strictObject({
   status: StatusSchema,
   schemaVersion: z.literal(1),
   definition: WorkflowDefinitionSchema,
+  createdFromVersionId: UuidSchema.nullable(),
+  publishedAt: IsoDateSchema.nullable(),
+  publishedById: UuidSchema.nullable(),
+  archivedAt: IsoDateSchema.nullable(),
+  archivedById: UuidSchema.nullable(),
+  createdAt: IsoDateSchema,
   updatedAt: IsoDateSchema,
 });
 
@@ -76,6 +86,47 @@ export const WorkflowVersionDetailResponseSchema = z.strictObject({
       provenance: z.string().min(1).max(64),
     }),
   ),
+  publishReadiness: PublishReadinessReportSchema,
+});
+
+export const WorkflowLifecycleActionResponseSchema =
+  WorkflowVersionDetailResponseSchema.extend({
+    idempotent: z.boolean(),
+  });
+
+export const WorkflowVersionHistoryResponseSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  workflowId: z.string().trim().min(1).max(256),
+  workspaceId: UuidSchema,
+  access: z.strictObject({
+    role: RoleSchema,
+    canEdit: z.boolean(),
+    canPublish: z.boolean(),
+  }),
+  versions: z.array(
+    z.strictObject({
+      id: UuidSchema,
+      workflowId: z.string().trim().min(1).max(256),
+      version: z.number().int().positive(),
+      revision: z.number().int().positive(),
+      status: StatusSchema,
+      schemaVersion: z.literal(1),
+      createdFromVersionId: UuidSchema.nullable(),
+      publishedAt: IsoDateSchema.nullable(),
+      publishedById: UuidSchema.nullable(),
+      archivedAt: IsoDateSchema.nullable(),
+      archivedById: UuidSchema.nullable(),
+      createdAt: IsoDateSchema,
+      updatedAt: IsoDateSchema,
+    }),
+  ),
+});
+
+export const WorkflowLifecycleErrorResponseSchema = z.strictObject({
+  code: z.string().trim().min(1).max(100),
+  message: z.string().trim().min(1).max(240),
+  currentRevision: z.number().int().positive().optional(),
+  readiness: PublishReadinessReportSchema.optional(),
 });
 
 export const WorkflowConflictResponseSchema = z
@@ -106,4 +157,10 @@ export type WorkspaceWorkflowListResponse = z.infer<
 >;
 export type WorkflowVersionDetailResponse = z.infer<
   typeof WorkflowVersionDetailResponseSchema
+>;
+export type WorkflowLifecycleActionResponse = z.infer<
+  typeof WorkflowLifecycleActionResponseSchema
+>;
+export type WorkflowVersionHistoryResponse = z.infer<
+  typeof WorkflowVersionHistoryResponseSchema
 >;

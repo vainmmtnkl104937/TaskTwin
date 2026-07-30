@@ -1,4 +1,5 @@
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
+import { analyzePublishReadiness } from '@tasktwin/workflow-lifecycle';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
@@ -7,11 +8,32 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkflowVersionDetailResponse } from '@/lib/control-plane-contracts';
 
 const saveDraft = vi.hoisted(() => vi.fn());
+const lifecycleAction = vi.hoisted(() => vi.fn());
+const routerPush = vi.hoisted(() => vi.fn());
+const routerRefresh = vi.hoisted(() => vi.fn());
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: routerPush,
+    refresh: routerRefresh,
+  }),
+}));
 
 vi.mock(
   '@/app/(authenticated)/workspaces/[workspaceId]/workflows/[workflowId]/versions/[versionId]/edit/actions',
   () => ({
     saveWorkflowDraftAction: saveDraft,
+  }),
+);
+
+vi.mock(
+  '@/app/(authenticated)/workspaces/[workspaceId]/workflows/[workflowId]/versions/actions',
+  () => ({
+    archiveVersionAction: lifecycleAction,
+    createDraftVersionAction: lifecycleAction,
+    publishVersionAction: lifecycleAction,
+    returnToDraftAction: lifecycleAction,
+    submitForTestingAction: lifecycleAction,
   }),
 );
 
@@ -92,22 +114,31 @@ function definition(): WorkflowDefinition {
 
 function detail(
   role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER' = 'MEMBER',
+  status: 'draft' | 'testing' | 'published' | 'archived' = 'draft',
 ): WorkflowVersionDetailResponse {
+  const workflowDefinition = definition();
+  workflowDefinition.status = status;
   return {
     schemaVersion: 1,
     workspaceId: 'b1a44632-f0ec-4f9d-901f-69d3ae992c45',
     access: {
       role,
-      canEdit: role !== 'VIEWER',
+      canEdit: role !== 'VIEWER' && status === 'draft',
     },
     workflowVersion: {
       id: 'bd947ba1-c033-442f-93d8-2f895fd3c32b',
       workflowId: 'workflow-session-11',
       version: 1,
       revision: 1,
-      status: 'draft',
+      status,
       schemaVersion: 1,
-      definition: definition(),
+      definition: workflowDefinition,
+      createdFromVersionId: null,
+      publishedAt: null,
+      publishedById: null,
+      archivedAt: null,
+      archivedById: null,
+      createdAt: '2026-07-29T19:00:00.000Z',
       updatedAt: '2026-07-29T20:00:00.000Z',
     },
     locatorMetadata: [
@@ -117,6 +148,7 @@ function detail(
         provenance: 'testId',
       },
     ],
+    publishReadiness: analyzePublishReadiness(workflowDefinition),
   };
 }
 
@@ -140,6 +172,64 @@ describe('WorkflowEditor', () => {
       'data-edge-count',
       '3',
     );
+  });
+
+  it.each(['testing', 'published', 'archived'] as const)(
+    'keeps %s versions read-only',
+    (status) => {
+      render(
+        <WorkflowEditor
+          detail={detail('MEMBER', status)}
+          workspaceId={detail().workspaceId}
+        />,
+      );
+
+      expect(
+        screen.getByText(new RegExp(`${status} versions are immutable`, 'i')),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText('Workflow name')).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    },
+  );
+
+  it('shows role-appropriate Testing actions', () => {
+    const { rerender } = render(
+      <WorkflowEditor
+        detail={detail('MEMBER', 'testing')}
+        workspaceId={detail().workspaceId}
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Return to Draft' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Publish' }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <WorkflowEditor
+        detail={detail('ADMIN', 'testing')}
+        workspaceId={detail().workspaceId}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeInTheDocument();
+  });
+
+  it('blocks Testing submission when readiness has blocking issues', () => {
+    const blocked = detail('MEMBER', 'draft');
+    blocked.workflowVersion.definition.steps = [];
+
+    render(
+      <WorkflowEditor detail={blocked} workspaceId={blocked.workspaceId} />,
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Submit for Testing' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/Resolve every blocking issue/i),
+    ).toBeInTheDocument();
   });
 
   it('selects, edits and reorders a step while showing dirty state', async () => {
@@ -226,7 +316,7 @@ describe('WorkflowEditor', () => {
     expect(
       await screen.findByText('Draft saved at revision 2.'),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Draft revision 2 · Saved/)).toBeInTheDocument();
+    expect(screen.getByText(/Revision 2 · Saved/)).toBeInTheDocument();
   });
 
   it('preserves local changes on conflict and disables every edit for VIEWER', async () => {

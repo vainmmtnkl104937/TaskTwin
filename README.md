@@ -8,7 +8,8 @@ then run the approved workflow safely**.
 
 This repository contains the application foundation, framework-independent
 workflow and recording domain models, authenticated control-plane foundation,
-and workflow-input foundation created through Session 12. It provides buildable
+workflow-input foundation, and publish lifecycle created through Session 13. It
+provides buildable
 application shells, shared configuration and types, health checks, runtime
 workflow validation, local PostgreSQL development tooling, short-lived
 access-token authentication, organization-scoped workspaces, deterministic
@@ -283,3 +284,16 @@ definition, so no database migration is added.
 
 Session 12 does not execute workflows, persist runs or runtime inputs, store
 secrets, upload files, publish workflows, add Playwright, or use AI.
+
+## Session 13 scope
+
+Session 13 adds deterministic Draft, Testing, Published, and Archived lifecycle
+rules; publish-readiness checks; immutable Published content; version history;
+and role-aware lifecycle controls. New edits clone a Published or Archived
+source into the next Draft version while preserving prior definitions.
+
+Lifecycle persistence uses optimistic revision checks, serializable
+transactions, a Workflow row lock, idempotent creation keys, and a PostgreSQL
+partial unique index that permits at most one current Published version per
+Workflow. Testing is review state only: this session does not execute or
+deploy workflows, use Playwright or AI, show diffs, or implement rollback.
