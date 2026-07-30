@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "values": {
+    "fixtureUrl": {
+      "kind": "string",
+      "value": "http://127.0.0.1:1/"
+    },
+    "customerName": {
+      "kind": "string",
+      "value": "TaskTwin sample"
+    },
+    "requiredOption": {
+      "kind": "string",
+      "value": "second"
+    }
+  }
+}

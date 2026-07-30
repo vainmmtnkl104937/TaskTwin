@@ -4,19 +4,27 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "browser:install": "playwright install chromium",
     "build": "tsc --project tsconfig.build.json",
+    "execute-fixture": "node dist/index.js execute-fixture",
     "lint": "eslint .",
     "pair": "node dist/index.js pair",
     "runner": "node dist/index.js",
     "start": "node dist/index.js start",
     "status": "node dist/index.js status",
-    "test": "vitest run",
+    "test": "vitest run --config vitest.config.ts",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "unpair": "node dist/index.js unpair"
   },
   "dependencies": {
+    "@tasktwin/locator-engine": "workspace:*",
     "@tasktwin/runner-protocol": "workspace:*",
-    "@tasktwin/shared-types": "workspace:*"
+    "@tasktwin/shared-types": "workspace:*",
+    "@tasktwin/workflow-inputs": "workspace:*",
+    "@tasktwin/workflow-schema": "workspace:*",
+    "playwright": "1.62.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@tasktwin/config": "workspace:*",

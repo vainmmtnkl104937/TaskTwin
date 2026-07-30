@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import type { RunnerArchitecture, RunnerPlatform } from './platform-types.js';
 import { HttpRunnerControlPlaneTransport } from './control-plane-client.js';
 import { FileCredentialStore } from './file-credential-store.js';
+import { executeFixtureCommand } from './execution/fixture-command.js';
 import { validateControlPlaneOrigin } from './origin.js';
 import { LocalRunnerService, systemClock } from './runner-service.js';
 
@@ -39,6 +40,7 @@ export async function runCli(
     options: {
       origin: { type: 'string' },
       name: { type: 'string' },
+      headed: { type: 'boolean' },
     },
     strict: true,
   });
@@ -50,6 +52,23 @@ export async function runCli(
     RUNNER_VERSION,
   );
   switch (command) {
+    case 'execute-fixture': {
+      const controller = new AbortController();
+      const stop = () => controller.abort();
+      process.once('SIGINT', stop);
+      process.once('SIGTERM', stop);
+      try {
+        await executeFixtureCommand(
+          output,
+          parsed.values.headed ?? false,
+          controller.signal,
+        );
+      } finally {
+        process.off('SIGINT', stop);
+        process.off('SIGTERM', stop);
+      }
+      return;
+    }
     case 'pair': {
       const origin = validateControlPlaneOrigin(
         parsed.values.origin ?? 'http://127.0.0.1:3001',
