@@ -13,6 +13,8 @@ export class WorkspacesService {
   async listForUser(userId: string): Promise<WorkspaceResponse[]> {
     const workspaces =
       await this.identityRepository.listReachableWorkspaces(userId);
-    return workspaces.map(toWorkspaceResponse);
+    return workspaces.map((workspace) =>
+      toWorkspaceResponse(workspace, workspace.role),
+    );
   }
 }

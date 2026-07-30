@@ -4,6 +4,7 @@ export {
   OrganizationRole,
   PrismaClient,
   RecordingSessionStatus,
+  RunnerPairingStatus,
 } from './generated/prisma/client.js';
 export { DuplicateEmailError } from './identity/identity-errors.js';
 export { IdentityRepository } from './identity/identity.repository.js';
@@ -15,6 +16,7 @@ export type {
   OrganizationRecord,
   SafeUserRecord,
   WorkspaceRecord,
+  WorkspaceAccessRecord,
 } from './identity/identity-records.js';
 export { normalizeEmail } from './identity/normalize-email.js';
 export { createCanonicalJsonDigest } from './recording/canonical-json.js';
@@ -40,6 +42,19 @@ export type {
   RecordingSessionMetadataRecord,
 } from './recording/recording-records.js';
 export { RecordingRepository } from './recording/recording.repository.js';
+export {
+  RunnerRepositoryError,
+  type RunnerRepositoryErrorCode,
+} from './runner/runner-errors.js';
+export type {
+  RunnerAuthenticationRecord,
+  RunnerDeviceListRecord,
+  RunnerDeviceRecord,
+  RunnerOrganizationAccess,
+  RunnerPairingRecord,
+  RunnerPollingResult,
+} from './runner/runner-records.js';
+export { RunnerRepository } from './runner/runner.repository.js';
 export {
   WorkflowVersionRepository,
   type PersistedWorkflowVersion,

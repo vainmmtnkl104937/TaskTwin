@@ -7,6 +7,8 @@ import { HealthController } from './health/health.controller.js';
 import { HealthService } from './health/health.service.js';
 import { RecordingSessionsModule } from './recording-sessions/recording-sessions.module.js';
 import { RecordingWorkflowDraftsModule } from './recording-workflow-drafts/recording-workflow-drafts.module.js';
+import { RunnerPairingModule } from './runner-pairing/runner-pairing.module.js';
+import { RunnerModule } from './runner/runner.module.js';
 import { WorkspacesModule } from './workspaces/workspaces.module.js';
 import { WorkflowLifecycleModule } from './workflow-lifecycle/workflow-lifecycle.module.js';
 import { WorkflowsModule } from './workflows/workflows.module.js';
@@ -18,6 +20,8 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     DatabaseModule,
     RecordingSessionsModule,
     RecordingWorkflowDraftsModule,
+    RunnerPairingModule,
+    RunnerModule,
     WorkspacesModule,
     WorkflowLifecycleModule,
     WorkflowsModule,

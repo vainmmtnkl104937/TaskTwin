@@ -6,11 +6,16 @@
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "lint": "eslint .",
-    "start": "node dist/index.js",
+    "pair": "node dist/index.js pair",
+    "runner": "node dist/index.js",
+    "start": "node dist/index.js start",
+    "status": "node dist/index.js status",
     "test": "vitest run",
-    "typecheck": "tsc --project tsconfig.json --noEmit"
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "unpair": "node dist/index.js unpair"
   },
   "dependencies": {
+    "@tasktwin/runner-protocol": "workspace:*",
     "@tasktwin/shared-types": "workspace:*"
   },
   "devDependencies": {

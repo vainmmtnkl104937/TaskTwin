@@ -38,6 +38,10 @@ export interface WorkspaceRecord {
   updatedAt: Date;
 }
 
+export interface WorkspaceAccessRecord extends WorkspaceRecord {
+  role: OrganizationRole;
+}
+
 export interface CreateRegistrationInput {
   userId: string;
   normalizedEmail: string;

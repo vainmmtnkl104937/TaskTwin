@@ -18,15 +18,16 @@
     "db:reset": "node scripts/reset-development-database.mjs",
     "db:status": "prisma migrate status",
     "lint": "eslint .",
-    "test": "pnpm db:generate && vitest run --exclude test/**/*.integration.spec.ts",
+    "test": "vitest run --exclude test/**/*.integration.spec.ts",
     "test:integration": "pnpm db:generate && vitest run test/database.integration.spec.ts",
-    "typecheck": "pnpm db:generate && tsc --project tsconfig.json --noEmit"
+    "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.9.1",
     "@prisma/client": "7.9.1",
     "@tasktwin/recording-converter": "workspace:*",
     "@tasktwin/recording-schema": "workspace:*",
+    "@tasktwin/runner-protocol": "workspace:*",
     "@tasktwin/workflow-editor-core": "workspace:*",
     "@tasktwin/workflow-lifecycle": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",

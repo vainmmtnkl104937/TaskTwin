@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tasktwin/runner-protocol": "workspace:*",
     "@tasktwin/workflow-editor-core": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",
     "@tasktwin/workflow-lifecycle": "workspace:*",

@@ -8,6 +8,13 @@
     "@tasktwin/config#build": {
       "outputs": []
     },
+    "@tasktwin/database#test": {
+      "dependsOn": ["build", "^build"],
+      "outputs": []
+    },
+    "@tasktwin/database#typecheck": {
+      "dependsOn": ["build", "^build"]
+    },
     "dev": {
       "cache": false,
       "persistent": true
