@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "workflowId": "localExecutionFixture",
+  "version": 1,
+  "name": "Local execution fixture",
+  "description": "Deterministic Session 15 Chromium execution fixture.",
+  "status": "draft",
+  "variables": [
+    {
+      "name": "fixtureUrl",
+      "valueType": "string",
+      "required": true
+    },
+    {
+      "name": "customerName",
+      "valueType": "string",
+      "required": true
+    },
+    {
+      "name": "requiredOption",
+      "valueType": "string",
+      "required": true
+    }
+  ],
+  "steps": [
+    {
+      "id": "navigateFixture",
+      "type": "navigate",
+      "name": "Open local fixture",
+      "url": {
+        "kind": "variable",
+        "variableName": "fixtureUrl"
+      }
+    },
+    {
+      "id": "openFixtureForm",
+      "type": "click",
+      "name": "Open fixture form",
+      "locator": {
+        "kind": "testId",
+        "value": "open-form"
+      }
+    },
+    {
+      "id": "fillCustomerName",
+      "type": "fill",
+      "name": "Fill customer name",
+      "locator": {
+        "kind": "label",
+        "value": "Customer name",
+        "exact": true
+      },
+      "value": {
+        "kind": "variable",
+        "variableName": "customerName"
+      }
+    },
+    {
+      "id": "selectRequiredOption",
+      "type": "select",
+      "name": "Select required option",
+      "locator": {
+        "kind": "label",
+        "value": "Required option",
+        "exact": true
+      },
+      "value": {
+        "kind": "variable",
+        "variableName": "requiredOption"
+      }
+    },
+    {
+      "id": "confirmFixture",
+      "type": "setChecked",
+      "name": "Confirm fixture",
+      "locator": {
+        "kind": "label",
+        "value": "Confirm fixture",
+        "exact": true
+      },
+      "checked": true
+    },
+    {
+      "id": "boundedWait",
+      "type": "wait",
+      "name": "Wait briefly",
+      "durationMs": 100
+    },
+    {
+      "id": "submitFixture",
+      "type": "click",
+      "name": "Submit fixture",
+      "locator": {
+        "kind": "role",
+        "role": "button",
+        "name": "Submit fixture",
+        "exact": true
+      }
+    },
+    {
+      "id": "allowCompletion",
+      "type": "wait",
+      "name": "Allow completion signal",
+      "durationMs": 100
+    }
+  ]
+}

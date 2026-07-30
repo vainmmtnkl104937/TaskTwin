@@ -495,8 +495,34 @@ WorkflowVersion resource.
   connect to PostgreSQL. The real integration check is opt-in and fails when
   configuration, connectivity, or migrations are missing.
 - There is no AI behavior, policy bypass, or silent workflow repair.
-- Runner pairing and heartbeat exist, but local browser execution is not
-  implemented.
+- Runner pairing and heartbeat remain separate from local browser execution.
+  Session 15 execution accepts no runner credential, JWT, cookie, or saved
+  browser state.
+
+## Local Playwright execution boundary
+
+The Local Runner owns all Playwright Library objects. Every execution validates
+its complete request before launch, then creates one Chromium Browser, one
+isolated non-persistent BrowserContext, and one Page. It never uses a personal
+profile, cookie import, persistent storage state, custom selector engine,
+workflow JavaScript, or XPath.
+
+The explicit origin allowlist accepts only HTTP/HTTPS origins. Navigate checks
+the resolved destination before `page.goto` and the final origin afterward.
+Fill and Select resolve only compatible literal or runtime-variable sources;
+secret references fail closed before launch.
+
+The workflow `steps` array remains the sole execution-order authority.
+Navigate, Click, Fill, Select, SetChecked, and Wait execute sequentially and
+stop at the first failure. Playwright actionability and bounded auto-wait are
+used without force, retry, or locator repair. BrowserContext and Browser close
+on success, step failure, cancellation, and partial setup failure.
+
+Execution results contain bounded identifiers, status, timing, locator kind,
+and fixed error codes. Runtime values, complete URLs, query parameters,
+cookies, page HTML, console payloads, and raw Playwright errors do not cross
+the reporting boundary. Control Plane job coordination and run persistence
+remain absent.
 
 ## Build architecture
 

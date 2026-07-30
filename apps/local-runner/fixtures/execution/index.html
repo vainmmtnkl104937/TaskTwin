@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TaskTwin Execution Fixture</title>
+    <style>
+      body {
+        max-width: 38rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        font-family: system-ui, sans-serif;
+      }
+      form {
+        display: grid;
+        gap: 1rem;
+      }
+      label {
+        display: grid;
+        gap: 0.35rem;
+      }
+      button,
+      input,
+      select {
+        min-height: 2.5rem;
+        font: inherit;
+      }
+      [hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>TaskTwin Execution Fixture</h1>
+      <button type="button" data-testid="open-form">
+        <span aria-hidden="true">▶</span>
+        <span>Open fixture form</span>
+      </button>
+      <div>
+        <button type="button" class="duplicate-action">Duplicate action</button>
+        <button type="button" class="duplicate-action">Duplicate action</button>
+      </div>
+      <form data-testid="fixture-form" hidden>
+        <label>
+          Customer name
+          <input type="text" name="customerName" />
+        </label>
+        <label for="required-option">Required option</label>
+        <select id="required-option" name="requiredOption">
+          <option value="first">First option</option>
+          <option value="second">Second option</option>
+        </select>
+        <label>
+          <input type="checkbox" name="confirmed" />
+          Confirm fixture
+        </label>
+        <button type="submit">Submit fixture</button>
+      </form>
+      <p data-testid="final-result" hidden>Fixture completed</p>
+    </main>
+    <script>
+      const openButton = document.querySelector('[data-testid="open-form"]');
+      const form = document.querySelector('[data-testid="fixture-form"]');
+      const result = document.querySelector('[data-testid="final-result"]');
+
+      openButton.addEventListener('click', () => {
+        form.hidden = false;
+      });
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const valid =
+          form.elements.customerName.value === 'TaskTwin sample' &&
+          form.elements.requiredOption.value === 'second' &&
+          form.elements.confirmed.checked;
+        if (!valid) {
+          return;
+        }
+        await fetch('/complete', { method: 'POST' });
+        result.hidden = false;
+      });
+    </script>
+  </body>
+</html>

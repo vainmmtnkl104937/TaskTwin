@@ -190,6 +190,22 @@ remain outside this session.
 Session 14 establishes runner identity and connectivity only. It does not
 install Playwright, poll for jobs, launch a browser, or execute a workflow.
 
+## Session 15: Playwright execution foundation
+
+- Playwright Library scoped to the Local Runner
+- Explicit Chromium-only browser installation
+- Strict local request, option, result, and safe-error contracts
+- Isolated non-persistent BrowserContext for every execution
+- Explicit HTTP/HTTPS origin allowlist and safe navigation
+- Deterministic locator mapping with exactly one match
+- Sequential Navigate, Click, Fill, Select, SetChecked, and Wait execution
+- Fail-fast behavior, resource cleanup, safe reporting, and local fixture
+
+Session 15 executes only caller-supplied validated local workflows. It does not
+poll the Control Plane, persist WorkflowRun records, reuse browser profiles,
+resolve secrets, capture screenshots or traces, retry, repair locators, or use
+AI.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

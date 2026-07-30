@@ -17,10 +17,12 @@ recorder state, privacy-bounded browser event capture, semantic locator
 ranking, deterministic privacy classification, redaction-plan contracts, a
 local recording outbox, idempotent recording persistence, and deterministic
 draft workflow generation, linear draft visualization, immutable editing
-operations, and revision-protected draft saving. Session 14 also adds secure
-Local Runner pairing, separate runner credentials, heartbeat, revocation, and
-local atomic credential storage. It does not execute workflows or capture
-screenshots.
+operations, and revision-protected draft saving. Session 14 adds secure Local
+Runner pairing, separate runner credentials, heartbeat, and revocation.
+Session 15 adds validated, isolated local Chromium execution for six workflow
+step types without connecting a Control Plane job system.
+It still does not poll for workflow jobs, persist workflow runs, reuse browser
+profiles, resolve secrets, or capture screenshots.
 
 ## Browser-first MVP
 
