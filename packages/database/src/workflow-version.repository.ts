@@ -1,4 +1,5 @@
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import type { WorkflowLifecycleStatus } from '@tasktwin/workflow-schema';
 
 import type { Prisma, PrismaClient } from './generated/prisma/client.js';
 
@@ -7,7 +8,7 @@ export interface PersistedWorkflowVersion {
   workflowId: string;
   version: number;
   revision: number;
-  status: 'draft' | 'published' | 'archived';
+  status: WorkflowLifecycleStatus;
   schemaVersion: number;
   definition: Prisma.JsonValue;
   createdAt: Date;

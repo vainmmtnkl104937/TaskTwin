@@ -276,9 +276,9 @@ desired boolean state of a checkbox or radio rather than representing a
 stateful control as an ambiguous click.
 
 `schemaVersion` versions the shape of the contract. The separate positive
-workflow `version` identifies revisions of a workflow. Published-version
-immutability remains an application and persistence responsibility in a later
-session; the schema cannot enforce changes across stored records.
+workflow `version` identifies immutable workflow-version lineage. Session 13
+enforces Published immutability at application and persistence boundaries;
+the schema alone cannot enforce changes across stored records.
 
 Runtime validation is required because workflow definitions will eventually
 cross extension, API, editor, file, and local-runner boundaries. TypeScript
@@ -398,8 +398,48 @@ Workflow name and description. A stale request receives HTTP 409 and cannot
 overwrite newer data.
 
 OWNER, ADMIN, MEMBER, and VIEWER may read. Only OWNER, ADMIN, and MEMBER may
-write a draft. Published and archived definitions remain immutable through the
-editor API.
+write a draft. Testing, Published, and Archived definitions remain immutable
+through the editor API.
+
+## Workflow version lifecycle
+
+`@tasktwin/workflow-lifecycle` owns deterministic, framework-independent
+transition and readiness rules:
+
+```text
+Draft --ready--> Testing --OWNER/ADMIN + ready--> Published --> Archived
+  ^                 |
+  +-----------------+
+
+Published or Archived --clone--> new Draft (next version, revision 1)
+```
+
+Version and revision serve different purposes. A version is a preserved
+lineage record. Revision is the optimistic concurrency counter of an editable
+Draft and never increases after that Draft leaves editing. The
+`WorkflowVersion.status` envelope is authoritative; lifecycle transitions
+update status and audit metadata without rewriting definition JSON or
+revision. Testing, Published, and Archived are read-only.
+
+The API evaluates publish readiness before Draft enters Testing and again from
+the stored definition immediately before publish. Structural validation,
+workflow-input cross-reference analysis, a non-empty step list, duplicate step
+IDs, and supported schema version are deterministic. Blocking issues stop the
+transition; warnings remain visible and do not masquerade as errors. Messages
+contain bounded structural context, never literal or secret values.
+
+Publish and version allocation use serializable database transactions and a
+row lock on the parent Workflow. Publishing archives any current Published
+version and publishes the Testing candidate in the same transaction.
+PostgreSQL additionally enforces a partial unique index for at most one
+Published version per Workflow. New-version retries use the unique
+`(workflowId, clientCreationId)` key and return the prior result. Bounded
+serialization retries handle database conflicts without an in-memory mutex.
+
+OWNER and ADMIN may publish and archive. MEMBER may edit Drafts, submit,
+return to Draft, and create a new Draft. VIEWER may only read. Every action
+resolves current organization membership through the Workflow or
+WorkflowVersion resource.
 
 ## Safety and trust boundaries
 

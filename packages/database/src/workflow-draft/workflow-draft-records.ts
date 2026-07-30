@@ -1,4 +1,5 @@
 import type { OrganizationRole, Prisma } from '../generated/prisma/client.js';
+import type { WorkflowLifecycleStatus } from '@tasktwin/workflow-schema';
 
 export interface WorkflowAccessRecord {
   organizationId: string;
@@ -13,7 +14,7 @@ export interface WorkflowListItemRecord {
   latestVersionId: string;
   version: number;
   revision: number;
-  status: 'draft' | 'published' | 'archived';
+  status: WorkflowLifecycleStatus;
   updatedAt: Date;
 }
 
@@ -29,9 +30,16 @@ export interface WorkflowVersionDetailRecord {
   workspaceId: string;
   version: number;
   revision: number;
-  status: 'draft' | 'published' | 'archived';
+  status: WorkflowLifecycleStatus;
   schemaVersion: number;
   definition: Prisma.JsonValue;
+  createdFromVersionId: string | null;
+  clientCreationId: string | null;
+  publishedAt: Date | null;
+  publishedById: string | null;
+  archivedAt: Date | null;
+  archivedById: string | null;
+  createdAt: Date;
   updatedAt: Date;
   conversionReport: Prisma.JsonValue | null;
   access: WorkflowAccessRecord;

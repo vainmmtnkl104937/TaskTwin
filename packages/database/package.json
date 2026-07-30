@@ -28,6 +28,7 @@
     "@tasktwin/recording-converter": "workspace:*",
     "@tasktwin/recording-schema": "workspace:*",
     "@tasktwin/workflow-editor-core": "workspace:*",
+    "@tasktwin/workflow-lifecycle": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "pg": "8.22.0"
   },

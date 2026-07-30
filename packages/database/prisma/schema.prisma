@@ -13,6 +13,7 @@ datasource db {
 
 enum WorkflowLifecycleStatus {
   draft
+  testing
   published
   archived
 
@@ -46,6 +47,8 @@ model User {
   organizationMemberships    OrganizationMember[]
   createdRecordingSessions   RecordingSession[]            @relation("RecordingSessionCreator")
   createdWorkflowConversions RecordingWorkflowConversion[] @relation("RecordingWorkflowConversionCreator")
+  publishedWorkflowVersions  WorkflowVersion[]              @relation("WorkflowVersionPublisher")
+  archivedWorkflowVersions   WorkflowVersion[]              @relation("WorkflowVersionArchiver")
 
   @@map("users")
 }
@@ -107,20 +110,35 @@ model Workflow {
 }
 
 model WorkflowVersion {
-  id                  String                       @id @default(uuid()) @db.Uuid
-  workflowId          String                       @map("workflow_id")
-  version             Int
-  revision            Int                          @default(1)
-  status              WorkflowLifecycleStatus
-  schemaVersion       Int                          @map("schema_version")
-  definition          Json                         @db.JsonB
-  createdAt           DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
-  workflow            Workflow                     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  recordingConversion RecordingWorkflowConversion?
+  id                   String                       @id @default(uuid()) @db.Uuid
+  workflowId           String                       @map("workflow_id")
+  version              Int
+  revision             Int                          @default(1)
+  status               WorkflowLifecycleStatus
+  schemaVersion        Int                          @map("schema_version")
+  definition           Json                         @db.JsonB
+  createdFromVersionId String?                      @map("created_from_version_id") @db.Uuid
+  clientCreationId     String?                      @map("client_creation_id") @db.Uuid
+  publishedAt          DateTime?                    @map("published_at") @db.Timestamptz(3)
+  publishedById        String?                      @map("published_by_id") @db.Uuid
+  archivedAt           DateTime?                    @map("archived_at") @db.Timestamptz(3)
+  archivedById         String?                      @map("archived_by_id") @db.Uuid
+  createdAt            DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workflow             Workflow                     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  createdFromVersion   WorkflowVersion?             @relation("WorkflowVersionDerivation", fields: [createdFromVersionId], references: [id], onDelete: SetNull)
+  derivedVersions      WorkflowVersion[]            @relation("WorkflowVersionDerivation")
+  publishedBy          User?                        @relation("WorkflowVersionPublisher", fields: [publishedById], references: [id], onDelete: Restrict)
+  archivedBy           User?                        @relation("WorkflowVersionArchiver", fields: [archivedById], references: [id], onDelete: Restrict)
+  recordingConversion  RecordingWorkflowConversion?
 
   @@unique([workflowId, version], map: "workflow_versions_workflow_id_version_key")
+  @@unique([workflowId, clientCreationId], map: "workflow_versions_workflow_id_client_creation_id_key")
   @@index([status], map: "workflow_versions_status_idx")
+  @@index([workflowId, status, version], map: "workflow_versions_workflow_id_status_version_idx")
+  @@index([createdFromVersionId], map: "workflow_versions_created_from_version_id_idx")
+  @@index([publishedById], map: "workflow_versions_published_by_id_idx")
+  @@index([archivedById], map: "workflow_versions_archived_by_id_idx")
   @@map("workflow_versions")
 }
 

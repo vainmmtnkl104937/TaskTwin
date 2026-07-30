@@ -98,7 +98,6 @@ function toConversionRecord(
     row.workflowVersion.id !== row.workflowVersionId ||
     row.workflowVersion.workflowId !== row.workflowId ||
     row.workflowVersion.version !== 1 ||
-    row.workflowVersion.status !== 'draft' ||
     row.workflowVersion.schemaVersion !==
       workflowDefinition.data.schemaVersion ||
     workflowDefinition.data.workflowId !== row.workflowId ||

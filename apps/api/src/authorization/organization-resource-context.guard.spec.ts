@@ -8,6 +8,7 @@ import {
   OrganizationRole,
   type RecordingRepository,
   type WorkflowDraftRepository,
+  type WorkflowLifecycleRepository,
 } from '@tasktwin/database';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -56,7 +57,11 @@ function createExecutionContext(request: TestRequest): ExecutionContext {
 }
 
 function createReflector(
-  kind: 'workspace' | 'recordingSession' | 'workflowVersion' = 'workspace',
+  kind:
+    | 'workspace'
+    | 'recordingSession'
+    | 'workflow'
+    | 'workflowVersion' = 'workspace',
   parameterName = 'workspaceId',
 ): Reflector {
   return {
@@ -71,6 +76,9 @@ describe('OrganizationResourceContextGuard', () => {
   const workflowDraftRepository = {
     resolveWorkflowVersionAccess: vi.fn(),
   } as unknown as WorkflowDraftRepository;
+  const workflowLifecycleRepository = {
+    resolveWorkflowAccess: vi.fn(),
+  } as unknown as WorkflowLifecycleRepository;
 
   it('resolves membership and attaches trusted organization context', async () => {
     const request = createRequest();
@@ -85,6 +93,7 @@ describe('OrganizationResourceContextGuard', () => {
         resolveWorkspaceAccess,
       } as unknown as RecordingRepository,
       workflowDraftRepository,
+      workflowLifecycleRepository,
     );
 
     await expect(
@@ -104,6 +113,7 @@ describe('OrganizationResourceContextGuard', () => {
         resolveWorkspaceAccess: vi.fn().mockResolvedValue(null),
       } as unknown as RecordingRepository,
       workflowDraftRepository,
+      workflowLifecycleRepository,
     );
 
     await expect(
@@ -119,6 +129,7 @@ describe('OrganizationResourceContextGuard', () => {
         resolveWorkspaceAccess,
       } as unknown as RecordingRepository,
       workflowDraftRepository,
+      workflowLifecycleRepository,
     );
 
     await expect(
@@ -140,6 +151,7 @@ describe('OrganizationResourceContextGuard', () => {
       {
         resolveWorkflowVersionAccess,
       } as unknown as WorkflowDraftRepository,
+      workflowLifecycleRepository,
     );
 
     await expect(
@@ -153,5 +165,29 @@ describe('OrganizationResourceContextGuard', () => {
       userId,
       workflowVersionId,
     );
+  });
+
+  it('resolves workflow membership through the lifecycle repository', async () => {
+    const workflowId = 'workflow-session-13';
+    const resolveWorkflowAccess = vi.fn().mockResolvedValue({
+      organizationId: '13375635-b896-4446-81ed-2de3fa201dac',
+      userId,
+      role: OrganizationRole.ADMIN,
+    });
+    const guard = new OrganizationResourceContextGuard(
+      createReflector('workflow', 'workflowId'),
+      {} as RecordingRepository,
+      workflowDraftRepository,
+      {
+        resolveWorkflowAccess,
+      } as unknown as WorkflowLifecycleRepository,
+    );
+
+    await expect(
+      guard.canActivate(
+        createExecutionContext(createRequest(workflowId, 'workflowId')),
+      ),
+    ).resolves.toBe(true);
+    expect(resolveWorkflowAccess).toHaveBeenCalledWith(userId, workflowId);
   });
 });

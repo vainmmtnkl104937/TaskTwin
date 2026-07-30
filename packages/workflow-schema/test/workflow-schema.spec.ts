@@ -10,6 +10,7 @@ import {
   SetCheckedStepSchema,
   ValueSourceSchema,
   WorkflowDefinitionSchema,
+  WorkflowLifecycleStatusSchema,
   WorkflowVariableSchema,
 } from '../src/index.js';
 
@@ -31,6 +32,15 @@ function parseValidFixture() {
 }
 
 describe('WorkflowDefinitionSchema', () => {
+  it('supports every workflow lifecycle status', () => {
+    expect(WorkflowLifecycleStatusSchema.options).toEqual([
+      'draft',
+      'testing',
+      'published',
+      'archived',
+    ]);
+  });
+
   it('keeps the legacy Session 02 workflow fixture valid', () => {
     const workflow = parseValidFixture();
 

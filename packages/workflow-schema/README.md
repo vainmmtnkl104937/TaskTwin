@@ -56,6 +56,10 @@ references, or secret references. A secret source stores only a valid
 The schema validates structure only. It does not resolve locators, retrieve
 secrets, execute workflows, or prove that a workflow is safe or publishable.
 
+Workflow lifecycle status supports `draft`, `testing`, `published`, and
+`archived`. The persisted WorkflowVersion envelope is the authoritative
+lifecycle state; lifecycle transitions do not rewrite an immutable definition.
+
 ## Commands
 
 ```sh

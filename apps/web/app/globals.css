@@ -484,6 +484,77 @@ p {
   color: #274f70;
 }
 
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.status-draft {
+  border-color: #91aa9f;
+  background: #eef4f2;
+  color: #31453e;
+}
+
+.status-testing {
+  border-color: #d7a34a;
+  background: #fff5dc;
+  color: #684b12;
+}
+
+.status-published {
+  border-color: #48a47e;
+  background: #e8f6ef;
+  color: #176044;
+}
+
+.status-archived {
+  border-color: #a4a4ad;
+  background: #f1f1f3;
+  color: #4f4f57;
+}
+
+.lifecycle-actions,
+.readiness-panel {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #d7e2de;
+  border-radius: 0.8rem;
+  background: white;
+}
+
+.readiness-panel h2 {
+  margin-top: 0;
+}
+
+.readiness-ready {
+  border-left: 0.3rem solid #48a47e;
+}
+
+.readiness-blocked {
+  border-left: 0.3rem solid #a83e3e;
+}
+
+.readiness-blocked li {
+  color: #8a2424;
+}
+
+.inline-action {
+  display: inline-grid;
+  gap: 0.35rem;
+}
+
+.inline-error {
+  max-width: 22rem;
+  color: #8a2424;
+  font-size: 0.85rem;
+}
+
 .dialog-backdrop {
   position: fixed;
   z-index: 20;

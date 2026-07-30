@@ -27,3 +27,21 @@ pnpm db:up
 pnpm db:migrate
 pnpm --filter @tasktwin/api test:integration:workflow-editor
 ```
+
+Session 13 adds authenticated, membership-scoped lifecycle endpoints:
+
+- `GET /workflows/:workflowId/versions`
+- `POST /workflow-versions/:versionId/submit-for-testing`
+- `POST /workflow-versions/:versionId/return-to-draft`
+- `POST /workflow-versions/:versionId/publish`
+- `POST /workflow-versions/:versionId/archive`
+- `POST /workflows/:workflowId/versions`
+
+Submit, return, and publish use expected Draft revision checks where
+applicable. Only OWNER and ADMIN can publish or archive. Creation requires a
+caller-generated UUID `clientCreationId` and a Published or Archived
+`sourceVersionId`.
+
+```powershell
+pnpm workflow-lifecycle:check
+```

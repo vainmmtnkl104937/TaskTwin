@@ -46,6 +46,13 @@ function detail(role: OrganizationRole = OrganizationRole.MEMBER) {
     status: 'draft' as const,
     schemaVersion: 1,
     definition: definition(),
+    createdFromVersionId: null,
+    clientCreationId: null,
+    publishedAt: null,
+    publishedById: null,
+    archivedAt: null,
+    archivedById: null,
+    createdAt: new Date('2026-07-29T19:00:00.000Z'),
     updatedAt: new Date('2026-07-29T20:00:00.000Z'),
     conversionReport: null,
     access: {

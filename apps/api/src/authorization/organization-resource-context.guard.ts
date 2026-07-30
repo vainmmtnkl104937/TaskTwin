@@ -10,6 +10,7 @@ import { Reflector } from '@nestjs/core';
 import {
   RecordingRepository,
   WorkflowDraftRepository,
+  WorkflowLifecycleRepository,
 } from '@tasktwin/database';
 
 import {
@@ -27,6 +28,7 @@ import {
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const WORKFLOW_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$/;
 
 interface OrganizationResourceRequest
   extends AuthenticatedRequest, OrganizationContextRequest {
@@ -39,6 +41,7 @@ export class OrganizationResourceContextGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly recordingRepository: RecordingRepository,
     private readonly workflowDraftRepository: WorkflowDraftRepository,
+    private readonly workflowLifecycleRepository: WorkflowLifecycleRepository,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -61,7 +64,12 @@ export class OrganizationResourceContextGuard implements CanActivate {
     }
 
     const resourceId = request.params?.[metadata.parameterName];
-    if (typeof resourceId !== 'string' || !UUID_PATTERN.test(resourceId)) {
+    const identifierIsValid =
+      typeof resourceId === 'string' &&
+      (metadata.kind === 'workflow'
+        ? WORKFLOW_ID_PATTERN.test(resourceId)
+        : UUID_PATTERN.test(resourceId));
+    if (!identifierIsValid || typeof resourceId !== 'string') {
       throw new BadRequestException('Invalid resource identifier');
     }
 
@@ -75,6 +83,12 @@ export class OrganizationResourceContextGuard implements CanActivate {
         break;
       case 'recordingSession':
         access = await this.recordingRepository.resolveRecordingSessionAccess(
+          user.id,
+          resourceId,
+        );
+        break;
+      case 'workflow':
+        access = await this.workflowLifecycleRepository.resolveWorkflowAccess(
           user.id,
           resourceId,
         );
