@@ -317,3 +317,17 @@ and atomic local credential persistence.
 
 It does not add Playwright, workflow polling or execution, browser launch,
 WebSocket, arbitrary commands, cloud runners, or native keychain integration.
+
+## Session 15 scope
+
+Session 15 adds Playwright-based local Chromium execution to the Local Runner.
+It validates the complete request and explicit allowed origins before launch,
+uses one isolated non-persistent BrowserContext per execution, and supports
+Navigate, Click, Fill, Select, SetChecked, and Wait in sequential fail-fast
+order. Locators must match exactly one element, secret references fail closed,
+and browser resources are always cleaned up with value-safe reporting.
+
+It does not add Control Plane jobs, WorkflowRun persistence, job polling,
+persistent browser profiles, saved authentication, secret resolution,
+Extract, Verify or Approval execution, screenshots, tracing, retries, locator
+repair, AI, scheduling, or parallel execution.
