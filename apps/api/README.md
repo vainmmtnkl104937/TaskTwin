@@ -63,3 +63,13 @@ Runner heartbeat uses
 codes, credentials, and complete Authorization headers must not be logged.
 Production verification and runner origins require HTTPS; loopback HTTP is
 development-only.
+
+Session 17 adds membership-scoped run creation/read/cancellation and
+runner-authenticated claim, lease, progress and completion endpoints. Run
+creation accepts only a client run ID and same-Workspace Runner selection;
+allowed origins and timeout policy are server-owned. Runner job mutations also
+require `X-TaskTwin-Run-Lease`. Only its keyed hash is persisted.
+
+```powershell
+pnpm workflow-runs:check
+```

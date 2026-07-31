@@ -9,8 +9,11 @@ import {
 import {
   ControlPlaneClientError,
   type RunnerControlPlaneTransport,
+  type RunnerJobTransport,
 } from './control-plane-client.js';
 import type { RunnerCredentialStore } from './credential-store.js';
+import type { BrowserSessionFactory } from './execution/browser-session.js';
+import { RunJobWorker } from './job-dispatch/run-job-worker.js';
 
 export interface RunnerOutput {
   write(message: string): void;
@@ -35,6 +38,8 @@ export class LocalRunnerService {
     private readonly output: RunnerOutput,
     private readonly clock: RunnerClock,
     private readonly runnerVersion: string,
+    private readonly jobTransport?: RunnerJobTransport,
+    private readonly browserSessions?: BrowserSessionFactory,
   ) {}
 
   async pair(input: {
@@ -114,6 +119,40 @@ export class LocalRunnerService {
   async start(signal: AbortSignal): Promise<void> {
     const credential = await this.requireCredential();
     this.output.write('TaskTwin Local Runner started safely.');
+    if (this.jobTransport !== undefined && this.browserSessions !== undefined) {
+      const operation = new AbortController();
+      const stopOperation = () => operation.abort();
+      signal.addEventListener('abort', stopOperation, { once: true });
+      const worker = new RunJobWorker(
+        this.jobTransport,
+        this.browserSessions,
+        this.clock,
+        this.output,
+        this.runnerVersion,
+      );
+      try {
+        const jobs = worker
+          .runLoop(credential, operation.signal)
+          .finally(stopOperation);
+        const heartbeat = this.runHeartbeatLoop(
+          credential,
+          operation.signal,
+        ).finally(stopOperation);
+        await Promise.all([jobs, heartbeat]);
+        this.output.write('TaskTwin Local Runner stopped safely.');
+        return;
+      } finally {
+        signal.removeEventListener('abort', stopOperation);
+      }
+    }
+    await this.runHeartbeatLoop(credential, signal);
+    this.output.write('TaskTwin Local Runner stopped safely.');
+  }
+
+  private async runHeartbeatLoop(
+    credential: StoredRunnerCredential,
+    signal: AbortSignal,
+  ): Promise<void> {
     let nextIntervalSeconds = await this.sendHeartbeat(credential);
     while (!signal.aborted) {
       await this.clock
@@ -134,7 +173,6 @@ export class LocalRunnerService {
         throw error;
       }
     }
-    this.output.write('TaskTwin Local Runner stopped safely.');
   }
 
   async unpair(): Promise<void> {

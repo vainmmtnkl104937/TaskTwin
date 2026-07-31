@@ -6,8 +6,10 @@ import { LifecycleStatusBadge } from '@/components/workflow-lifecycle/lifecycle-
 import { getAccessToken } from '@/lib/server/auth-session';
 import {
   ControlPlaneError,
+  listRunnerDevices,
   listWorkflowVersions,
 } from '@/lib/server/control-plane';
+import { RunWorkflowPanel } from '@/components/workflow-runs/run-workflow-panel';
 
 export default async function WorkflowVersionHistoryPage({
   params,
@@ -21,8 +23,10 @@ export default async function WorkflowVersionHistoryPage({
   }
 
   let history;
+  let runners;
   try {
     history = await listWorkflowVersions(accessToken, workflowId);
+    runners = await listRunnerDevices(accessToken, workspaceId);
   } catch (error: unknown) {
     if (error instanceof ControlPlaneError && error.status === 401) {
       redirect('/auth/expired');
@@ -88,6 +92,19 @@ export default async function WorkflowVersionHistoryPage({
                   workflowId={workflowId}
                   workspaceId={workspaceId}
                   sourceVersionId={version.id}
+                />
+              ) : null}
+              {version.status === 'published' ? (
+                <RunWorkflowPanel
+                  workspaceId={workspaceId}
+                  workflowVersionId={version.id}
+                  runners={runners.devices
+                    .filter((device) => device.connectionStatus !== 'revoked')
+                    .map((device) => ({
+                      id: device.id,
+                      name: device.metadata.displayName,
+                      status: device.connectionStatus,
+                    }))}
                 />
               ) : null}
             </div>

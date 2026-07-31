@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@tasktwin/locator-engine": "workspace:*",
+    "@tasktwin/run-protocol": "workspace:*",
     "@tasktwin/runner-protocol": "workspace:*",
     "@tasktwin/shared-types": "workspace:*",
     "@tasktwin/workflow-engine": "workspace:*",

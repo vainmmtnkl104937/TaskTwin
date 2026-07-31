@@ -7,6 +7,7 @@ export type OrganizationResourceKind =
   | 'recordingSession'
   | 'workflow'
   | 'workflowVersion'
+  | 'workflowRun'
   | 'runnerDevice';
 
 export interface OrganizationResourceMetadata {

@@ -221,6 +221,19 @@ Session 16 remains local and in-memory. It does not add Control Plane jobs,
 WorkflowRun persistence, polling, retry, resume, approval pause, branching,
 parallel execution, screenshots, secret resolution, scheduling, or AI repair.
 
+## Session 17: persisted run dispatch
+
+- Framework-independent run protocol
+- Published workflow run creation and readiness restrictions
+- Transactional run and step persistence
+- Assigned Local Runner claims and hashed renewable leases
+- Ordered idempotent progress and completion
+- Cooperative cancellation and lease-expiry interruption
+- Safe run history and detail UI
+
+Session 17 excludes runtime input and secret delivery, automatic retry or
+requeue, resume, Redis, WebSocket, scheduling and parallel jobs.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

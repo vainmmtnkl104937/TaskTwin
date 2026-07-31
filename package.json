@@ -33,6 +33,7 @@
     "runner-pairing:check": "pnpm --filter @tasktwin/api test:integration:runner-pairing",
     "workflow-editor:check": "pnpm --filter @tasktwin/api test:integration:workflow-editor",
     "workflow-lifecycle:check": "pnpm --filter @tasktwin/api test:integration:workflow-lifecycle",
+    "workflow-runs:check": "pnpm --filter @tasktwin/api test:integration:workflow-runs",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"
   },

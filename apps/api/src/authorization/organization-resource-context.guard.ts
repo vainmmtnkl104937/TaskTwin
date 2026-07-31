@@ -12,6 +12,7 @@ import {
   RunnerRepository,
   WorkflowDraftRepository,
   WorkflowLifecycleRepository,
+  WorkflowRunRepository,
 } from '@tasktwin/database';
 
 import {
@@ -44,6 +45,7 @@ export class OrganizationResourceContextGuard implements CanActivate {
     private readonly workflowDraftRepository: WorkflowDraftRepository,
     private readonly workflowLifecycleRepository: WorkflowLifecycleRepository,
     private readonly runnerRepository: RunnerRepository,
+    private readonly workflowRunRepository: WorkflowRunRepository,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -101,6 +103,12 @@ export class OrganizationResourceContextGuard implements CanActivate {
             user.id,
             resourceId,
           );
+        break;
+      case 'workflowRun':
+        access = await this.workflowRunRepository.resolveWorkflowRunAccess(
+          user.id,
+          resourceId,
+        );
         break;
       case 'runnerDevice':
         access = await this.runnerRepository.resolveRunnerDeviceAccess(

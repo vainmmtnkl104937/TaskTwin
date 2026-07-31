@@ -5,6 +5,8 @@ export {
   PrismaClient,
   RecordingSessionStatus,
   RunnerPairingStatus,
+  WorkflowRunStatus,
+  WorkflowRunStepStatus,
 } from './generated/prisma/client.js';
 export { DuplicateEmailError } from './identity/identity-errors.js';
 export { IdentityRepository } from './identity/identity.repository.js';
@@ -82,3 +84,19 @@ export type {
   WorkflowVersionHistoryRecord,
 } from './workflow-lifecycle/workflow-lifecycle-records.js';
 export { WorkflowLifecycleRepository } from './workflow-lifecycle/workflow-lifecycle.repository.js';
+export {
+  WorkflowRunRepositoryError,
+  type WorkflowRunRepositoryErrorCode,
+} from './workflow-run/workflow-run-errors.js';
+export type {
+  ClaimWorkflowRunResult,
+  CompletionInput,
+  CompletionResult,
+  CreateWorkflowRunResult,
+  ProgressBatchResult,
+  WorkflowRunAccess,
+  WorkflowRunListRecord,
+  WorkflowRunRecord,
+  WorkflowRunStepRecord,
+} from './workflow-run/workflow-run-records.js';
+export { WorkflowRunRepository } from './workflow-run/workflow-run.repository.js';

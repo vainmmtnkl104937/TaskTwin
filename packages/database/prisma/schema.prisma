@@ -46,6 +46,33 @@ enum RunnerPairingStatus {
   @@map("runner_pairing_status")
 }
 
+enum WorkflowRunStatus {
+  QUEUED
+  CLAIMED
+  RUNNING
+  CANCEL_REQUESTED
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  TIMED_OUT
+  INTERRUPTED
+
+  @@map("workflow_run_status")
+}
+
+enum WorkflowRunStepStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  TIMED_OUT
+  SKIPPED
+  INTERRUPTED
+
+  @@map("workflow_run_step_status")
+}
+
 model User {
   id                         String                        @id @default(uuid()) @db.Uuid
   email                      String                        @unique(map: "users_email_key") @db.VarChar(254)
@@ -62,6 +89,8 @@ model User {
   approvedRunnerPairings     RunnerPairingSession[]          @relation("RunnerPairingApprover")
   deniedRunnerPairings       RunnerPairingSession[]          @relation("RunnerPairingDenier")
   revokedRunnerDevices       RunnerDevice[]                  @relation("RunnerDeviceRevoker")
+  createdWorkflowRuns        WorkflowRun[]                   @relation("WorkflowRunCreator")
+  cancelledWorkflowRuns      WorkflowRun[]                   @relation("WorkflowRunCanceller")
 
   @@map("users")
 }
@@ -104,6 +133,7 @@ model Workspace {
   recordingSessions RecordingSession[]
   runnerPairingSessions RunnerPairingSession[]
   runnerDevices         RunnerDevice[]
+  workflowRuns          WorkflowRun[]
 
   @@unique([organizationId, slug], map: "workspaces_organization_id_slug_key")
   @@map("workspaces")
@@ -161,6 +191,7 @@ model RunnerDevice {
   pairingSession   RunnerPairingSession @relation(fields: [pairingSessionId], references: [id], onDelete: Restrict)
   revokedBy        User?                @relation("RunnerDeviceRevoker", fields: [revokedById], references: [id], onDelete: Restrict)
   credential       RunnerCredential?
+  workflowRuns     WorkflowRun[]
 
   @@index([workspaceId, revokedAt, lastSeenAt], map: "runner_devices_workspace_id_revoked_at_last_seen_at_idx")
   @@index([revokedById], map: "runner_devices_revoked_by_id_idx")
@@ -191,6 +222,7 @@ model Workflow {
   workspace            Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   versions             WorkflowVersion[]
   recordingConversions RecordingWorkflowConversion[]
+  runs                 WorkflowRun[]
 
   @@index([workspaceId], map: "workflows_workspace_id_idx")
   @@map("workflows")
@@ -218,6 +250,7 @@ model WorkflowVersion {
   publishedBy          User?                        @relation("WorkflowVersionPublisher", fields: [publishedById], references: [id], onDelete: Restrict)
   archivedBy           User?                        @relation("WorkflowVersionArchiver", fields: [archivedById], references: [id], onDelete: Restrict)
   recordingConversion  RecordingWorkflowConversion?
+  runs                 WorkflowRun[]
 
   @@unique([workflowId, version], map: "workflow_versions_workflow_id_version_key")
   @@unique([workflowId, clientCreationId], map: "workflow_versions_workflow_id_client_creation_id_key")
@@ -227,6 +260,96 @@ model WorkflowVersion {
   @@index([publishedById], map: "workflow_versions_published_by_id_idx")
   @@index([archivedById], map: "workflow_versions_archived_by_id_idx")
   @@map("workflow_versions")
+}
+
+model WorkflowRun {
+  id                      String            @id @default(uuid()) @db.Uuid
+  workspaceId             String            @map("workspace_id") @db.Uuid
+  workflowId              String            @map("workflow_id")
+  workflowVersionId       String            @map("workflow_version_id") @db.Uuid
+  runnerDeviceId          String            @map("runner_device_id") @db.Uuid
+  createdByUserId         String            @map("created_by_user_id") @db.Uuid
+  clientRunId             String            @map("client_run_id") @db.Uuid
+  status                  WorkflowRunStatus @default(QUEUED)
+  runProtocolVersion      Int               @map("run_protocol_version")
+  workflowEngineVersion   Int               @map("workflow_engine_version")
+  definitionDigest        String            @map("definition_digest") @db.Char(64)
+  allowedOrigins          Json              @map("allowed_origins") @db.JsonB
+  executionOptions        Json              @map("execution_options") @db.JsonB
+  claimAttemptId          String?           @map("claim_attempt_id") @db.Uuid
+  leaseTokenHash          String?           @map("lease_token_hash") @db.Char(64)
+  leaseExpiresAt          DateTime?         @map("lease_expires_at") @db.Timestamptz(3)
+  claimedAt               DateTime?         @map("claimed_at") @db.Timestamptz(3)
+  startedAt               DateTime?         @map("started_at") @db.Timestamptz(3)
+  lastProgressSequence    Int               @default(0) @map("last_progress_sequence")
+  lastEngineStatus        String?           @map("last_engine_status") @db.VarChar(32)
+  cancelRequestedAt       DateTime?         @map("cancel_requested_at") @db.Timestamptz(3)
+  cancelRequestedByUserId String?           @map("cancel_requested_by_user_id") @db.Uuid
+  clientCompletionId      String?           @map("client_completion_id") @db.Uuid
+  completionDigest        String?           @map("completion_digest") @db.Char(64)
+  finalResult             Json?             @map("final_result") @db.JsonB
+  terminationCause        String?           @map("termination_cause") @db.VarChar(80)
+  finishedAt              DateTime?         @map("finished_at") @db.Timestamptz(3)
+  createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace               Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  workflow                Workflow          @relation(fields: [workflowId], references: [id], onDelete: Restrict)
+  workflowVersion         WorkflowVersion   @relation(fields: [workflowVersionId], references: [id], onDelete: Restrict)
+  runnerDevice            RunnerDevice      @relation(fields: [runnerDeviceId], references: [id], onDelete: Restrict)
+  createdBy               User              @relation("WorkflowRunCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  cancelRequestedBy       User?             @relation("WorkflowRunCanceller", fields: [cancelRequestedByUserId], references: [id], onDelete: Restrict)
+  steps                   WorkflowRunStep[]
+  progressBatches         WorkflowRunProgressBatch[]
+
+  @@unique([workspaceId, clientRunId], map: "workflow_runs_workspace_id_client_run_id_key")
+  @@unique([runnerDeviceId, claimAttemptId], map: "workflow_runs_runner_device_id_claim_attempt_id_key")
+  @@index([runnerDeviceId, status, createdAt], map: "workflow_runs_runner_device_id_status_created_at_idx")
+  @@index([workspaceId, createdAt], map: "workflow_runs_workspace_id_created_at_idx")
+  @@index([workflowId, createdAt], map: "workflow_runs_workflow_id_created_at_idx")
+  @@index([workflowVersionId, createdAt], map: "workflow_runs_workflow_version_id_created_at_idx")
+  @@index([status, leaseExpiresAt], map: "workflow_runs_status_lease_expires_at_idx")
+  @@index([createdByUserId, createdAt], map: "workflow_runs_created_by_user_id_created_at_idx")
+  @@index([cancelRequestedByUserId], map: "workflow_runs_cancel_requested_by_user_id_idx")
+  @@map("workflow_runs")
+}
+
+model WorkflowRunStep {
+  id               String                @id @default(uuid()) @db.Uuid
+  workflowRunId    String                @map("workflow_run_id") @db.Uuid
+  sourceStepId     String                @map("source_step_id") @db.VarChar(256)
+  sourceStepIndex  Int                   @map("source_step_index")
+  stepType         String                @map("step_type") @db.VarChar(32)
+  status           WorkflowRunStepStatus @default(PENDING)
+  lastEngineStatus String?               @map("last_engine_status") @db.VarChar(32)
+  startedAt        DateTime?             @map("started_at") @db.Timestamptz(3)
+  finishedAt       DateTime?             @map("finished_at") @db.Timestamptz(3)
+  durationMs       Int?                  @map("duration_ms")
+  errorCode        String?               @map("error_code") @db.VarChar(80)
+  skippedReason    String?               @map("skipped_reason") @db.VarChar(80)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workflowRun      WorkflowRun           @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowRunId, sourceStepId], map: "workflow_run_steps_run_id_source_step_id_key")
+  @@unique([workflowRunId, sourceStepIndex], map: "workflow_run_steps_run_id_source_step_index_key")
+  @@index([workflowRunId, status], map: "workflow_run_steps_run_id_status_idx")
+  @@map("workflow_run_steps")
+}
+
+model WorkflowRunProgressBatch {
+  id            String      @id @default(uuid()) @db.Uuid
+  workflowRunId String      @map("workflow_run_id") @db.Uuid
+  clientBatchId String      @map("client_batch_id") @db.Uuid
+  firstSequence Int         @map("first_sequence")
+  lastSequence  Int         @map("last_sequence")
+  eventCount    Int         @map("event_count")
+  payloadDigest String      @map("payload_digest") @db.Char(64)
+  processedAt   DateTime    @default(now()) @map("processed_at") @db.Timestamptz(3)
+  workflowRun   WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowRunId, clientBatchId], map: "workflow_run_progress_batches_run_id_client_batch_id_key")
+  @@index([workflowRunId, firstSequence, lastSequence], map: "workflow_run_progress_batches_run_id_sequence_idx")
+  @@map("workflow_run_progress_batches")
 }
 
 model RecordingSession {

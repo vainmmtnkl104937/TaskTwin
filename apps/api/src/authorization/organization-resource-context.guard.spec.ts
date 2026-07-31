@@ -10,6 +10,7 @@ import {
   type RunnerRepository,
   type WorkflowDraftRepository,
   type WorkflowLifecycleRepository,
+  type WorkflowRunRepository,
 } from '@tasktwin/database';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -63,6 +64,7 @@ function createReflector(
     | 'recordingSession'
     | 'workflow'
     | 'workflowVersion'
+    | 'workflowRun'
     | 'runnerDevice' = 'workspace',
   parameterName = 'workspaceId',
 ): Reflector {
@@ -84,6 +86,9 @@ describe('OrganizationResourceContextGuard', () => {
   const runnerRepository = {
     resolveRunnerDeviceAccess: vi.fn(),
   } as unknown as RunnerRepository;
+  const workflowRunRepository = {
+    resolveWorkflowRunAccess: vi.fn(),
+  } as unknown as WorkflowRunRepository;
 
   it('resolves membership and attaches trusted organization context', async () => {
     const request = createRequest();
@@ -100,6 +105,7 @@ describe('OrganizationResourceContextGuard', () => {
       workflowDraftRepository,
       workflowLifecycleRepository,
       runnerRepository,
+      workflowRunRepository,
     );
 
     await expect(
@@ -121,6 +127,7 @@ describe('OrganizationResourceContextGuard', () => {
       workflowDraftRepository,
       workflowLifecycleRepository,
       runnerRepository,
+      workflowRunRepository,
     );
 
     await expect(
@@ -138,6 +145,7 @@ describe('OrganizationResourceContextGuard', () => {
       workflowDraftRepository,
       workflowLifecycleRepository,
       runnerRepository,
+      workflowRunRepository,
     );
 
     await expect(
@@ -161,6 +169,7 @@ describe('OrganizationResourceContextGuard', () => {
       } as unknown as WorkflowDraftRepository,
       workflowLifecycleRepository,
       runnerRepository,
+      workflowRunRepository,
     );
 
     await expect(
@@ -191,6 +200,7 @@ describe('OrganizationResourceContextGuard', () => {
         resolveWorkflowAccess,
       } as unknown as WorkflowLifecycleRepository,
       runnerRepository,
+      workflowRunRepository,
     );
 
     await expect(

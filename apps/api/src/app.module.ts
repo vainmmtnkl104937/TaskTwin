@@ -12,6 +12,7 @@ import { RunnerModule } from './runner/runner.module.js';
 import { WorkspacesModule } from './workspaces/workspaces.module.js';
 import { WorkflowLifecycleModule } from './workflow-lifecycle/workflow-lifecycle.module.js';
 import { WorkflowsModule } from './workflows/workflows.module.js';
+import { WorkflowRunsModule } from './workflow-runs/workflow-runs.module.js';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     WorkspacesModule,
     WorkflowLifecycleModule,
     WorkflowsModule,
+    WorkflowRunsModule,
   ],
   controllers: [HealthController],
   providers: [HealthService],
