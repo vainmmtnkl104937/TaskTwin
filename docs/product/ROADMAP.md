@@ -206,6 +206,21 @@ poll the Control Plane, persist WorkflowRun records, reuse browser profiles,
 resolve secrets, capture screenshots or traces, retry, repair locators, or use
 AI.
 
+## Session 16: deterministic workflow engine
+
+- Framework-independent workflow execution orchestrator
+- Explicit run and step state machines
+- Preflight before adapter startup
+- Sequential fail-fast execution with typed skipped steps
+- Total timeout, step timeout, and idempotent cancellation
+- Deterministic termination races and safe progress events
+- Complete validated results and guaranteed cleanup reporting
+- Playwright retained behind the Local Runner adapter
+
+Session 16 remains local and in-memory. It does not add Control Plane jobs,
+WorkflowRun persistence, polling, retry, resume, approval pause, branching,
+parallel execution, screenshots, secret resolution, scheduling, or AI repair.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

@@ -1,8 +1,9 @@
 # TaskTwin Local Runner
 
 The Local Runner pairs with the control plane, stores one revocable runner
-credential locally, sends heartbeats, and provides the Session 15 local
-Playwright execution foundation. Control Plane jobs are not connected yet.
+credential locally, sends heartbeats, and adapts the framework-independent
+workflow engine to local Playwright execution. Control Plane jobs are not
+connected yet.
 
 ```powershell
 pnpm --filter @tasktwin/local-runner build
@@ -38,7 +39,9 @@ Each execution launches Chromium, creates one isolated non-persistent
 `BrowserContext`, opens one `Page`, then closes both context and browser.
 TaskTwin never supplies a personal profile path, imports cookies, or loads a
 saved storage state. Navigate, Click, Fill, Select, SetChecked, and Wait run
-sequentially and stop at the first failure.
+sequentially through `@tasktwin/workflow-engine` and stop at the first failure.
+Every source step receives a terminal result; unattempted steps are skipped
+with a typed reason.
 
 Execution requires an explicit HTTP/HTTPS origin allowlist. Navigation rejects
 credential-bearing URLs, unsafe schemes, disallowed destinations, and a final
@@ -49,6 +52,17 @@ closed because secret resolution is not implemented.
 Reports contain only safe step metadata and fixed error codes. Runtime values,
 full URLs, query parameters, cookies, HTML, browser console payloads, and raw
 Playwright errors are excluded.
+
+An external AbortSignal handles SIGINT/SIGTERM cancellation. The total run
+timeout covers Chromium startup and all steps, while each step receives an
+effective timeout capped by remaining run time. Cancellation returns exit code
+2, total timeout returns 3, other execution failure returns 1, and success
+returns 0. The command awaits BrowserContext and Browser cleanup before setting
+the process exit code.
+
+Safe CLI progress contains only run/step identifiers and statuses. It never
+prints values, full URLs, secrets, locators, DOM content, or raw Playwright
+errors.
 
 Plain HTTP is accepted only for loopback development. Other origins must use
 HTTPS. The runner displays only the user code and verification URL during

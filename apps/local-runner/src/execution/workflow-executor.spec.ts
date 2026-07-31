@@ -33,7 +33,8 @@ function executionRequest(steps: WorkflowDefinition['steps']) {
       headless: true,
       actionTimeoutMs: 1_000,
       navigationTimeoutMs: 1_000,
-      executionTimeoutMs: 10_000,
+      totalTimeoutMs: 10_000,
+      stepTimeoutMs: 1_000,
     },
   };
 }
@@ -142,7 +143,7 @@ describe('LocalWorkflowExecutor', () => {
     );
 
     expect(result.status).toBe('failed');
-    expect(result.attemptedStepCount).toBe(1);
+    expect(result.counts.attempted).toBe(1);
     expect(result.failedStepId).toBe('fails');
     expect(result.steps[0]?.error?.code).toBe('ACTION_FAILED');
     expect(JSON.stringify(result)).not.toContain('raw private browser error');
@@ -164,7 +165,10 @@ describe('LocalWorkflowExecutor', () => {
       ]),
     );
     expect(result.status).toBe('failed');
-    expect(result.cleanupError?.code).toBe('RESOURCE_CLEANUP_FAILED');
+    expect(result.error?.code).toBe('RESOURCE_CLEANUP_FAILED');
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({ code: 'RESOURCE_CLEANUP_FAILED' }),
+    );
   });
 
   it('never creates a browser session for unsafe URL or secret input', async () => {
@@ -179,8 +183,9 @@ describe('LocalWorkflowExecutor', () => {
     ]);
     unsafe.workflow.variables = [];
     unsafe.inputs.values = {} as typeof unsafe.inputs.values;
-    await expect(context.executor.execute(unsafe)).rejects.toMatchObject({
-      safe: { code: 'UNSAFE_URL_SCHEME' },
+    await expect(context.executor.execute(unsafe)).resolves.toMatchObject({
+      status: 'failed',
+      error: { code: 'UNSAFE_URL_SCHEME' },
     });
 
     const secret = executionRequest([
@@ -194,8 +199,9 @@ describe('LocalWorkflowExecutor', () => {
     ]);
     secret.workflow.variables = [];
     secret.inputs.values = {} as typeof secret.inputs.values;
-    await expect(context.executor.execute(secret)).rejects.toMatchObject({
-      safe: { code: 'SECRET_RESOLUTION_UNAVAILABLE' },
+    await expect(context.executor.execute(secret)).resolves.toMatchObject({
+      status: 'failed',
+      error: { code: 'SECRET_RESOLUTION_UNAVAILABLE' },
     });
     expect(context.create).not.toHaveBeenCalled();
   });

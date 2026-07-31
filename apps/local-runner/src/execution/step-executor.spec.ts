@@ -22,16 +22,16 @@ function setup() {
   } as unknown as Page;
   const context: StepExecutionContext = {
     page,
-    runtimeValues: new Map([
-      ['customerName', { kind: 'string', value: 'runtime text' }],
-    ]),
-    allowedOrigins: new Set(['http://127.0.0.1:4177']),
+    runtimeValues: {
+      customerName: { kind: 'string', value: 'runtime text' },
+    },
+    allowedOrigins: ['http://127.0.0.1:4177'],
     options: {
       headless: true,
       actionTimeoutMs: 1_000,
       navigationTimeoutMs: 1_000,
-      executionTimeoutMs: 10_000,
     },
+    effectiveTimeoutMs: 1_000,
   };
   return { locatorMock, context };
 }
@@ -112,7 +112,7 @@ describe('supported step executors', () => {
     ).rejects.toMatchObject({
       safe: {
         code: 'ACTION_TIMEOUT',
-        message: 'The browser action exceeded its allowed timeout.',
+        message: 'The browser action exceeded its allowed step timeout.',
       },
     });
   });

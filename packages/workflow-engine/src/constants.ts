@@ -1,0 +1,7 @@
+export const WORKFLOW_ENGINE_SCHEMA_VERSION = 1;
+export const MIN_EXECUTION_TIMEOUT_MS = 100;
+export const MAX_EXECUTION_TIMEOUT_MS = 600_000;
+export const MIN_STEP_TIMEOUT_MS = 100;
+export const MAX_STEP_TIMEOUT_MS = 60_000;
+export const MAX_ALLOWED_ORIGINS = 32;
+export const MAX_SAFE_MESSAGE_LENGTH = 200;

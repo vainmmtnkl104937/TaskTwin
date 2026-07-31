@@ -1,9 +1,7 @@
 import type { Page } from 'playwright';
+import type { SafeExecutionError } from '@tasktwin/workflow-engine';
 
-import type {
-  BrowserExecutionOptions,
-  SafeExecutionError,
-} from './contracts.js';
+import type { BrowserExecutionOptions } from './contracts.js';
 
 export interface BrowserSession {
   readonly page: Page;

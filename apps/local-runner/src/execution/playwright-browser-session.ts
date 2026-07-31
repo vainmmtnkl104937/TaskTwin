@@ -6,15 +6,13 @@ import {
   type ChromiumBrowser,
   type Page,
 } from 'playwright';
+import type { SafeExecutionError } from '@tasktwin/workflow-engine';
 
 import type {
   BrowserSession,
   BrowserSessionFactory,
 } from './browser-session.js';
-import type {
-  BrowserExecutionOptions,
-  SafeExecutionError,
-} from './contracts.js';
+import type { BrowserExecutionOptions } from './contracts.js';
 import { SafeExecutionException, safeError } from './errors.js';
 
 type ChromiumLauncher = Pick<BrowserType<ChromiumBrowser>, 'launch'>;
@@ -57,6 +55,9 @@ export class PlaywrightBrowserSessionFactory implements BrowserSessionFactory {
     try {
       browser = await this.launcher.launch({
         headless: options.headless,
+        handleSIGHUP: false,
+        handleSIGINT: false,
+        handleSIGTERM: false,
         timeout: options.navigationTimeoutMs,
       });
     } catch {

@@ -1,12 +1,25 @@
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
 import { describe, expect, it } from 'vitest';
 
+import { PlaywrightWorkflowExecutionAdapter } from './playwright-workflow-execution-adapter.js';
 import {
   LocalExecutionRequestSchema,
   MAX_ACTION_TIMEOUT_MS,
 } from './contracts.js';
-import { SafeExecutionException } from './errors.js';
-import { prepareLocalExecution } from './workflow-executor.js';
+import { preflightWorkflowExecution } from '@tasktwin/workflow-engine';
+
+const adapter = new PlaywrightWorkflowExecutionAdapter(
+  {
+    create: async () => {
+      throw new Error('Preflight must not create a browser session.');
+    },
+  },
+  {
+    headless: true,
+    actionTimeoutMs: 1_000,
+    navigationTimeoutMs: 1_000,
+  },
+);
 
 function workflow(
   steps: WorkflowDefinition['steps'] = [
@@ -55,41 +68,58 @@ function request(steps?: WorkflowDefinition['steps']) {
       headless: true,
       actionTimeoutMs: 1_000,
       navigationTimeoutMs: 1_000,
-      executionTimeoutMs: 10_000,
+      totalTimeoutMs: 10_000,
+      stepTimeoutMs: 1_000,
     },
   };
 }
 
 describe('local execution validation and preflight', () => {
+  function preflight(input: ReturnType<typeof request>) {
+    const local = LocalExecutionRequestSchema.parse(input);
+    return preflightWorkflowExecution(
+      {
+        schemaVersion: local.schemaVersion,
+        workflow: local.workflow,
+        inputs: local.inputs,
+        allowedOrigins: local.allowedOrigins,
+        options: {
+          totalTimeoutMs: local.options.totalTimeoutMs,
+          stepTimeoutMs: local.options.stepTimeoutMs,
+        },
+      },
+      adapter,
+    );
+  }
+
   it('accepts a complete valid request', () => {
     expect(LocalExecutionRequestSchema.safeParse(request()).success).toBe(true);
-    expect(prepareLocalExecution(request()).steps).toHaveLength(2);
+    expect(preflight(request()).ok).toBe(true);
   });
 
   it('rejects invalid workflows, missing and unknown runtime variables', () => {
     const invalidWorkflow = request();
     invalidWorkflow.workflow.steps = [];
-    expect(() => prepareLocalExecution(invalidWorkflow)).toThrow(
-      SafeExecutionException,
-    );
+    expect(preflight(invalidWorkflow)).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_WORKFLOW' },
+    });
 
     const missing = request();
     delete (missing.inputs.values as Record<string, unknown>).customerName;
-    expect(() => prepareLocalExecution(missing)).toThrow(
-      expect.objectContaining({
-        safe: expect.objectContaining({ code: 'INVALID_RUNTIME_INPUTS' }),
-      }),
-    );
+    expect(preflight(missing)).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_RUNTIME_INPUTS' },
+    });
 
     const unknown = request();
     Object.assign(unknown.inputs.values, {
       unexpected: { kind: 'string', value: 'not returned' },
     });
-    expect(() => prepareLocalExecution(unknown)).toThrow(
-      expect.objectContaining({
-        safe: expect.objectContaining({ code: 'INVALID_RUNTIME_INPUTS' }),
-      }),
-    );
+    expect(preflight(unknown)).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_RUNTIME_INPUTS' },
+    });
   });
 
   it.each([
@@ -100,7 +130,7 @@ describe('local execution validation and preflight', () => {
   ])('rejects invalid allowed origin %s', (origin) => {
     const input = request();
     input.allowedOrigins = [origin];
-    expect(LocalExecutionRequestSchema.safeParse(input).success).toBe(false);
+    expect(preflight(input).ok).toBe(false);
   });
 
   it.each(['file:///tmp/page', 'data:text/html,unsafe', 'javascript:alert(1)'])(
@@ -108,11 +138,10 @@ describe('local execution validation and preflight', () => {
     (url) => {
       const input = request();
       input.inputs.values.targetUrl.value = url;
-      expect(() => prepareLocalExecution(input)).toThrow(
-        expect.objectContaining({
-          safe: expect.objectContaining({ code: 'UNSAFE_URL_SCHEME' }),
-        }),
-      );
+      expect(preflight(input)).toMatchObject({
+        ok: false,
+        error: { code: 'UNSAFE_URL_SCHEME' },
+      });
     },
   );
 
@@ -123,9 +152,7 @@ describe('local execution validation and preflight', () => {
     ]) {
       const input = request();
       input.inputs.values.targetUrl.value = url;
-      expect(() => prepareLocalExecution(input)).toThrow(
-        SafeExecutionException,
-      );
+      expect(preflight(input).ok).toBe(false);
     }
   });
 
@@ -141,13 +168,10 @@ describe('local execution validation and preflight', () => {
     ]);
     input.workflow.variables = [];
     input.inputs.values = {} as typeof input.inputs.values;
-    expect(() => prepareLocalExecution(input)).toThrow(
-      expect.objectContaining({
-        safe: expect.objectContaining({
-          code: 'SECRET_RESOLUTION_UNAVAILABLE',
-        }),
-      }),
-    );
+    expect(preflight(input)).toMatchObject({
+      ok: false,
+      error: { code: 'SECRET_RESOLUTION_UNAVAILABLE' },
+    });
   });
 
   it('rejects unsupported steps before browser launch', () => {
@@ -164,11 +188,10 @@ describe('local execution validation and preflight', () => {
     ]);
     input.workflow.variables = [];
     input.inputs.values = {} as typeof input.inputs.values;
-    expect(() => prepareLocalExecution(input)).toThrow(
-      expect.objectContaining({
-        safe: expect.objectContaining({ code: 'UNSUPPORTED_STEP_TYPE' }),
-      }),
-    );
+    expect(preflight(input)).toMatchObject({
+      ok: false,
+      error: { code: 'UNSUPPORTED_STEP_TYPE' },
+    });
   });
 
   it('enforces bounded execution options', () => {

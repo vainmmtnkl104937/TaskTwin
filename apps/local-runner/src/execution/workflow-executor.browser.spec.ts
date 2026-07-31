@@ -53,7 +53,8 @@ async function fixture() {
       headless: true,
       actionTimeoutMs: 5_000,
       navigationTimeoutMs: 10_000,
-      executionTimeoutMs: 30_000,
+      totalTimeoutMs: 30_000,
+      stepTimeoutMs: 10_000,
     },
   };
   return { server, request };
@@ -67,9 +68,7 @@ describe('Chromium local workflow integration', () => {
     ).execute(context.request);
 
     expect(result.status, JSON.stringify(result)).toBe('succeeded');
-    expect(result.attemptedStepCount).toBe(
-      context.request.workflow.steps.length,
-    );
+    expect(result.counts.attempted).toBe(context.request.workflow.steps.length);
     expect(context.server.completed()).toBe(true);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('TaskTwin sample');
@@ -114,9 +113,95 @@ describe('Chromium local workflow integration', () => {
     ).execute({ ...context.request, workflow });
 
     expect(result.status).toBe('failed');
-    expect(result.attemptedStepCount).toBe(2);
+    expect(result.counts.attempted).toBe(2);
     expect(result.failedStepId).toBe('failure');
     expect(result.steps[1]?.error?.code, JSON.stringify(result)).toBe(code);
     expect(context.server.completed()).toBe(false);
+  });
+
+  it('closes Chromium after the total run timeout', async () => {
+    const context = await fixture();
+    const navigate = context.request.workflow.steps[0];
+    if (navigate === undefined) {
+      throw new Error('Fixture must contain a navigate step.');
+    }
+    const workflow: WorkflowDefinition = {
+      ...context.request.workflow,
+      steps: [
+        navigate,
+        {
+          id: 'longWait',
+          type: 'wait',
+          name: 'Long wait',
+          durationMs: 5_000,
+        },
+        {
+          id: 'later',
+          type: 'click',
+          name: 'Later',
+          locator: { kind: 'testId', value: 'open-form' },
+        },
+      ],
+    };
+    const result = await new LocalWorkflowExecutor(
+      new PlaywrightBrowserSessionFactory(),
+    ).execute({
+      ...context.request,
+      workflow,
+      options: {
+        ...context.request.options,
+        totalTimeoutMs: 200,
+      },
+    });
+
+    expect(result.status).toBe('timed_out');
+    expect(result.terminationCause).toBe('total_timeout');
+    expect(result.steps.map((step) => step.status)).toEqual([
+      'succeeded',
+      'timed_out',
+      'skipped',
+    ]);
+  });
+
+  it('closes Chromium after cancellation during a wait', async () => {
+    const context = await fixture();
+    const navigate = context.request.workflow.steps[0];
+    if (navigate === undefined) {
+      throw new Error('Fixture must contain a navigate step.');
+    }
+    const workflow: WorkflowDefinition = {
+      ...context.request.workflow,
+      steps: [
+        navigate,
+        {
+          id: 'longWait',
+          type: 'wait',
+          name: 'Long wait',
+          durationMs: 5_000,
+        },
+        {
+          id: 'later',
+          type: 'click',
+          name: 'Later',
+          locator: { kind: 'testId', value: 'open-form' },
+        },
+      ],
+    };
+    const controller = new AbortController();
+    const cancellation = setTimeout(() => controller.abort(), 200);
+    try {
+      const result = await new LocalWorkflowExecutor(
+        new PlaywrightBrowserSessionFactory(),
+      ).execute({ ...context.request, workflow }, controller.signal);
+      expect(result.status).toBe('cancelled');
+      expect(result.terminationCause).toBe('run_cancelled');
+      expect(result.steps.map((step) => step.status)).toEqual([
+        'succeeded',
+        'cancelled',
+        'skipped',
+      ]);
+    } finally {
+      clearTimeout(cancellation);
+    }
   });
 });

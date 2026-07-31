@@ -1,3 +1,8 @@
+import {
+  resolveSelectValue,
+  resolveTextValue,
+  type RuntimeValueRecord,
+} from '@tasktwin/workflow-engine';
 import type { ElementLocator, WorkflowStep } from '@tasktwin/workflow-schema';
 import type { Page } from 'playwright';
 
@@ -8,11 +13,6 @@ import {
   assertFinalOriginAllowed,
   validateNavigationUrl,
 } from './origin-policy.js';
-import {
-  resolveSelectValue,
-  resolveTextValue,
-  type RuntimeValueMap,
-} from './value-source-resolver.js';
 
 export type SupportedWorkflowStep = Extract<
   WorkflowStep,
@@ -23,9 +23,10 @@ export type SupportedWorkflowStep = Extract<
 
 export interface StepExecutionContext {
   page: Page;
-  runtimeValues: RuntimeValueMap;
-  allowedOrigins: ReadonlySet<string>;
+  runtimeValues: RuntimeValueRecord;
+  allowedOrigins: readonly string[];
   options: BrowserExecutionOptions;
+  effectiveTimeoutMs: number;
   signal?: AbortSignal;
 }
 
@@ -37,21 +38,28 @@ export function stepLocatorKind(
 
 async function cancellableWait(
   milliseconds: number,
+  effectiveTimeoutMs: number,
   signal?: AbortSignal,
 ): Promise<void> {
   if (signal?.aborted === true) {
     throw new SafeExecutionException('EXECUTION_CANCELLED');
   }
   await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(resolve, milliseconds);
-    signal?.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timeout);
-        reject(new SafeExecutionException('EXECUTION_CANCELLED'));
-      },
-      { once: true },
-    );
+    const waitWillTimeout = milliseconds > effectiveTimeoutMs;
+    const delay = Math.min(milliseconds, effectiveTimeoutMs);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(new SafeExecutionException('EXECUTION_CANCELLED'));
+    };
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      if (waitWillTimeout) {
+        reject(new SafeExecutionException('STEP_TIMEOUT'));
+      } else {
+        resolve();
+      }
+    }, delay);
+    signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
 
@@ -73,7 +81,10 @@ export async function executeStep(
     try {
       await context.page.goto(url.href, {
         waitUntil: 'domcontentloaded',
-        timeout: context.options.navigationTimeoutMs,
+        timeout: Math.min(
+          context.options.navigationTimeoutMs,
+          context.effectiveTimeoutMs,
+        ),
       });
       assertFinalOriginAllowed(context.page.url(), context.allowedOrigins);
       return;
@@ -83,19 +94,28 @@ export async function executeStep(
   }
 
   if (step.type === 'wait') {
-    await cancellableWait(step.durationMs, context.signal);
+    await cancellableWait(
+      step.durationMs,
+      context.effectiveTimeoutMs,
+      context.signal,
+    );
     return;
   }
 
   const adapter = new PlaywrightLocatorAdapter(
     context.page,
-    context.options.actionTimeoutMs,
+    Math.min(context.options.actionTimeoutMs, context.effectiveTimeoutMs),
   );
   const locator = await adapter.resolveUnique(step.locator, context.signal);
   try {
     switch (step.type) {
       case 'click':
-        await locator.click({ timeout: context.options.actionTimeoutMs });
+        await locator.click({
+          timeout: Math.min(
+            context.options.actionTimeoutMs,
+            context.effectiveTimeoutMs,
+          ),
+        });
         return;
       case 'fill': {
         const value = resolveTextValue(
@@ -104,7 +124,10 @@ export async function executeStep(
           context.runtimeValues,
         );
         await locator.fill(value, {
-          timeout: context.options.actionTimeoutMs,
+          timeout: Math.min(
+            context.options.actionTimeoutMs,
+            context.effectiveTimeoutMs,
+          ),
         });
         return;
       }
@@ -112,13 +135,21 @@ export async function executeStep(
         const value = resolveSelectValue(step.value, context.runtimeValues);
         await locator.selectOption(
           { value },
-          { timeout: context.options.actionTimeoutMs },
+          {
+            timeout: Math.min(
+              context.options.actionTimeoutMs,
+              context.effectiveTimeoutMs,
+            ),
+          },
         );
         return;
       }
       case 'setChecked':
         await locator.setChecked(step.checked, {
-          timeout: context.options.actionTimeoutMs,
+          timeout: Math.min(
+            context.options.actionTimeoutMs,
+            context.effectiveTimeoutMs,
+          ),
         });
         return;
     }
