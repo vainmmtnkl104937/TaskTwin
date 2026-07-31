@@ -34,6 +34,9 @@ describe('Playwright browser lifecycle', () => {
     expect(session.page).toBe(context.page);
     expect(context.launcher.launch).toHaveBeenCalledWith({
       headless: true,
+      handleSIGHUP: false,
+      handleSIGINT: false,
+      handleSIGTERM: false,
       timeout: 2_000,
     });
     expect(context.browser.newContext).toHaveBeenCalledWith();

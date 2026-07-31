@@ -1,5 +1,10 @@
 import { arch, platform } from 'node:process';
 import { parseArgs } from 'node:util';
+import {
+  MAX_EXECUTION_TIMEOUT_MS,
+  MIN_EXECUTION_TIMEOUT_MS,
+} from '@tasktwin/workflow-engine';
+import { MAX_WAIT_DURATION_MS } from '@tasktwin/workflow-schema';
 
 import type { RunnerArchitecture, RunnerPlatform } from './platform-types.js';
 import { HttpRunnerControlPlaneTransport } from './control-plane-client.js';
@@ -9,6 +14,36 @@ import { validateControlPlaneOrigin } from './origin.js';
 import { LocalRunnerService, systemClock } from './runner-service.js';
 
 const RUNNER_VERSION = '0.1.0';
+
+function optionalFixtureWait(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const milliseconds = Number(value);
+  if (
+    !Number.isInteger(milliseconds) ||
+    milliseconds < 1 ||
+    milliseconds > MAX_WAIT_DURATION_MS
+  ) {
+    throw new Error('Fixture wait duration is invalid.');
+  }
+  return milliseconds;
+}
+
+function optionalTotalTimeout(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const milliseconds = Number(value);
+  if (
+    !Number.isInteger(milliseconds) ||
+    milliseconds < MIN_EXECUTION_TIMEOUT_MS ||
+    milliseconds > MAX_EXECUTION_TIMEOUT_MS
+  ) {
+    throw new Error('Fixture total timeout is invalid.');
+  }
+  return milliseconds;
+}
 
 function supportedPlatform(value: string): RunnerPlatform {
   if (value !== 'win32' && value !== 'darwin' && value !== 'linux') {
@@ -33,7 +68,7 @@ export async function runCli(
   output: { write(message: string): void } = {
     write: (message) => console.info(message),
   },
-): Promise<void> {
+): Promise<number> {
   const command = argv[0] ?? 'start';
   const parsed = parseArgs({
     args: argv.slice(1),
@@ -41,6 +76,8 @@ export async function runCli(
       origin: { type: 'string' },
       name: { type: 'string' },
       headed: { type: 'boolean' },
+      'fixture-wait-ms': { type: 'string' },
+      'total-timeout-ms': { type: 'string' },
     },
     strict: true,
   });
@@ -55,19 +92,20 @@ export async function runCli(
     case 'execute-fixture': {
       const controller = new AbortController();
       const stop = () => controller.abort();
-      process.once('SIGINT', stop);
-      process.once('SIGTERM', stop);
+      process.on('SIGINT', stop);
+      process.on('SIGTERM', stop);
       try {
-        await executeFixtureCommand(
+        return await executeFixtureCommand(
           output,
           parsed.values.headed ?? false,
           controller.signal,
+          optionalFixtureWait(parsed.values['fixture-wait-ms']),
+          optionalTotalTimeout(parsed.values['total-timeout-ms']),
         );
       } finally {
         process.off('SIGINT', stop);
         process.off('SIGTERM', stop);
       }
-      return;
     }
     case 'pair': {
       const origin = validateControlPlaneOrigin(
@@ -79,27 +117,27 @@ export async function runCli(
         platform: supportedPlatform(platform),
         architecture: supportedArchitecture(arch),
       });
-      return;
+      return 0;
     }
     case 'status':
       await service.status();
-      return;
+      return 0;
     case 'start': {
       const controller = new AbortController();
       const stop = () => controller.abort();
-      process.once('SIGINT', stop);
-      process.once('SIGTERM', stop);
+      process.on('SIGINT', stop);
+      process.on('SIGTERM', stop);
       try {
         await service.start(controller.signal);
       } finally {
         process.off('SIGINT', stop);
         process.off('SIGTERM', stop);
       }
-      return;
+      return 0;
     }
     case 'unpair':
       await service.unpair();
-      return;
+      return 0;
     default:
       throw new Error('Unknown Local Runner command.');
   }

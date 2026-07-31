@@ -7,12 +7,12 @@ import {
 
 import { SafeExecutionException } from './errors.js';
 
-export type RuntimeValueMap = ReadonlyMap<string, RuntimeInputValue>;
+export type RuntimeValueRecord = Readonly<Record<string, RuntimeInputValue>>;
 
 export function resolveValueSource(
   source: ValueSource,
   target: ValueSourceTarget,
-  runtimeValues: RuntimeValueMap,
+  runtimeValues: RuntimeValueRecord,
 ): string | number | boolean {
   const compatibility = getValueSourceCompatibility(target);
   if (source.kind === 'secret') {
@@ -25,7 +25,7 @@ export function resolveValueSource(
     }
     return source.value;
   }
-  const runtimeValue = runtimeValues.get(source.variableName);
+  const runtimeValue = runtimeValues[source.variableName];
   if (
     runtimeValue === undefined ||
     !compatibility.variableTypes.includes(runtimeValue.kind)
@@ -41,7 +41,7 @@ export function resolveValueSource(
 export function resolveTextValue(
   source: ValueSource,
   target: 'navigate.url' | 'fill.value',
-  runtimeValues: RuntimeValueMap,
+  runtimeValues: RuntimeValueRecord,
 ): string {
   const value = resolveValueSource(source, target, runtimeValues);
   if (typeof value !== 'string') {
@@ -52,7 +52,7 @@ export function resolveTextValue(
 
 export function resolveSelectValue(
   source: ValueSource,
-  runtimeValues: RuntimeValueMap,
+  runtimeValues: RuntimeValueRecord,
 ): string {
   const value = resolveValueSource(source, 'select.value', runtimeValues);
   if (typeof value !== 'string' && typeof value !== 'number') {

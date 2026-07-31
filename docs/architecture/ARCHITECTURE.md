@@ -263,6 +263,11 @@ launch, job polling, arbitrary command channel, or workflow execution.
   record contracts plus deterministic state rules. It has no filesystem,
   network, NestJS, Prisma, React, Next.js, Chrome, Playwright, or execution
   behavior.
+- `packages/workflow-engine` owns framework-independent execution contracts,
+  preflight, run and step state machines, sequential orchestration, timeout,
+  cancellation, progress, safe results, and deterministic termination rules.
+  Playwright and application-framework objects never cross its adapter
+  boundary.
 - Application packages own framework bootstrapping and presentation, without
   introducing domain behavior.
 
@@ -523,6 +528,32 @@ and fixed error codes. Runtime values, complete URLs, query parameters,
 cookies, page HTML, console payloads, and raw Playwright errors do not cross
 the reporting boundary. Control Plane job coordination and run persistence
 remain absent.
+
+## Deterministic workflow-engine boundary
+
+`@tasktwin/workflow-engine` owns execution lifecycle independently from
+Playwright. It preflights workflow structure, runtime inputs, secret
+requirements, supported steps, explicit origins, and bounded timeout options
+before calling an adapter. The engine executes only in steps-array order,
+allows one running step, stops at the first failure/cancellation/timeout, and
+creates a terminal result for every source step.
+
+The total deadline covers adapter startup and steps. Effective step timeout is
+capped by remaining total budget. Step timeout fails the run while total
+deadline expiration produces `timed_out`. Cancellation uses an external
+AbortSignal and is idempotent. Near-simultaneous termination causes are chosen
+by monotonic timestamp with a fixed tie rule: total timeout, cancellation,
+then adapter failure.
+
+The Local Runner implements `PlaywrightWorkflowExecutionAdapter`. Browser,
+BrowserContext, Page, Locator, post-navigation checks, and raw Playwright
+errors remain inside that adapter. Adapter cleanup is awaited after startup
+begins; cleanup warnings cannot replace an earlier primary failure.
+
+Progress events and final results contain only bounded identifiers, states,
+timestamps, counts, and safe codes. They never contain runtime values, secret
+references, complete URLs, raw locators, DOM content, browser objects, or raw
+errors. Execution persistence, job delivery, retry, and resume remain absent.
 
 ## Build architecture
 

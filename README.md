@@ -8,8 +8,7 @@ then run the approved workflow safely**.
 
 This repository contains the application foundation, framework-independent
 workflow and recording domain models, authenticated control-plane foundation,
-workflow-input foundation, and publish lifecycle created through Session 13. It
-provides buildable
+workflow-input foundation, and publish lifecycle. It provides buildable
 application shells, shared configuration and types, health checks, runtime
 workflow validation, local PostgreSQL development tooling, short-lived
 access-token authentication, organization-scoped workspaces, deterministic
@@ -21,6 +20,9 @@ operations, and revision-protected draft saving. Session 14 adds secure Local
 Runner pairing, separate runner credentials, heartbeat, and revocation.
 Session 15 adds validated, isolated local Chromium execution for six workflow
 step types without connecting a Control Plane job system.
+Session 16 adds a deterministic framework-independent workflow engine with
+explicit lifecycle, timeout, cancellation, progress, skipped-step, and cleanup
+semantics behind a Playwright adapter.
 It still does not poll for workflow jobs, persist workflow runs, reuse browser
 profiles, resolve secrets, or capture screenshots.
 
@@ -39,7 +41,7 @@ general-purpose operating-system control are not part of the browser-first MVP.
 | `apps/web`                      | Next.js login, workspace list, and draft editor        |
 | `apps/api`                      | NestJS control-plane APIs                              |
 | `apps/extension`                | Privacy-aware Manifest V3 browser interaction recorder |
-| `apps/local-runner`             | Node.js startup and health/status shell                |
+| `apps/local-runner`             | Paired local Chromium execution service                |
 | `packages/shared-types`         | Shared service health contract                         |
 | `packages/workflow-schema`      | Versioned workflow contracts and runtime validation    |
 | `packages/locator-engine`       | Pure locator scoring, ranking, and confidence rules    |
@@ -48,6 +50,7 @@ general-purpose operating-system control are not part of the browser-first MVP.
 | `packages/recording-converter`  | Pure recording-to-draft workflow conversion            |
 | `packages/workflow-editor-core` | Pure immutable draft editing and linear graph model    |
 | `packages/workflow-inputs`      | Variable, secret-reference, and run-input analysis     |
+| `packages/workflow-engine`      | Deterministic execution lifecycle and orchestration    |
 | `packages/database`             | Prisma identity, workflow, and recording persistence   |
 | `packages/config`               | Shared strict TypeScript and ESLint configuration      |
 | `packages/runner-protocol`      | Local Runner pairing and heartbeat contracts           |
@@ -331,3 +334,16 @@ It does not add Control Plane jobs, WorkflowRun persistence, job polling,
 persistent browser profiles, saved authentication, secret resolution,
 Extract, Verify or Approval execution, screenshots, tracing, retries, locator
 repair, AI, scheduling, or parallel execution.
+
+## Session 16 scope
+
+Session 16 adds the framework-independent deterministic workflow engine with
+explicit run and step state machines, preflight before adapter startup,
+sequential fail-fast execution, typed skipped steps, total and step timeouts,
+idempotent cancellation, safe progress events, complete validated results, and
+guaranteed cleanup reporting. Playwright remains behind the Local Runner
+adapter.
+
+It does not add Control Plane jobs, WorkflowRun persistence, polling, retries,
+resume, approval, branching, parallel execution, screenshots, traces, secret
+resolution, scheduling, or AI.
