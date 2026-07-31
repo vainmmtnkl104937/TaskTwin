@@ -37,6 +37,9 @@ export default async function WorkflowsPage({
           Role: {result.access.role}.{' '}
           {result.access.canEdit ? 'Draft editing enabled.' : 'Read only.'}
         </p>
+        <Link className="button-link" href={`/workspaces/${workspaceId}/runs`}>
+          Workflow runs
+        </Link>
       </section>
       <section className="workflow-list" aria-label="Available workflows">
         {result.workflows.map((workflow) => (

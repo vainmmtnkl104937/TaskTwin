@@ -41,6 +41,9 @@ importers:
       '@tasktwin/recording-schema':
         specifier: workspace:*
         version: link:../../packages/recording-schema
+      '@tasktwin/run-protocol':
+        specifier: workspace:*
+        version: link:../../packages/run-protocol
       '@tasktwin/runner-protocol':
         specifier: workspace:*
         version: link:../../packages/runner-protocol
@@ -50,6 +53,9 @@ importers:
       '@tasktwin/workflow-editor-core':
         specifier: workspace:*
         version: link:../../packages/workflow-editor-core
+      '@tasktwin/workflow-engine':
+        specifier: workspace:*
+        version: link:../../packages/workflow-engine
       '@tasktwin/workflow-inputs':
         specifier: workspace:*
         version: link:../../packages/workflow-inputs
@@ -145,6 +151,9 @@ importers:
       '@tasktwin/locator-engine':
         specifier: workspace:*
         version: link:../../packages/locator-engine
+      '@tasktwin/run-protocol':
+        specifier: workspace:*
+        version: link:../../packages/run-protocol
       '@tasktwin/runner-protocol':
         specifier: workspace:*
         version: link:../../packages/runner-protocol
@@ -185,6 +194,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@tasktwin/run-protocol':
+        specifier: workspace:*
+        version: link:../../packages/run-protocol
       '@tasktwin/runner-protocol':
         specifier: workspace:*
         version: link:../../packages/runner-protocol
@@ -298,12 +310,18 @@ importers:
       '@tasktwin/recording-schema':
         specifier: workspace:*
         version: link:../recording-schema
+      '@tasktwin/run-protocol':
+        specifier: workspace:*
+        version: link:../run-protocol
       '@tasktwin/runner-protocol':
         specifier: workspace:*
         version: link:../runner-protocol
       '@tasktwin/workflow-editor-core':
         specifier: workspace:*
         version: link:../workflow-editor-core
+      '@tasktwin/workflow-engine':
+        specifier: workspace:*
+        version: link:../workflow-engine
       '@tasktwin/workflow-lifecycle':
         specifier: workspace:*
         version: link:../workflow-lifecycle
@@ -425,6 +443,37 @@ importers:
       '@tasktwin/privacy-engine':
         specifier: workspace:*
         version: link:../privacy-engine
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@tasktwin/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 22.19.1
+        version: 22.19.1
+      eslint:
+        specifier: 9.39.5
+        version: 9.39.5(jiti@2.7.0)
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@22.19.1)(happy-dom@20.11.1)(vite@8.1.5(@types/node@22.19.1)(jiti@2.7.0)(terser@5.49.0))
+
+  packages/run-protocol:
+    dependencies:
+      '@tasktwin/workflow-engine':
+        specifier: workspace:*
+        version: link:../workflow-engine
+      '@tasktwin/workflow-inputs':
+        specifier: workspace:*
+        version: link:../workflow-inputs
+      '@tasktwin/workflow-schema':
+        specifier: workspace:*
+        version: link:../workflow-schema
       zod:
         specifier: 4.4.3
         version: 4.4.3

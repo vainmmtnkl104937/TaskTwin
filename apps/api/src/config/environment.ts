@@ -19,6 +19,10 @@ export interface RunnerSecurityConfiguration {
   webOrigin: string;
 }
 
+export interface RunnerJobSecurityConfiguration {
+  leasePepper: string;
+}
+
 export function loadRootEnvironment(): void {
   const rootEnvironmentPath = fileURLToPath(
     new URL('../../../../.env', import.meta.url),
@@ -124,5 +128,11 @@ export function getRunnerSecurityConfiguration(): RunnerSecurityConfiguration {
     pairingCodePepper: getRequiredSecret('RUNNER_PAIRING_CODE_PEPPER'),
     credentialPepper: getRequiredSecret('RUNNER_CREDENTIAL_PEPPER'),
     webOrigin: getHttpOrigin('TASKTWIN_WEB_BASE_URL', 'http://127.0.0.1:3000'),
+  };
+}
+
+export function getRunnerJobSecurityConfiguration(): RunnerJobSecurityConfiguration {
+  return {
+    leasePepper: getRequiredSecret('RUNNER_JOB_LEASE_PEPPER'),
   };
 }

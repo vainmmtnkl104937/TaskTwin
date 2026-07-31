@@ -5,6 +5,16 @@ import {
   RunnerDeviceListResponseSchema,
   RunnerDeviceRevokeResponseSchema,
 } from '@tasktwin/runner-protocol';
+export {
+  CreateWorkflowRunResponseSchema,
+  WorkflowRunCancellationResponseSchema,
+  WorkflowRunDetailResponseSchema,
+  WorkflowRunListResponseSchema,
+} from '@tasktwin/run-protocol';
+export type {
+  WorkflowRunDetail,
+  WorkflowRunStatus,
+} from '@tasktwin/run-protocol';
 import {
   WorkflowDefinitionSchema,
   WorkflowLifecycleStatusSchema,

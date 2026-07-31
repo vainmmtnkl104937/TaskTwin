@@ -580,3 +580,22 @@ The web editor holds temporary run-input values only in the mounted preview
 component. Secret values have no contract or UI field. File content is never
 read or uploaded; only bounded size and media-type metadata may exist until
 the preview closes.
+
+## Persisted run-dispatch boundary
+
+`@tasktwin/run-protocol` defines strict JSON contracts around the existing
+workflow-engine progress and result schemas. The API creates a WorkflowRun only
+from a validated Published WorkflowVersion whose execution needs no runtime
+variables, files, secrets or unsupported steps. Allowed origins are derived
+from literal Navigate steps and never supplied by the client.
+
+A run is assigned to one RunnerDevice in the same Workspace. Runner
+authentication identifies the device; a separate short-lived run lease
+authorizes renewal, progress and completion. Only the lease hash is stored.
+PostgreSQL row locks, serializable transactions, unique constraints and a
+partial one-active-run-per-device index protect concurrent claims.
+
+The Local Runner claims at most one run, renews its lease, executes through the
+workflow engine, uploads monotonically sequenced progress and delivers one
+validated completion. Cancellation is cooperative. Expired active runs become
+Interrupted and are never automatically requeued or executed again.

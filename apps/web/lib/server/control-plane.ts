@@ -13,6 +13,10 @@ import {
   WorkflowVersionHistoryResponseSchema,
   WorkspaceListResponseSchema,
   WorkspaceWorkflowListResponseSchema,
+  CreateWorkflowRunResponseSchema,
+  WorkflowRunCancellationResponseSchema,
+  WorkflowRunDetailResponseSchema,
+  WorkflowRunListResponseSchema,
 } from '../control-plane-contracts';
 import { getControlPlaneOrigin } from './environment';
 
@@ -245,5 +249,60 @@ export function createWorkflowDraftVersion(
     accessToken,
     `/workflows/${encodeURIComponent(workflowId)}/versions`,
     { sourceVersionId, clientCreationId },
+  );
+}
+
+export function createWorkflowRun(
+  accessToken: string,
+  workflowVersionId: string,
+  runnerDeviceId: string,
+  clientRunId: string,
+) {
+  return request(
+    `/workflow-versions/${encodeURIComponent(workflowVersionId)}/runs`,
+    CreateWorkflowRunResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        runnerDeviceId,
+        clientRunId,
+      }),
+    },
+  );
+}
+
+export function listWorkflowRuns(accessToken: string, workspaceId: string) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/workflow-runs`,
+    WorkflowRunListResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function getWorkflowRun(accessToken: string, workflowRunId: string) {
+  return request(
+    `/workflow-runs/${encodeURIComponent(workflowRunId)}`,
+    WorkflowRunDetailResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function cancelWorkflowRun(accessToken: string, workflowRunId: string) {
+  return request(
+    `/workflow-runs/${encodeURIComponent(workflowRunId)}/cancel`,
+    WorkflowRunCancellationResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ schemaVersion: 1 }),
+    },
   );
 }

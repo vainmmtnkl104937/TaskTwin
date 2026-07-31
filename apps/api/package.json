@@ -16,6 +16,7 @@
     "test:integration:runner-pairing": "vitest run test/runner-pairing.integration.spec.ts",
     "test:integration:workflow-editor": "vitest run test/workflow-editor.integration.spec.ts",
     "test:integration:workflow-lifecycle": "vitest run test/workflow-lifecycle.integration.spec.ts",
+    "test:integration:workflow-runs": "vitest run test/workflow-run-dispatch.integration.spec.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -27,9 +28,11 @@
     "@tasktwin/database": "workspace:*",
     "@tasktwin/recording-converter": "workspace:*",
     "@tasktwin/recording-schema": "workspace:*",
+    "@tasktwin/run-protocol": "workspace:*",
     "@tasktwin/runner-protocol": "workspace:*",
     "@tasktwin/shared-types": "workspace:*",
     "@tasktwin/workflow-editor-core": "workspace:*",
+    "@tasktwin/workflow-engine": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",
     "@tasktwin/workflow-lifecycle": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",

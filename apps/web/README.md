@@ -40,3 +40,8 @@ inspection and approval continue through the HTTP-only user-token server
 boundary. The web application never receives a runner device code, runner
 credential, or database digest. Only OWNER and ADMIN workspaces appear as
 approval targets and revoke controls require confirmation.
+
+Session 17 adds Published workflow run creation, required Local Runner
+selection, Workspace run history, safe run/step detail, terminal-aware polling
+and cooperative cancellation. Access tokens remain in the HTTP-only cookie and
+runner credentials or lease tokens never reach browser code.

@@ -1,9 +1,9 @@
 # TaskTwin Local Runner
 
 The Local Runner pairs with the control plane, stores one revocable runner
-credential locally, sends heartbeats, and adapts the framework-independent
-workflow engine to local Playwright execution. Control Plane jobs are not
-connected yet.
+credential locally, sends heartbeats, claims at most one assigned workflow
+run, renews its short-lived lease, and adapts the framework-independent
+workflow engine to local Playwright execution.
 
 ```powershell
 pnpm --filter @tasktwin/local-runner build
@@ -74,6 +74,11 @@ and `0600`. Windows does not apply POSIX mode bits as a complete ACL guarantee,
 so access also depends on the security of the Windows user profile. Native OS
 keychain integration and credential rotation remain out of scope.
 
-Control Plane job polling, WorkflowRun persistence, saved authentication,
-persistent profiles, secret resolution, screenshots, tracing, retries, AI,
-and scheduling remain out of scope.
+Progress is sequenced and uploaded idempotently before one validated completion
+is delivered. A cancellation request aborts the workflow engine and waits for
+browser cleanup. A stopped Runner does not re-execute work; its expired lease
+causes the Control Plane to mark the run Interrupted.
+
+Runtime input and secret delivery, saved browser authentication, persistent
+profiles, retry or resume, screenshots, tracing, AI and scheduling remain out
+of scope.

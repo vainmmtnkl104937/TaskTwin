@@ -10,6 +10,7 @@ import type { RunnerArchitecture, RunnerPlatform } from './platform-types.js';
 import { HttpRunnerControlPlaneTransport } from './control-plane-client.js';
 import { FileCredentialStore } from './file-credential-store.js';
 import { executeFixtureCommand } from './execution/fixture-command.js';
+import { PlaywrightBrowserSessionFactory } from './execution/playwright-browser-session.js';
 import { validateControlPlaneOrigin } from './origin.js';
 import { LocalRunnerService, systemClock } from './runner-service.js';
 
@@ -81,12 +82,15 @@ export async function runCli(
     },
     strict: true,
   });
+  const transport = new HttpRunnerControlPlaneTransport();
   const service = new LocalRunnerService(
     new FileCredentialStore(),
-    new HttpRunnerControlPlaneTransport(),
+    transport,
     output,
     systemClock,
     RUNNER_VERSION,
+    transport,
+    new PlaywrightBrowserSessionFactory(),
   );
   switch (command) {
     case 'execute-fixture': {

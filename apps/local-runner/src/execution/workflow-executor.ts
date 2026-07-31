@@ -20,6 +20,7 @@ export class LocalWorkflowExecutor {
   execute(
     input: unknown,
     signal?: AbortSignal,
+    executionId?: string,
   ): Promise<WorkflowExecutionResult> {
     const request = LocalExecutionRequestSchema.safeParse(input);
     if (!request.success) {
@@ -31,7 +32,8 @@ export class LocalWorkflowExecutor {
       navigationTimeoutMs: request.data.options.navigationTimeoutMs,
     });
     const engine = new WorkflowEngine(adapter, {
-      createExecutionId: randomUUID,
+      createExecutionId:
+        executionId === undefined ? randomUUID : () => executionId,
       ...(this.progressSink === undefined
         ? {}
         : { progressSink: this.progressSink }),

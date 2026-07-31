@@ -8,6 +8,18 @@ import {
   type RunnerHeartbeatResponse,
   type StoredRunnerCredential,
 } from '@tasktwin/runner-protocol';
+import {
+  LeaseRenewalResponseSchema,
+  RunnerJobClaimResponseSchema,
+  WorkflowProgressBatchResponseSchema,
+  WorkflowRunCompletionResponseSchema,
+  type LeaseRenewalResponse,
+  type RunnerJobClaimRequest,
+  type RunnerJobClaimResponse,
+  type WorkflowProgressBatch,
+  type WorkflowRunCompletionRequest,
+  type WorkflowRunCompletionResponse,
+} from '@tasktwin/run-protocol';
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
@@ -33,7 +45,33 @@ export interface RunnerControlPlaneTransport {
   ): Promise<RunnerHeartbeatResponse>;
 }
 
-export class HttpRunnerControlPlaneTransport implements RunnerControlPlaneTransport {
+export interface RunnerJobTransport {
+  claimJob(
+    credential: StoredRunnerCredential,
+    request: RunnerJobClaimRequest,
+  ): Promise<RunnerJobClaimResponse>;
+  renewJobLease(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+  ): Promise<LeaseRenewalResponse>;
+  sendProgress(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    batch: WorkflowProgressBatch,
+  ): Promise<{ acceptedThroughSequence: number; cancelRequested: boolean }>;
+  completeJob(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    completion: WorkflowRunCompletionRequest,
+  ): Promise<WorkflowRunCompletionResponse>;
+}
+
+export class HttpRunnerControlPlaneTransport
+  implements RunnerControlPlaneTransport, RunnerJobTransport
+{
   createPairingSession(
     origin: string,
     request: PairingSessionCreateRequest,
@@ -80,6 +118,88 @@ export class HttpRunnerControlPlaneTransport implements RunnerControlPlaneTransp
         body: JSON.stringify({ schemaVersion: 1, runnerVersion }),
       },
     );
+  }
+
+  claimJob(
+    credential: StoredRunnerCredential,
+    request: RunnerJobClaimRequest,
+  ): Promise<RunnerJobClaimResponse> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/jobs/claim`,
+      RunnerJobClaimResponseSchema,
+      {
+        method: 'POST',
+        headers: this.runnerHeaders(credential),
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  renewJobLease(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+  ): Promise<LeaseRenewalResponse> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/jobs/${encodeURIComponent(runId)}/lease/renew`,
+      LeaseRenewalResponseSchema,
+      {
+        method: 'POST',
+        headers: this.runnerHeaders(credential, leaseToken),
+        body: JSON.stringify({ schemaVersion: 1 }),
+      },
+    );
+  }
+
+  async sendProgress(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    batch: WorkflowProgressBatch,
+  ): Promise<{ acceptedThroughSequence: number; cancelRequested: boolean }> {
+    const response = await this.request(
+      `${credential.controlPlaneOrigin}/runner/jobs/${encodeURIComponent(runId)}/progress`,
+      WorkflowProgressBatchResponseSchema,
+      {
+        method: 'POST',
+        headers: this.runnerHeaders(credential, leaseToken),
+        body: JSON.stringify(batch),
+      },
+    );
+    return {
+      acceptedThroughSequence: response.acceptedThroughSequence,
+      cancelRequested: response.cancelRequested,
+    };
+  }
+
+  completeJob(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    completion: WorkflowRunCompletionRequest,
+  ): Promise<WorkflowRunCompletionResponse> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/jobs/${encodeURIComponent(runId)}/complete`,
+      WorkflowRunCompletionResponseSchema,
+      {
+        method: 'POST',
+        headers: this.runnerHeaders(credential, leaseToken),
+        body: JSON.stringify(completion),
+      },
+    );
+  }
+
+  private runnerHeaders(
+    credential: StoredRunnerCredential,
+    leaseToken?: string,
+  ): Record<string, string> {
+    return {
+      authorization: `TaskTwinRunner ${credential.runnerDeviceId}.${credential.credential}`,
+      'content-type': 'application/json',
+      ...(leaseToken === undefined
+        ? {}
+        : { 'x-tasktwin-run-lease': leaseToken }),
+    };
   }
 
   private async request<Result>(

@@ -36,24 +36,25 @@ general-purpose operating-system control are not part of the browser-first MVP.
 
 ## Workspaces
 
-| Workspace                       | Current purpose                                        |
-| ------------------------------- | ------------------------------------------------------ |
-| `apps/web`                      | Next.js login, workspace list, and draft editor        |
-| `apps/api`                      | NestJS control-plane APIs                              |
-| `apps/extension`                | Privacy-aware Manifest V3 browser interaction recorder |
-| `apps/local-runner`             | Paired local Chromium execution service                |
-| `packages/shared-types`         | Shared service health contract                         |
-| `packages/workflow-schema`      | Versioned workflow contracts and runtime validation    |
-| `packages/locator-engine`       | Pure locator scoring, ranking, and confidence rules    |
-| `packages/privacy-engine`       | Pure privacy classification and redaction-plan rules   |
-| `packages/recording-schema`     | Current recording artifact and sync protocol contracts |
-| `packages/recording-converter`  | Pure recording-to-draft workflow conversion            |
-| `packages/workflow-editor-core` | Pure immutable draft editing and linear graph model    |
-| `packages/workflow-inputs`      | Variable, secret-reference, and run-input analysis     |
-| `packages/workflow-engine`      | Deterministic execution lifecycle and orchestration    |
-| `packages/database`             | Prisma identity, workflow, and recording persistence   |
-| `packages/config`               | Shared strict TypeScript and ESLint configuration      |
-| `packages/runner-protocol`      | Local Runner pairing and heartbeat contracts           |
+| Workspace                       | Current purpose                                         |
+| ------------------------------- | ------------------------------------------------------- |
+| `apps/web`                      | Next.js login, workspace list, and draft editor         |
+| `apps/api`                      | NestJS control-plane APIs                               |
+| `apps/extension`                | Privacy-aware Manifest V3 browser interaction recorder  |
+| `apps/local-runner`             | Paired local Chromium execution service                 |
+| `packages/shared-types`         | Shared service health contract                          |
+| `packages/workflow-schema`      | Versioned workflow contracts and runtime validation     |
+| `packages/locator-engine`       | Pure locator scoring, ranking, and confidence rules     |
+| `packages/privacy-engine`       | Pure privacy classification and redaction-plan rules    |
+| `packages/recording-schema`     | Current recording artifact and sync protocol contracts  |
+| `packages/recording-converter`  | Pure recording-to-draft workflow conversion             |
+| `packages/workflow-editor-core` | Pure immutable draft editing and linear graph model     |
+| `packages/workflow-inputs`      | Variable, secret-reference, and run-input analysis      |
+| `packages/workflow-engine`      | Deterministic execution lifecycle and orchestration     |
+| `packages/database`             | Prisma identity, workflow, and recording persistence    |
+| `packages/config`               | Shared strict TypeScript and ESLint configuration       |
+| `packages/runner-protocol`      | Local Runner pairing and heartbeat contracts            |
+| `packages/run-protocol`         | Persisted run, lease, progress and completion contracts |
 
 The architectural direction is documented in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
@@ -113,7 +114,8 @@ pnpm workflow-editor:check
 Local Runner pairing additionally requires `RUNNER_PAIRING_CODE_PEPPER` and
 `RUNNER_CREDENTIAL_PEPPER`, each at least 32 characters, and
 `TASKTWIN_WEB_BASE_URL`. Plain HTTP is supported only for loopback
-development.
+development. Run dispatch also requires `RUNNER_JOB_LEASE_PEPPER` with at
+least 32 characters.
 
 Useful development commands:
 
@@ -347,3 +349,16 @@ adapter.
 It does not add Control Plane jobs, WorkflowRun persistence, polling, retries,
 resume, approval, branching, parallel execution, screenshots, traces, secret
 resolution, scheduling, or AI.
+
+## Session 17 scope
+
+Session 17 adds framework-independent run-dispatch contracts, transactional
+WorkflowRun and WorkflowRunStep persistence, assigned-runner claims, hashed
+renewable leases, monotonic idempotent progress batches, validated completion,
+cooperative cancellation, interruption on lease expiry, and safe Web run
+history. The Local Runner keeps one active job and executes it through the
+existing workflow engine and isolated Playwright adapter.
+
+It does not deliver runtime variables, files or secrets; requeue or retry an
+Interrupted run; add Redis, WebSocket, scheduling, parallel jobs, persistent
+browser profiles, screenshots or AI.
