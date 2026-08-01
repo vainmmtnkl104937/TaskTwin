@@ -1,4 +1,5 @@
 export const RUNNER_PROTOCOL_SCHEMA_VERSION = 1;
+export const WORKFLOW_VERIFICATION_CAPABILITY = 'workflow_verification_v1';
 export const DEFAULT_PAIRING_EXPIRES_IN_SECONDS = 600;
 export const DEFAULT_POLL_INTERVAL_SECONDS = 5;
 export const MAX_POLL_INTERVAL_SECONDS = 30;

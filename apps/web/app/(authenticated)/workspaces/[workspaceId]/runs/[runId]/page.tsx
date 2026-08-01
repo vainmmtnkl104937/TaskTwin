@@ -58,6 +58,16 @@ export default async function WorkflowRunDetailPage({
                 {step.stepType} · {step.status}
                 {step.errorCode === null ? '' : ` · ${step.errorCode}`}
               </p>
+              {step.verification === undefined ? null : (
+                <p className="metadata">
+                  Verification: {step.verification.kind} ·{' '}
+                  {step.verification.outcome} · attempts{' '}
+                  {step.verification.attemptCount}
+                  {step.verification.observedState === undefined
+                    ? ''
+                    : ` · ${step.verification.observedState}`}
+                </p>
+              )}
             </div>
           </article>
         ))}

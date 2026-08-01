@@ -16,6 +16,7 @@ import {
   type WorkflowRunStatus as ProtocolRunStatus,
 } from '@tasktwin/run-protocol';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import { WORKFLOW_VERIFICATION_CAPABILITY } from '@tasktwin/runner-protocol';
 import {
   RunInputAdditionalAuthenticatedDataSchema,
   SecureRunInputEnvelopeSchema,
@@ -88,6 +89,16 @@ function isSerializationError(error: unknown): boolean {
 }
 
 function toRecord(row: RunRow): WorkflowRunRecord {
+  const finalResult = WorkflowExecutionResultSchema.safeParse(row.finalResult);
+  const verificationByStep = new Map(
+    finalResult.success
+      ? finalResult.data.steps.flatMap((step) =>
+          step.verification === undefined
+            ? []
+            : [[step.stepId, step.verification] as const],
+        )
+      : [],
+  );
   return {
     id: row.id,
     workspaceId: row.workspaceId,
@@ -117,6 +128,9 @@ function toRecord(row: RunRow): WorkflowRunRecord {
       durationMs: step.durationMs,
       errorCode: step.errorCode,
       skippedReason: step.skippedReason,
+      ...(verificationByStep.get(step.sourceStepId) === undefined
+        ? {}
+        : { verification: verificationByStep.get(step.sourceStepId)! }),
     })),
   };
 }
@@ -294,7 +308,7 @@ export class WorkflowRunRepository {
           id: input.runnerDeviceId,
           workspaceId: version.workflow.workspaceId,
         },
-        select: { revokedAt: true },
+        select: { revokedAt: true, capabilities: true },
       });
       if (runner === null) {
         throw new WorkflowRunRepositoryError('RUNNER_MISMATCH');
@@ -317,6 +331,22 @@ export class WorkflowRunRepository {
       const readiness = analyzeWorkflowRunReadiness(parsed.data);
       if (!readiness.ready) {
         throw new WorkflowRunRepositoryError('RUN_NOT_READY', readiness);
+      }
+      if (
+        parsed.data.steps.some((step) => step.type === 'verify') &&
+        !runner.capabilities.includes(WORKFLOW_VERIFICATION_CAPABILITY)
+      ) {
+        throw new WorkflowRunRepositoryError('RUN_NOT_READY', {
+          ...readiness,
+          ready: false,
+          issues: [
+            ...readiness.issues,
+            {
+              code: 'RUNNER_CAPABILITY_UNAVAILABLE',
+              message: 'The selected Runner cannot execute Verify steps.',
+            },
+          ],
+        });
       }
       const executionOptions = {
         totalTimeoutMs: DEFAULT_RUN_TOTAL_TIMEOUT_MS,

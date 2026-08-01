@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { RunnerCapabilitiesSchema } from '@tasktwin/secure-run-inputs';
+import {
+  RunnerCapabilitySchema as SecureInputRunnerCapabilitySchema,
+  RunnerEncryptionKeyRegistrationRequestSchema,
+  RunnerEncryptionKeyRegistrationResponseSchema,
+  RunnerPublicKeyMetadataSchema,
+} from '@tasktwin/secure-run-inputs';
 
 import {
   DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
@@ -7,12 +12,35 @@ import {
   OPAQUE_CODE_PATTERN,
   RUNNER_PROTOCOL_SCHEMA_VERSION,
   USER_CODE_PATTERN,
+  WORKFLOW_VERIFICATION_CAPABILITY,
 } from './constants.js';
 
 const UuidSchema = z.string().uuid();
 const IsoDateSchema = z.string().datetime({ offset: true });
 const OpaqueCodeSchema = z.string().regex(OPAQUE_CODE_PATTERN);
 const UserCodeSchema = z.string().regex(USER_CODE_PATTERN);
+
+export const RunnerCapabilitySchema = z.union([
+  SecureInputRunnerCapabilitySchema,
+  z.literal(WORKFLOW_VERIFICATION_CAPABILITY),
+]);
+export const RunnerCapabilitiesSchema = z
+  .array(RunnerCapabilitySchema)
+  .max(3)
+  .superRefine((values, context) => {
+    if (new Set(values).size !== values.length) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Capabilities must be unique.',
+      });
+    }
+  });
+
+export {
+  RunnerEncryptionKeyRegistrationRequestSchema,
+  RunnerEncryptionKeyRegistrationResponseSchema,
+  RunnerPublicKeyMetadataSchema,
+};
 
 export const ControlPlaneOriginSchema = z
   .string()
@@ -238,6 +266,7 @@ export const StoredRunnerCredentialSchema = z.strictObject({
 });
 
 export type RunnerDeviceMetadata = z.infer<typeof RunnerDeviceMetadataSchema>;
+export type RunnerCapability = z.infer<typeof RunnerCapabilitySchema>;
 export type PairingStatus = z.infer<typeof PairingStatusSchema>;
 export type RunnerConnectionStatus = z.infer<
   typeof RunnerConnectionStatusSchema

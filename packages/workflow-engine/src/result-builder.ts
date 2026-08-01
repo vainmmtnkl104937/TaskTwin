@@ -1,4 +1,5 @@
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
+import type { SafeVerificationResult } from '@tasktwin/workflow-verification';
 
 import {
   TerminalStepStatusSchema,
@@ -21,6 +22,7 @@ export interface ExecutionStepRecord {
   finishedAtMs?: number;
   skippedReason?: SkippedStepReason;
   error?: SafeExecutionError;
+  verification?: SafeVerificationResult;
 }
 
 export interface FinalResultInput {
@@ -39,7 +41,11 @@ export interface FinalResultInput {
 function locatorKind(
   step: WorkflowDefinition['steps'][number],
 ): StepExecutionResult['locatorKind'] {
-  return 'locator' in step ? step.locator.kind : undefined;
+  if ('locator' in step) return step.locator.kind;
+  if (step.type === 'verify' && 'locator' in step.assertion) {
+    return step.assertion.locator.kind;
+  }
+  return undefined;
 }
 
 function stepResult(record: ExecutionStepRecord): StepExecutionResult {
@@ -65,6 +71,9 @@ function stepResult(record: ExecutionStepRecord): StepExecutionResult {
       ? {}
       : { skippedReason: record.skippedReason }),
     ...(record.error === undefined ? {} : { error: record.error }),
+    ...(record.verification === undefined
+      ? {}
+      : { verification: record.verification }),
   };
 }
 

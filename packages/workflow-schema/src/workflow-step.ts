@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { ElementLocatorSchema } from './element-locator.js';
 import {
   IdentifierSchema,
+  MAX_VERIFICATION_TIMEOUT_MS,
   MAX_WAIT_DURATION_MS,
+  MIN_VERIFICATION_TIMEOUT_MS,
   NonEmptyStringSchema,
 } from './primitives.js';
 import { ValueSourceSchema } from './value-source.js';
@@ -84,6 +86,12 @@ export const VerifyStepSchema = z.strictObject({
   ...baseStepShape,
   type: z.literal('verify'),
   assertion: WorkflowAssertionSchema,
+  timeoutMs: z
+    .number()
+    .int()
+    .min(MIN_VERIFICATION_TIMEOUT_MS)
+    .max(MAX_VERIFICATION_TIMEOUT_MS)
+    .optional(),
 });
 
 export const ApprovalStepSchema = z.strictObject({

@@ -82,10 +82,14 @@ describe('publish readiness', () => {
         code: 'UNUSED_VARIABLE',
         severity: 'warning',
       }),
+      expect.objectContaining({
+        code: 'OUTCOME_VERIFICATION_MISSING',
+        severity: 'warning',
+      }),
     ]);
     expect(result.summary).toMatchObject({
       blockingCount: 0,
-      warningCount: 1,
+      warningCount: 2,
       stepCount: 1,
       variableCount: 2,
     });
@@ -170,6 +174,7 @@ describe('publish readiness', () => {
       'UNKNOWN_VARIABLE_REFERENCE',
       'UNUSED_VARIABLE',
       'UNUSED_VARIABLE',
+      'OUTCOME_VERIFICATION_MISSING',
     ]);
   });
 });

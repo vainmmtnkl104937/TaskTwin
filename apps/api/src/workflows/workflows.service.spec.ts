@@ -237,6 +237,61 @@ describe('WorkflowsService', () => {
     expect(updateDraft).not.toHaveBeenCalled();
   });
 
+  it('saves valid Verify rules and rejects secret expectations', async () => {
+    const verified = definition();
+    verified.steps = [
+      {
+        id: 'verify-result',
+        type: 'verify',
+        name: 'Verify result',
+        assertion: {
+          kind: 'text',
+          locator: { kind: 'testId', value: 'result' },
+          matchMode: 'exact',
+          expected: { kind: 'literal', value: 'Completed' },
+        },
+        timeoutMs: 5_000,
+      },
+    ];
+    const updateDraft = vi.fn().mockResolvedValue({
+      workflowVersion: { ...detail(), definition: verified },
+    });
+    const service = new WorkflowsService({
+      updateDraft,
+    } as unknown as WorkflowDraftRepository);
+
+    await expect(
+      service.updateDraft(userId, versionId, {
+        expectedRevision: 1,
+        definition: verified,
+      }),
+    ).resolves.toMatchObject({ workflowVersion: { definition: verified } });
+
+    const invalid = structuredClone(verified);
+    const verify = invalid.steps[0];
+    if (verify?.type !== 'verify' || verify.assertion.kind !== 'text') {
+      throw new Error('Expected text Verify step.');
+    }
+    verify.assertion.expected = {
+      kind: 'secret',
+      secretName: 'privateExpectation',
+    };
+    await expect(
+      service.updateDraft(userId, versionId, {
+        expectedRevision: 1,
+        definition: invalid,
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'WORKFLOW_INPUT_VALIDATION_FAILED',
+        issues: expect.arrayContaining([
+          expect.objectContaining({ code: 'SECRET_SOURCE_NOT_ALLOWED' }),
+        ]),
+      },
+    });
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+  });
+
   it('maps stale, non-draft and forbidden writes to safe HTTP errors', async () => {
     const updateDraft = vi
       .fn()

@@ -1,5 +1,6 @@
 import { WorkflowRunInputSubmissionSchema } from '@tasktwin/workflow-inputs';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import { SafeVerificationResultSchema } from '@tasktwin/workflow-verification';
 import { z } from 'zod';
 
 import {
@@ -65,6 +66,7 @@ export const SkippedStepReasonSchema = z.enum([
   'preflight_failed',
   'adapter_start_failed',
   'prior_step_failed',
+  'previous_step_failed',
   'run_cancelled',
   'run_timed_out',
 ]);
@@ -107,6 +109,10 @@ export const ExecutionErrorCodeSchema = z.enum([
   'RESOURCE_CLEANUP_FAILED',
   'INVALID_RUN_TRANSITION',
   'INVALID_STEP_TRANSITION',
+  'VERIFICATION_RULE_INVALID',
+  'VERIFICATION_EXPECTATION_INVALID',
+  'VERIFICATION_NOT_MATCHED',
+  'VERIFICATION_TARGET_UNSUPPORTED',
 ]);
 
 export const SafeExecutionErrorSchema = z.strictObject({
@@ -160,6 +166,7 @@ export const StepExecutionResultSchema = z
       .optional(),
     skippedReason: SkippedStepReasonSchema.optional(),
     error: SafeExecutionErrorSchema.optional(),
+    verification: SafeVerificationResultSchema.optional(),
   })
   .superRefine((result, context) => {
     if (result.status === 'skipped' && result.skippedReason === undefined) {

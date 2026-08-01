@@ -6,6 +6,8 @@ import {
 } from '@tasktwin/secure-run-inputs';
 import {
   StoredRunnerCredentialSchema,
+  WORKFLOW_VERIFICATION_CAPABILITY,
+  type RunnerCapability,
   type RunnerDeviceMetadata,
   type StoredRunnerCredential,
 } from '@tasktwin/runner-protocol';
@@ -224,14 +226,18 @@ export class LocalRunnerService {
     }
   }
 
-  private capabilities() {
-    if (this.keyManager === undefined) return [];
-    return [
-      SECURE_INPUT_CAPABILITIES[0],
-      ...(this.secretProvider?.isAvailable() === true
-        ? [SECURE_INPUT_CAPABILITIES[1]]
-        : []),
-    ];
+  private capabilities(): RunnerCapability[] {
+    const capabilities: RunnerCapability[] = [];
+    if (this.browserSessions !== undefined) {
+      capabilities.push(WORKFLOW_VERIFICATION_CAPABILITY);
+    }
+    if (this.keyManager !== undefined) {
+      capabilities.push(SECURE_INPUT_CAPABILITIES[0]);
+      if (this.secretProvider?.isAvailable() === true) {
+        capabilities.push(SECURE_INPUT_CAPABILITIES[1]);
+      }
+    }
+    return capabilities;
   }
 }
 

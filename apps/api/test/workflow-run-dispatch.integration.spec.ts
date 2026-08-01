@@ -41,6 +41,7 @@ interface Identity {
 const suffix = randomUUID();
 const workflowId = `session17-${suffix}`;
 const secureWorkflowId = `session18-${suffix}`;
+const verificationWorkflowId = `session19-${suffix}`;
 const credentialPepper = 'session17-credential-pepper-value-safe';
 const leasePepper = 'session17-run-lease-pepper-value-safe';
 const pairingPepper = 'session17-pairing-pepper-value-safe-123';
@@ -94,6 +95,35 @@ function secureDefinition(): WorkflowDefinition {
   };
 }
 
+function verificationDefinition(): WorkflowDefinition {
+  return {
+    schemaVersion: 1,
+    workflowId: verificationWorkflowId,
+    version: 1,
+    name: 'Session 19 verification fixture',
+    status: 'published',
+    variables: [],
+    steps: [
+      {
+        id: 'navigate',
+        type: 'navigate',
+        name: 'Navigate',
+        url: { kind: 'literal', value: 'http://127.0.0.1:4177/result' },
+      },
+      {
+        id: 'verify-url',
+        type: 'verify',
+        name: 'Verify URL',
+        assertion: {
+          kind: 'url',
+          matchMode: 'origin_and_path',
+          expected: { kind: 'literal', value: 'http://127.0.0.1:4177/result' },
+        },
+      },
+    ],
+  };
+}
+
 describe('workflow run dispatch integration', () => {
   let app: INestApplication;
   let prisma: PrismaClient;
@@ -103,6 +133,7 @@ describe('workflow run dispatch integration', () => {
   let publishedVersionId: string;
   let draftVersionId: string;
   let secureVersionId: string;
+  let verificationVersionId: string;
   let runnerDeviceId: string;
   let runnerCredential: string;
   const userIds: string[] = [];
@@ -205,6 +236,25 @@ describe('workflow run dispatch integration', () => {
       select: { versions: { select: { id: true } } },
     });
     secureVersionId = secureWorkflow.versions[0]!.id;
+    const verificationWorkflow = await prisma.workflow.create({
+      data: {
+        id: verificationWorkflowId,
+        workspaceId: owner.workspace.id,
+        name: 'Session 19 verification fixture',
+        versions: {
+          create: {
+            version: 1,
+            status: 'published',
+            schemaVersion: 1,
+            definition: verificationDefinition(),
+            publishedAt: new Date(),
+            publishedById: owner.user.id,
+          },
+        },
+      },
+      select: { versions: { select: { id: true } } },
+    });
+    verificationVersionId = verificationWorkflow.versions[0]!.id;
 
     const pairing = await request(app.getHttpServer())
       .post('/runner-pairing/sessions')
@@ -240,19 +290,41 @@ describe('workflow run dispatch integration', () => {
       where: { workflowVersion: { workflowId: secureWorkflowId } },
     });
     await prisma.workflowRunProgressBatch.deleteMany({
-      where: { workflowRun: { workflowId } },
+      where: {
+        workflowRun: {
+          workflowId: {
+            in: [workflowId, secureWorkflowId, verificationWorkflowId],
+          },
+        },
+      },
     });
     await prisma.workflowRunStep.deleteMany({
-      where: { workflowRun: { workflowId } },
+      where: {
+        workflowRun: {
+          workflowId: {
+            in: [workflowId, secureWorkflowId, verificationWorkflowId],
+          },
+        },
+      },
     });
     await prisma.workflowRun.deleteMany({
-      where: { workflowId: { in: [workflowId, secureWorkflowId] } },
+      where: {
+        workflowId: {
+          in: [workflowId, secureWorkflowId, verificationWorkflowId],
+        },
+      },
     });
     await prisma.workflowVersion.deleteMany({
-      where: { workflowId: { in: [workflowId, secureWorkflowId] } },
+      where: {
+        workflowId: {
+          in: [workflowId, secureWorkflowId, verificationWorkflowId],
+        },
+      },
     });
     await prisma.workflow.deleteMany({
-      where: { id: { in: [workflowId, secureWorkflowId] } },
+      where: {
+        id: { in: [workflowId, secureWorkflowId, verificationWorkflowId] },
+      },
     });
     await prisma.runnerEncryptionKey.deleteMany({ where: { runnerDeviceId } });
     await prisma.runnerCredential.deleteMany({ where: { runnerDeviceId } });
@@ -854,5 +926,40 @@ describe('workflow run dispatch integration', () => {
     expect(claimed.body.job.runId).toBe(prepared.workflowRunId);
     expect(claimed.body.job.runtimeInput.kind).toBe('encrypted_envelope');
     expect(JSON.stringify(claimed.body)).not.toContain(plaintextValue);
+  });
+
+  it('rejects an incompatible Runner and accepts verification capability', async () => {
+    const requestBody = {
+      schemaVersion: 1,
+      runnerDeviceId,
+      clientRunId: randomUUID(),
+    };
+    await request(app.getHttpServer())
+      .post(`/workflow-versions/${verificationVersionId}/runs`)
+      .set(auth(owner))
+      .send(requestBody)
+      .expect(409)
+      .expect(({ body }) => {
+        expect(JSON.stringify(body)).toContain('RUNNER_CAPABILITY_UNAVAILABLE');
+      });
+
+    await request(app.getHttpServer())
+      .post('/runner/heartbeat')
+      .set(runnerAuth())
+      .send({
+        schemaVersion: 1,
+        runnerVersion: '0.1.0',
+        capabilities: ['secure_input_envelope_v1', 'workflow_verification_v1'],
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post(`/workflow-versions/${verificationVersionId}/runs`)
+      .set(auth(owner))
+      .send({ ...requestBody, clientRunId: randomUUID() })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.run.steps).toHaveLength(2);
+      });
   });
 });

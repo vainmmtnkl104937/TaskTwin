@@ -627,3 +627,25 @@ Secret aliases are resolved by an attended no-echo local prompt; secret values
 never pass through Web or Control Plane. Secret leases and mutable buffers are
 disposed on terminal paths. JavaScript string memory cannot be guaranteed to
 be immediately zeroized.
+
+## Deterministic workflow verification boundary
+
+`@tasktwin/workflow-verification` defines framework-independent verification
+contracts, semantic analysis, URL normalization, text normalization, and safe
+outcomes. It extends the versioned workflow `VerifyStep` contract instead of
+introducing a second step format. Supported rules are deliberately limited to
+URL, text, visibility, field value, and checked state.
+
+The workflow engine performs verification preflight before adapter startup and
+preserves sequential fail-fast, timeout, cancellation, skipped-step, and
+cleanup behavior. Playwright querying and polling remain inside the Local
+Runner adapter. Element rules require one unique locator, except that an
+absent target satisfies a hidden assertion. Expected and observed values,
+complete URLs, raw locators, and Playwright errors never cross the safe-report
+boundary.
+
+Runner devices advertise `workflow_verification_v1` only when their execution
+adapter supports this behavior. Run preparation and direct dispatch reject a
+Verify workflow assigned to a Runner without that capability. No persistence
+migration is required because Verify remains part of the existing versioned
+workflow JSON and safe per-step results use the existing final-result JSON.

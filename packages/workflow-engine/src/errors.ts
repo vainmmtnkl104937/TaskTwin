@@ -3,6 +3,7 @@ import {
   type ExecutionErrorCode,
   type SafeExecutionError,
 } from './contracts.js';
+import type { SafeVerificationResult } from '@tasktwin/workflow-verification';
 
 const SAFE_MESSAGES = {
   INVALID_EXECUTION_REQUEST: 'The workflow execution request is invalid.',
@@ -32,6 +33,10 @@ const SAFE_MESSAGES = {
   RESOURCE_CLEANUP_FAILED: 'Execution resources could not be closed cleanly.',
   INVALID_RUN_TRANSITION: 'The run state transition is invalid.',
   INVALID_STEP_TRANSITION: 'The step state transition is invalid.',
+  VERIFICATION_RULE_INVALID: 'The verification rule is invalid.',
+  VERIFICATION_EXPECTATION_INVALID: 'The verification expectation is invalid.',
+  VERIFICATION_NOT_MATCHED: 'The verification outcome did not match.',
+  VERIFICATION_TARGET_UNSUPPORTED: 'The verification target is not supported.',
 } as const satisfies Record<ExecutionErrorCode, string>;
 
 export function safeError(code: ExecutionErrorCode): SafeExecutionError {
@@ -43,12 +48,14 @@ export function safeError(code: ExecutionErrorCode): SafeExecutionError {
 
 export class SafeExecutionException extends Error {
   readonly safe: SafeExecutionError;
+  readonly verification: SafeVerificationResult | undefined;
 
-  constructor(code: ExecutionErrorCode) {
+  constructor(code: ExecutionErrorCode, verification?: SafeVerificationResult) {
     const details = safeError(code);
     super(details.message);
     this.name = 'SafeExecutionException';
     this.safe = details;
+    this.verification = verification;
   }
 }
 

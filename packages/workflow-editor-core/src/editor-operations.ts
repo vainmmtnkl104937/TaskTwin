@@ -1,5 +1,7 @@
 import type {
   ApprovalStep,
+  ElementLocator,
+  VerifyStep,
   WaitStep,
   WorkflowDefinition,
   WorkflowStep,
@@ -93,6 +95,65 @@ export function addApprovalStep(
   return insertWorkflowStep(workflow, index, {
     ...input,
     type: 'approval',
+  });
+}
+
+export interface ReusableStepLocator {
+  stepId: string;
+  stepName: string;
+  locator: ElementLocator;
+}
+
+export function listReusableStepLocators(
+  workflow: WorkflowDefinition,
+): ReusableStepLocator[] {
+  return workflow.steps.flatMap((step) => {
+    const locator =
+      'locator' in step
+        ? step.locator
+        : step.type === 'verify' && 'locator' in step.assertion
+          ? step.assertion.locator
+          : undefined;
+    return locator === undefined
+      ? []
+      : [{ stepId: step.id, stepName: step.name, locator }];
+  });
+}
+
+export function addUrlVerifyStep(
+  workflow: WorkflowDefinition,
+  input: Pick<VerifyStep, 'id' | 'name'>,
+  index = workflow.steps.length,
+): WorkflowDefinition {
+  return insertWorkflowStep(workflow, index, {
+    ...input,
+    type: 'verify',
+    assertion: {
+      kind: 'url',
+      matchMode: 'origin_and_path',
+      expected: { kind: 'literal', value: 'https://example.com/' },
+    },
+    timeoutMs: 5_000,
+  });
+}
+
+export function addElementVerifyStep(
+  workflow: WorkflowDefinition,
+  sourceStepId: string,
+  input: Pick<VerifyStep, 'id' | 'name'>,
+  index = workflow.steps.length,
+): WorkflowDefinition {
+  const source = listReusableStepLocators(workflow).find(
+    (item) => item.stepId === sourceStepId,
+  );
+  if (source === undefined) {
+    throw new Error(`Reusable workflow locator not found: ${sourceStepId}`);
+  }
+  return insertWorkflowStep(workflow, index, {
+    ...input,
+    type: 'verify',
+    assertion: { kind: 'visible', locator: { ...source.locator } },
+    timeoutMs: 5_000,
   });
 }
 

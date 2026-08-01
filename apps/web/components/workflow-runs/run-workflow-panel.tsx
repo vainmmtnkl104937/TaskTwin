@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { WORKFLOW_VERIFICATION_CAPABILITY } from '@tasktwin/runner-protocol';
 import type {
   RunInputPreparationMetadata,
   SecureRunInputManifest,
@@ -23,6 +24,7 @@ export function RunWorkflowPanel({
   workflowVersionId,
   runners,
   manifest,
+  requiresVerification,
 }: {
   workspaceId: string;
   workflowVersionId: string;
@@ -33,18 +35,20 @@ export function RunWorkflowPanel({
     capabilities: string[];
   }>;
   manifest: SecureRunInputManifest;
+  requiresVerification?: boolean;
 }) {
   const router = useRouter();
   const requiresSecureInputs =
     manifest.variables.length > 0 || manifest.secrets.length > 0;
-  const compatibleRunners = requiresSecureInputs
-    ? runners.filter(
-        (runner) =>
-          runner.capabilities.includes('secure_input_envelope_v1') &&
+  const compatibleRunners = runners.filter(
+    (runner) =>
+      (requiresVerification !== true ||
+        runner.capabilities.includes(WORKFLOW_VERIFICATION_CAPABILITY)) &&
+      (!requiresSecureInputs ||
+        (runner.capabilities.includes('secure_input_envelope_v1') &&
           (manifest.secrets.length === 0 ||
-            runner.capabilities.includes('interactive_secret_prompt_v1')),
-      )
-    : runners;
+            runner.capabilities.includes('interactive_secret_prompt_v1')))),
+  );
   const [runnerId, setRunnerId] = useState(compatibleRunners[0]?.id ?? '');
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState(false);

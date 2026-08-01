@@ -204,4 +204,83 @@ describe('Chromium local workflow integration', () => {
       clearTimeout(cancellation);
     }
   });
+
+  it('fails an incorrect text verification and skips later browser steps', async () => {
+    const context = await fixture();
+    const privateExpected = 'Incorrect private expectation';
+    const workflow: WorkflowDefinition = {
+      ...context.request.workflow,
+      steps: context.request.workflow.steps.map((candidate) =>
+        candidate.id === 'verifySuccessText' && candidate.type === 'verify'
+          ? {
+              ...candidate,
+              timeoutMs: 200,
+              assertion: {
+                kind: 'text',
+                locator: { kind: 'testId', value: 'final-result' },
+                matchMode: 'exact',
+                expected: { kind: 'literal', value: privateExpected },
+              },
+            }
+          : candidate,
+      ),
+    };
+    const result = await new LocalWorkflowExecutor(
+      new PlaywrightBrowserSessionFactory(),
+    ).execute({ ...context.request, workflow });
+
+    expect(result.status).toBe('failed');
+    expect(result.failedStepId).toBe('verifySuccessText');
+    expect(
+      result.steps.find((step) => step.stepId === 'verifySuccessText')?.error
+        ?.code,
+    ).toBe('VERIFICATION_NOT_MATCHED');
+    expect(
+      result.steps
+        .slice(
+          result.steps.findIndex(
+            (step) => step.stepId === 'verifySuccessText',
+          ) + 1,
+        )
+        .every((step) => step.status === 'skipped'),
+    ).toBe(true);
+    expect(JSON.stringify(result)).not.toContain(privateExpected);
+    expect(JSON.stringify(result)).not.toContain('Fixture completed');
+  });
+
+  it('cancels bounded verification polling and closes Chromium', async () => {
+    const context = await fixture();
+    const navigate = context.request.workflow.steps[0];
+    if (navigate?.type !== 'navigate') {
+      throw new Error('Fixture must start with Navigate.');
+    }
+    const workflow: WorkflowDefinition = {
+      ...context.request.workflow,
+      steps: [
+        navigate,
+        {
+          id: 'longVerification',
+          type: 'verify',
+          name: 'Wait for absent outcome',
+          assertion: {
+            kind: 'visible',
+            locator: { kind: 'testId', value: 'never-visible' },
+          },
+          timeoutMs: 5_000,
+        },
+      ],
+    };
+    const controller = new AbortController();
+    const cancellation = setTimeout(() => controller.abort(), 200);
+    try {
+      const result = await new LocalWorkflowExecutor(
+        new PlaywrightBrowserSessionFactory(),
+      ).execute({ ...context.request, workflow }, controller.signal);
+      expect(result.status).toBe('cancelled');
+      expect(result.steps[1]?.status).toBe('cancelled');
+      expect(JSON.stringify(result)).not.toContain('never-visible');
+    } finally {
+      clearTimeout(cancellation);
+    }
+  });
 });

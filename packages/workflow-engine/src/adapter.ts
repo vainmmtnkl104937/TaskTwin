@@ -1,4 +1,5 @@
 import type { WorkflowStep } from '@tasktwin/workflow-schema';
+import type { SafeVerificationResult } from '@tasktwin/workflow-verification';
 
 import type {
   SafeExecutionError,
@@ -26,10 +27,14 @@ export interface AdapterStopContext {
   terminationCause: TerminationCause;
 }
 
+export interface AdapterStepOutput {
+  verification?: SafeVerificationResult;
+}
+
 export interface WorkflowExecutionAdapter {
   readonly supportedStepTypes: readonly WorkflowStepType[];
   validateStep(step: WorkflowStep): void;
   start(context: AdapterStartContext): Promise<void>;
-  executeStep(context: AdapterStepContext): Promise<void>;
+  executeStep(context: AdapterStepContext): Promise<AdapterStepOutput | void>;
   stop(context: AdapterStopContext): Promise<SafeExecutionError | null>;
 }

@@ -1,5 +1,6 @@
 export type {
   AdapterStartContext,
+  AdapterStepOutput,
   AdapterStepContext,
   AdapterStopContext,
   WorkflowExecutionAdapter,

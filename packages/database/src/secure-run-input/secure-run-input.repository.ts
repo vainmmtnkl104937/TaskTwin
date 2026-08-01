@@ -20,6 +20,7 @@ import {
   type RunnerPublicKeyMetadata,
   type SecureRunInputEnvelope,
 } from '@tasktwin/secure-run-inputs';
+import { WORKFLOW_VERIFICATION_CAPABILITY } from '@tasktwin/runner-protocol';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
 
 import {
@@ -248,6 +249,12 @@ export class SecureRunInputRepository {
         throw new SecureRunInputRepositoryError('RUNNER_UNAVAILABLE');
       }
       if (!runner.capabilities.includes(SECURE_INPUT_CAPABILITIES[0])) {
+        throw new SecureRunInputRepositoryError('CAPABILITY_UNAVAILABLE');
+      }
+      if (
+        parsed.data.steps.some((step) => step.type === 'verify') &&
+        !runner.capabilities.includes(WORKFLOW_VERIFICATION_CAPABILITY)
+      ) {
         throw new SecureRunInputRepositoryError('CAPABILITY_UNAVAILABLE');
       }
       if (

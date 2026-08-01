@@ -29,6 +29,11 @@ Progress and results contain identifiers, statuses, timestamps, fixed error
 codes, counts, and safe warnings only. Runtime values, secrets, full URLs,
 locators, framework objects, and raw errors are excluded.
 
+Verify steps return only value-free verification metadata through the generic
+adapter result. A mismatch fails the step and run, later steps are skipped,
+and cancellation or total timeout still wins through the existing termination
+arbiter. The engine does not read DOM state and does not import Playwright.
+
 ## Verification
 
 ```powershell

@@ -26,6 +26,7 @@
     "@tasktwin/workflow-engine": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
+    "@tasktwin/workflow-verification": "workspace:*",
     "playwright": "1.62.0",
     "zod": "4.4.3"
   },

@@ -7,6 +7,7 @@ import type {
   WorkflowExecutionAdapter,
   WorkflowExecutionRequest,
   WorkflowStepType,
+  AdapterStepOutput,
 } from '../src/index.js';
 import { SafeExecutionException } from '../src/index.js';
 
@@ -47,7 +48,13 @@ export function executionRequest(
   };
 }
 
-export type StepBehavior = 'succeed' | 'fail' | 'timeout' | 'wait-for-abort';
+export type StepBehavior =
+  | 'succeed'
+  | 'fail'
+  | 'timeout'
+  | 'wait-for-abort'
+  | 'verify-succeed'
+  | 'verify-fail';
 
 export class FakeAdapter implements WorkflowExecutionAdapter {
   readonly supportedStepTypes = [
@@ -57,6 +64,7 @@ export class FakeAdapter implements WorkflowExecutionAdapter {
     'select',
     'setChecked',
     'wait',
+    'verify',
   ] as const satisfies readonly WorkflowStepType[];
   readonly executed: string[] = [];
   readonly effectiveTimeouts: number[] = [];
@@ -80,7 +88,9 @@ export class FakeAdapter implements WorkflowExecutionAdapter {
     }
   }
 
-  async executeStep(context: AdapterStepContext): Promise<void> {
+  async executeStep(
+    context: AdapterStepContext,
+  ): Promise<AdapterStepOutput | void> {
     this.executed.push(context.step.id);
     this.effectiveTimeouts.push(context.effectiveTimeoutMs);
     this.activeSteps += 1;
@@ -95,6 +105,25 @@ export class FakeAdapter implements WorkflowExecutionAdapter {
           throw new SafeExecutionException('ACTION_TIMEOUT');
         case 'wait-for-abort':
           await rejectOnAbort(context.signal);
+          return;
+        case 'verify-succeed':
+          return {
+            verification: {
+              schemaVersion: 1,
+              kind: 'text',
+              outcome: 'matched',
+              attemptCount: 1,
+              durationMs: 1,
+            },
+          };
+        case 'verify-fail':
+          throw new SafeExecutionException('VERIFICATION_NOT_MATCHED', {
+            schemaVersion: 1,
+            kind: 'text',
+            outcome: 'not_matched',
+            attemptCount: 2,
+            durationMs: 100,
+          });
       }
     } finally {
       this.activeSteps -= 1;

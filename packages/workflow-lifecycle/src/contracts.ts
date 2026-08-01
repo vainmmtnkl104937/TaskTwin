@@ -50,6 +50,8 @@ export const PublishReadinessIssueCodeSchema = z.enum([
   'SECRET_SOURCE_NOT_ALLOWED',
   'UNSAFE_SECRET_REFERENCE',
   'UNUSED_VARIABLE',
+  'INVALID_VERIFICATION',
+  'OUTCOME_VERIFICATION_MISSING',
 ]);
 
 export const PublishReadinessIssueSchema = z.strictObject({
