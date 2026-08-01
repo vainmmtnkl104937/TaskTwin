@@ -80,7 +80,7 @@ export class PlaywrightLocatorAdapter {
     signal?: AbortSignal,
   ): Promise<Locator> {
     validateExecutableLocator(locator);
-    const playwrightLocator = this.map(locator);
+    const playwrightLocator = this.create(locator);
     try {
       await playwrightLocator.first().waitFor({
         state: 'attached',
@@ -106,7 +106,8 @@ export class PlaywrightLocatorAdapter {
     }
   }
 
-  private map(locator: ElementLocator): Locator {
+  create(locator: ElementLocator): Locator {
+    validateExecutableLocator(locator);
     switch (locator.kind) {
       case 'testId': {
         const attribute = locator.attribute ?? 'data-testid';

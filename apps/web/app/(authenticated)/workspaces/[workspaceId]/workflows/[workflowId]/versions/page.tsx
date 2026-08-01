@@ -54,7 +54,15 @@ export default async function WorkflowVersionHistoryPage({
           const detail = await getWorkflowVersion(accessToken, version.id);
           return [
             version.id,
-            deriveSecureRunInputManifest(detail.workflowVersion.definition),
+            {
+              manifest: deriveSecureRunInputManifest(
+                detail.workflowVersion.definition,
+              ),
+              requiresVerification:
+                detail.workflowVersion.definition.steps.some(
+                  (step) => step.type === 'verify',
+                ),
+            },
           ] as const;
         }),
     ),
@@ -114,7 +122,10 @@ export default async function WorkflowVersionHistoryPage({
                 <RunWorkflowPanel
                   workspaceId={workspaceId}
                   workflowVersionId={version.id}
-                  manifest={runInputManifests.get(version.id)!}
+                  manifest={runInputManifests.get(version.id)!.manifest}
+                  requiresVerification={
+                    runInputManifests.get(version.id)!.requiresVerification
+                  }
                   runners={runners.devices
                     .filter((device) => device.connectionStatus !== 'revoked')
                     .map((device) => ({

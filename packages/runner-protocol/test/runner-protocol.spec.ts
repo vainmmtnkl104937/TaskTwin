@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ControlPlaneOriginSchema,
   PairingPollingResponseSchema,
+  RunnerHeartbeatRequestSchema,
   RunnerDeviceMetadataSchema,
   StoredRunnerCredentialSchema,
   canTransitionPairingStatus,
@@ -17,6 +18,25 @@ const metadata = {
   runnerVersion: '0.1.0',
   installationId: '32f7a31d-e6ab-476a-80bc-13b9be58df5f',
 } as const;
+
+describe('runner capabilities', () => {
+  it('accepts workflow_verification_v1 and rejects duplicates', () => {
+    expect(
+      RunnerHeartbeatRequestSchema.parse({
+        schemaVersion: 1,
+        runnerVersion: '0.1.0',
+        capabilities: ['workflow_verification_v1'],
+      }).capabilities,
+    ).toEqual(['workflow_verification_v1']);
+    expect(
+      RunnerHeartbeatRequestSchema.safeParse({
+        schemaVersion: 1,
+        runnerVersion: '0.1.0',
+        capabilities: ['workflow_verification_v1', 'workflow_verification_v1'],
+      }).success,
+    ).toBe(false);
+  });
+});
 
 describe('runner device metadata', () => {
   it('accepts the bounded allowlist', () => {

@@ -20,6 +20,7 @@
   "dependencies": {
     "@tasktwin/workflow-inputs": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
+    "@tasktwin/workflow-verification": "workspace:*",
     "zod": "4.4.3"
   },
   "devDependencies": {

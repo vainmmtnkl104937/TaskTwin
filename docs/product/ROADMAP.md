@@ -247,6 +247,20 @@ requeue, resume, Redis, WebSocket, scheduling and parallel jobs.
 Session 18 excludes files, persistent secrets, key rotation, OS keychains,
 retry/resume, saved browser authentication and AI.
 
+## Session 19: deterministic outcome verification
+
+- Framework-independent verification contracts and semantic analysis
+- URL origin and origin-plus-path verification
+- Exact and contains text verification
+- Visibility, field-value, and checked-state verification
+- Bounded cancellable Playwright polling with unique locators
+- Value-free results and fail-fast workflow integration
+- Runner capability advertisement and dispatch compatibility checks
+- Read-only locator editing for explicit Verify steps
+
+Session 19 excludes visual comparison, regex, custom JavaScript, XPath,
+automatic verification generation, locator repair, screenshots and AI.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

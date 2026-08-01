@@ -565,4 +565,44 @@ describe('WorkflowEditor', () => {
       await screen.findByText(/Draft saved at revision 2/),
     ).toBeInTheDocument();
   });
+
+  it('adds URL and locator-reuse Verify steps without exposing locator editing', async () => {
+    const user = userEvent.setup();
+    render(<WorkflowEditor detail={detail()} workspaceId="workspace" />);
+
+    await user.click(screen.getByRole('button', { name: 'Add URL Verify' }));
+    expect(screen.getByLabelText('URL match mode')).toBeEnabled();
+    expect(
+      screen.getByLabelText('Verification timeout (milliseconds)'),
+    ).toHaveValue(5000);
+
+    await user.selectOptions(
+      screen.getByLabelText('Locator source step'),
+      'step-click',
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Add Element Verify' }),
+    );
+    expect(screen.getByText('Read-only locator')).toBeInTheDocument();
+    expect(screen.getByText('Kind: testId')).toBeInTheDocument();
+    expect(screen.queryByLabelText('CSS selector')).not.toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByLabelText('Verification kind'),
+      'text',
+    );
+    expect(screen.getByLabelText('Text match mode')).toBeEnabled();
+    expect(
+      within(screen.getByRole('group', { name: 'Expected text' })).queryByRole(
+        'option',
+        { name: 'Secret reference' },
+      ),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(
+      screen.getByLabelText('Verification timeout (milliseconds)'),
+      { target: { value: '99' } },
+    );
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+  });
 });

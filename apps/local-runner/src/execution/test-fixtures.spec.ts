@@ -177,13 +177,10 @@ describe('local execution validation and preflight', () => {
   it('rejects unsupported steps before browser launch', () => {
     const input = request([
       {
-        id: 'verify',
-        type: 'verify',
-        name: 'Verify',
-        assertion: {
-          kind: 'visible',
-          locator: { kind: 'text', value: 'Complete' },
-        },
+        id: 'approval',
+        type: 'approval',
+        name: 'Approval',
+        message: 'Approval is not executable.',
       },
     ]);
     input.workflow.variables = [];

@@ -4,6 +4,7 @@ import {
   WorkflowProgressEventSchema,
 } from '@tasktwin/workflow-engine';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import { SafeVerificationResultSchema } from '@tasktwin/workflow-verification';
 import {
   RunInputPreparationResponseSchema,
   RunInputAdditionalAuthenticatedDataSchema,
@@ -72,6 +73,7 @@ export const RunReadinessIssueCodeSchema = z.enum([
   'NAVIGATION_URL_MUST_BE_LITERAL',
   'INVALID_NAVIGATION_URL',
   'NO_ALLOWED_ORIGIN',
+  'RUNNER_CAPABILITY_UNAVAILABLE',
 ]);
 
 export const RunReadinessIssueSchema = z.strictObject({
@@ -119,6 +121,7 @@ export const SafeRunStepMetadataSchema = z.strictObject({
   durationMs: z.number().int().nonnegative().nullable(),
   errorCode: z.string().trim().min(1).max(80).nullable(),
   skippedReason: z.string().trim().min(1).max(80).nullable(),
+  verification: SafeVerificationResultSchema.optional(),
 });
 
 export const SafeWorkflowRunMetadataSchema = z.strictObject({

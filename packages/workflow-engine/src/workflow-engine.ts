@@ -15,7 +15,7 @@ import {
   timestampFromMs,
   type WorkflowEngineClock,
 } from './clock.js';
-import { safeError, toSafeError } from './errors.js';
+import { SafeExecutionException, safeError, toSafeError } from './errors.js';
 import {
   findTypedWorkflow,
   preflightWorkflowExecution,
@@ -422,7 +422,7 @@ export class WorkflowEngine {
           this.transitionStep(record, steps, 'running', executionId, progress);
           let stepError: SafeExecutionError | null = null;
           try {
-            await this.adapter.executeStep({
+            const output = await this.adapter.executeStep({
               executionId,
               valueResolver: prepared.valueResolver,
               allowedOrigins: prepared.allowedOrigins,
@@ -435,8 +435,16 @@ export class WorkflowEngine {
               signal: controller.signal,
               step: record.step,
             });
+            if (output?.verification !== undefined) {
+              record.verification = output.verification;
+            }
           } catch (error: unknown) {
             stepError = toSafeError(error, 'ACTION_FAILED');
+            if (error instanceof SafeExecutionException) {
+              if (error.verification !== undefined) {
+                record.verification = error.verification;
+              }
+            }
           }
           recordDeadlineIfElapsed();
           if (stepError !== null) {

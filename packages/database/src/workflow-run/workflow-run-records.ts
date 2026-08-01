@@ -1,4 +1,5 @@
 import type {
+  StepExecutionResult,
   WorkflowExecutionResult,
   WorkflowProgressEvent,
 } from '@tasktwin/workflow-engine';
@@ -20,6 +21,7 @@ export interface WorkflowRunStepRecord {
   durationMs: number | null;
   errorCode: string | null;
   skippedReason: string | null;
+  verification?: StepExecutionResult['verification'];
 }
 
 export interface WorkflowRunRecord {

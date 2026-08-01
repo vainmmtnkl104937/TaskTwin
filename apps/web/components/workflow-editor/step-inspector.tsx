@@ -6,6 +6,7 @@ import type {
   ElementLocator,
   ValueSource,
   VerifyStep,
+  WorkflowAssertion,
   WorkflowStep,
   WorkflowVariable,
 } from '@tasktwin/workflow-schema';
@@ -52,42 +53,184 @@ function VerifyFields({
   onValueSourceChange(target: ValueSourceTarget, source: ValueSource): void;
 }) {
   const assertion = step.assertion;
-  if (assertion.kind === 'visible' || assertion.kind === 'hidden') {
-    return <p className="reference-summary">Assertion: {assertion.kind}</p>;
-  }
-
   return (
     <div className="reference-summary">
       <p>Assertion: {assertion.kind}</p>
+      {'locator' in assertion ? (
+        <label>
+          Verification kind
+          <select
+            value={assertion.kind}
+            disabled={readOnly}
+            onChange={(event) => {
+              const kind = event.currentTarget.value as
+                'visible' | 'hidden' | 'text' | 'value' | 'checked';
+              const locator = assertion.locator;
+              let nextAssertion: WorkflowAssertion;
+              switch (kind) {
+                case 'visible':
+                  nextAssertion = { kind: 'visible', locator };
+                  break;
+                case 'hidden':
+                  nextAssertion = { kind: 'hidden', locator };
+                  break;
+                case 'text':
+                  nextAssertion = {
+                    kind: 'text',
+                    locator,
+                    matchMode: 'exact',
+                    expected: { kind: 'literal', value: '' },
+                  };
+                  break;
+                case 'value':
+                  nextAssertion = {
+                    kind: 'value',
+                    locator,
+                    expected: { kind: 'literal', value: '' },
+                  };
+                  break;
+                case 'checked':
+                  nextAssertion = { kind: 'checked', locator, expected: true };
+                  break;
+              }
+              onChange({ ...step, assertion: nextAssertion });
+            }}
+          >
+            <option value="visible">visible</option>
+            <option value="hidden">hidden</option>
+            <option value="text">text</option>
+            <option value="value">field value</option>
+            <option value="checked">checked state</option>
+          </select>
+        </label>
+      ) : null}
+
+      {assertion.kind === 'url' ? (
+        <>
+          <label>
+            URL match mode
+            <select
+              value={
+                assertion.matchMode ??
+                (assertion.operator === 'equals' ? 'origin_and_path' : 'origin')
+              }
+              disabled={readOnly}
+              onChange={(event) =>
+                onChange({
+                  ...step,
+                  assertion: {
+                    kind: 'url',
+                    matchMode: event.currentTarget.value as
+                      'origin' | 'origin_and_path',
+                    expected: assertion.expected,
+                  },
+                })
+              }
+            >
+              <option value="origin">origin</option>
+              <option value="origin_and_path">origin and path</option>
+            </select>
+          </label>
+          <ValueSourceField
+            label="Expected URL"
+            source={assertion.expected}
+            target="verify.url.expected"
+            variables={variables}
+            readOnly={readOnly}
+            summarizeStringLiteral={summarizeNavigateUrl}
+            onChange={(expected) =>
+              onValueSourceChange('verify.url.expected', expected)
+            }
+          />
+        </>
+      ) : null}
+
+      {assertion.kind === 'text' ? (
+        <>
+          <label>
+            Text match mode
+            <select
+              value={
+                assertion.matchMode ??
+                (assertion.operator === 'equals' ? 'exact' : 'contains')
+              }
+              disabled={readOnly}
+              onChange={(event) =>
+                onChange({
+                  ...step,
+                  assertion: {
+                    kind: 'text',
+                    locator: assertion.locator,
+                    matchMode: event.currentTarget.value as
+                      'exact' | 'contains',
+                    expected: assertion.expected,
+                  },
+                })
+              }
+            >
+              <option value="exact">exact</option>
+              <option value="contains">contains</option>
+            </select>
+          </label>
+          <ValueSourceField
+            label="Expected text"
+            source={assertion.expected}
+            target="verify.text.expected"
+            variables={variables}
+            readOnly={readOnly}
+            onChange={(expected) =>
+              onValueSourceChange('verify.text.expected', expected)
+            }
+          />
+        </>
+      ) : null}
+
+      {assertion.kind === 'value' ? (
+        <ValueSourceField
+          label="Expected field value"
+          source={assertion.expected}
+          target="verify.value.expected"
+          variables={variables}
+          readOnly={readOnly}
+          onChange={(expected) =>
+            onValueSourceChange('verify.value.expected', expected)
+          }
+        />
+      ) : null}
+
+      {assertion.kind === 'checked' ? (
+        <label className="checkbox-field">
+          <input
+            type="checkbox"
+            checked={assertion.expected}
+            disabled={readOnly}
+            onChange={(event) =>
+              onChange({
+                ...step,
+                assertion: {
+                  ...assertion,
+                  expected: event.currentTarget.checked,
+                },
+              })
+            }
+          />
+          Expected checked state
+        </label>
+      ) : null}
+
       <label>
-        Operator
-        <select
-          value={assertion.operator}
+        Verification timeout (milliseconds)
+        <input
+          type="number"
+          min={100}
+          max={60_000}
+          value={step.timeoutMs ?? 5_000}
           disabled={readOnly}
           onChange={(event) =>
-            onChange({
-              ...step,
-              assertion: {
-                ...assertion,
-                operator: event.currentTarget.value as 'equals' | 'contains',
-              },
-            })
+            onChange({ ...step, timeoutMs: Number(event.currentTarget.value) })
           }
-        >
-          <option value="equals">equals</option>
-          <option value="contains">contains</option>
-        </select>
+        />
       </label>
-      <ValueSourceField
-        label="Expected value"
-        source={assertion.expected}
-        target={`verify.${assertion.kind}.expected`}
-        variables={variables}
-        readOnly={readOnly}
-        onChange={(expected) =>
-          onValueSourceChange(`verify.${assertion.kind}.expected`, expected)
-        }
-      />
     </div>
   );
 }

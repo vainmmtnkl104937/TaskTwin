@@ -375,3 +375,13 @@ aliases are prompted locally without echo and disposed after execution.
 It does not transfer files, send secret values through Web or API, persist
 plaintext inputs, rotate keys, use an OS keychain, retry or resume runs, or add
 AI.
+
+## Session 19 scope
+
+Session 19 adds deterministic URL, text, visibility, field-value, and
+checked-state verification. Verify steps use bounded cancellable polling,
+unique read-only locators, safe value-free reporting, Runner capability
+gating, and the existing fail-fast workflow lifecycle.
+
+It does not add visual comparison, regular expressions, custom JavaScript,
+XPath, automatic verification generation, locator repair, screenshots, or AI.

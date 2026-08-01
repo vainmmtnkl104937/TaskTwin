@@ -8,6 +8,11 @@ import {
   WorkflowDefinitionSchema,
   type WorkflowDefinition,
 } from '@tasktwin/workflow-schema';
+import {
+  analyzeWorkflowVerifications,
+  normalizeVerificationText,
+  normalizeVerificationUrl,
+} from '@tasktwin/workflow-verification';
 import { z } from 'zod';
 
 import type { WorkflowExecutionAdapter } from './adapter.js';
@@ -122,6 +127,9 @@ export function preflightWorkflowExecution(
   if (inputAnalysis.hasBlockingIssues) {
     return failure('INVALID_WORKFLOW', workflow);
   }
+  if (analyzeWorkflowVerifications(workflow).issues.length > 0) {
+    return failure('VERIFICATION_RULE_INVALID', workflow);
+  }
   if (externalResolver === undefined) {
     if (inputAnalysis.secretRequirements.length > 0) {
       return failure('SECRET_RESOLUTION_UNAVAILABLE', workflow);
@@ -192,6 +200,35 @@ export function preflightWorkflowExecution(
         resolveTextWithResolver(step.value, 'fill.value', valueResolver);
       } else if (step.type === 'select') {
         resolveSelectWithResolver(step.value, valueResolver);
+      } else if (step.type === 'verify') {
+        const assertion = step.assertion;
+        if (
+          assertion.kind === 'url' ||
+          assertion.kind === 'text' ||
+          assertion.kind === 'value'
+        ) {
+          const target = `verify.${assertion.kind}.expected` as const;
+          const expected = valueResolver.resolve(assertion.expected, target);
+          if (assertion.kind === 'url') {
+            if (
+              typeof expected !== 'string' ||
+              !normalizeVerificationUrl(expected).ok
+            ) {
+              throw new SafeExecutionException(
+                'VERIFICATION_EXPECTATION_INVALID',
+              );
+            }
+          } else if (assertion.kind === 'text') {
+            if (
+              typeof expected !== 'string' ||
+              normalizeVerificationText(expected) === null
+            ) {
+              throw new SafeExecutionException(
+                'VERIFICATION_EXPECTATION_INVALID',
+              );
+            }
+          }
+        }
       }
     }
   } catch (error: unknown) {

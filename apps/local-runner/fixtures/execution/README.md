@@ -1,7 +1,7 @@
 # Local execution fixture
 
 This loopback-only fixture exercises Navigate, Click, Fill, Select, SetChecked,
-Wait, and final form submission through the Session 16 workflow engine and
+Wait, explicit URL/text/value/checked verification, and final form submission through the Session 19 workflow engine and
 Playwright adapter. The workflow and runtime input JSON files are validated
 before Chromium launches.
 

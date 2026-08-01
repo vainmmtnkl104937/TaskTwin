@@ -43,6 +43,13 @@ sequentially through `@tasktwin/workflow-engine` and stop at the first failure.
 Every source step receives a terminal result; unattempted steps are skipped
 with a typed reason.
 
+Verify reads current URL, normalized rendered text, visibility, non-password
+field value, or checked state without mutating the page. It uses fixed bounded
+polling, the step AbortSignal, and the smaller of its own timeout and the
+engine's effective timeout. The Runner advertises
+`workflow_verification_v1` only when this Playwright executor is available.
+Verification results contain no observed or expected value.
+
 Execution requires an explicit HTTP/HTTPS origin allowlist. Navigation rejects
 credential-bearing URLs, unsafe schemes, disallowed destinations, and a final
 redirect outside the allowlist. Locators must match exactly one element and

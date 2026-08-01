@@ -10,6 +10,7 @@ import {
   WorkflowDefinitionSchema,
   type WorkflowDefinition,
 } from '@tasktwin/workflow-schema';
+import { analyzeWorkflowVerifications } from '@tasktwin/workflow-verification';
 
 import { RUN_PROTOCOL_SCHEMA_VERSION } from './constants.js';
 import {
@@ -24,6 +25,7 @@ const SUPPORTED_STEPS = new Set([
   'select',
   'setChecked',
   'wait',
+  'verify',
 ]);
 
 function issue(
@@ -74,6 +76,14 @@ export function analyzeWorkflowRunReadiness(
       issue(
         'INVALID_WORKFLOW_DEFINITION',
         'The workflow has invalid input references.',
+      ),
+    );
+  }
+  if (analyzeWorkflowVerifications(workflow).issues.length > 0) {
+    issues.push(
+      issue(
+        'INVALID_WORKFLOW_DEFINITION',
+        'The workflow contains an invalid verification rule.',
       ),
     );
   }

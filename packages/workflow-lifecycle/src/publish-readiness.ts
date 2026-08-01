@@ -1,5 +1,6 @@
 import { analyzeWorkflowInputs } from '@tasktwin/workflow-inputs';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import { analyzeWorkflowVerifications } from '@tasktwin/workflow-verification';
 
 import {
   MAX_LIFECYCLE_ISSUES,
@@ -54,6 +55,14 @@ const ISSUE_DETAILS = {
   UNUSED_VARIABLE: {
     severity: 'warning',
     message: 'A workflow variable is not referenced by any step.',
+  },
+  INVALID_VERIFICATION: {
+    severity: 'blocking',
+    message: 'A Verify step contains an invalid or unsafe rule.',
+  },
+  OUTCOME_VERIFICATION_MISSING: {
+    severity: 'warning',
+    message: 'The workflow has no valid explicit outcome verification.',
   },
 } as const satisfies Record<
   PublishReadinessIssueCode,
@@ -180,6 +189,25 @@ export function analyzePublishReadiness(
         : { variableName: issue.variableName }),
     };
   });
+  const verification = analyzeWorkflowVerifications(parsed.data);
+  issues.push(
+    ...verification.issues.map((issue) => ({
+      code: 'INVALID_VERIFICATION' as const,
+      severity: 'blocking' as const,
+      message: ISSUE_DETAILS.INVALID_VERIFICATION.message,
+      path: issue.path,
+      stepId: issue.stepId,
+      stepIndex: issue.stepIndex,
+    })),
+  );
+  if (!verification.hasValidVerification) {
+    issues.push({
+      code: 'OUTCOME_VERIFICATION_MISSING',
+      severity: 'warning',
+      message: ISSUE_DETAILS.OUTCOME_VERIFICATION_MISSING.message,
+      path: ['steps'],
+    });
+  }
   const blockingCount = issues.filter(
     (issue) => issue.severity === 'blocking',
   ).length;

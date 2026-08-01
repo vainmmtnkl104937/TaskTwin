@@ -105,6 +105,17 @@ describe('encrypted runtime input Chromium integration', () => {
           value: { kind: 'literal', value: 'second' },
         },
         {
+          id: 'verifyField',
+          type: 'verify',
+          name: 'Verify encrypted runtime field',
+          assertion: {
+            kind: 'value',
+            locator: { kind: 'label', value: 'Customer name', exact: true },
+            expected: { kind: 'variable', variableName: 'customerName' },
+          },
+          timeoutMs: 5_000,
+        },
+        {
           id: 'check',
           type: 'setChecked',
           name: 'Check',

@@ -83,16 +83,13 @@ describe('workflow engine preflight', () => {
   });
 
   it('rejects unsupported steps before adapter startup', async () => {
-    const request = executionRequest(['verify']);
+    const request = executionRequest(['approval']);
     request.workflow.steps = [
       {
-        id: 'verify',
-        type: 'verify',
-        name: 'Verify',
-        assertion: {
-          kind: 'visible',
-          locator: { kind: 'text', value: 'Complete' },
-        },
+        id: 'approval',
+        type: 'approval',
+        name: 'Approval',
+        message: 'Approval is not executable.',
       },
     ];
     const context = run(request);

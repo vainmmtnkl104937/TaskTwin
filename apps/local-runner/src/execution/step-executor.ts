@@ -4,6 +4,7 @@ import {
   type WorkflowRuntimeValueResolver,
 } from '@tasktwin/workflow-engine';
 import type { ElementLocator, WorkflowStep } from '@tasktwin/workflow-schema';
+import type { SafeVerificationResult } from '@tasktwin/workflow-verification';
 import type { Page } from 'playwright';
 
 import type { BrowserExecutionOptions } from './contracts.js';
@@ -13,11 +14,19 @@ import {
   assertFinalOriginAllowed,
   validateNavigationUrl,
 } from './origin-policy.js';
+import { executeVerification } from './verification-executor.js';
 
 export type SupportedWorkflowStep = Extract<
   WorkflowStep,
   {
-    type: 'navigate' | 'click' | 'fill' | 'select' | 'setChecked' | 'wait';
+    type:
+      | 'navigate'
+      | 'click'
+      | 'fill'
+      | 'select'
+      | 'setChecked'
+      | 'wait'
+      | 'verify';
   }
 >;
 
@@ -33,7 +42,10 @@ export interface StepExecutionContext {
 export function stepLocatorKind(
   step: SupportedWorkflowStep,
 ): ElementLocator['kind'] | undefined {
-  return 'locator' in step ? step.locator.kind : undefined;
+  if ('locator' in step) return step.locator.kind;
+  return step.type === 'verify' && 'locator' in step.assertion
+    ? step.assertion.locator.kind
+    : undefined;
 }
 
 async function cancellableWait(
@@ -66,7 +78,7 @@ async function cancellableWait(
 export async function executeStep(
   step: SupportedWorkflowStep,
   context: StepExecutionContext,
-): Promise<void> {
+): Promise<{ verification?: SafeVerificationResult } | void> {
   if (context.signal?.aborted === true) {
     throw new SafeExecutionException('EXECUTION_CANCELLED');
   }
@@ -100,6 +112,18 @@ export async function executeStep(
       context.signal,
     );
     return;
+  }
+
+  if (step.type === 'verify') {
+    return {
+      verification: await executeVerification(step, {
+        page: context.page,
+        valueResolver: context.valueResolver,
+        effectiveTimeoutMs: context.effectiveTimeoutMs,
+        actionTimeoutMs: context.options.actionTimeoutMs,
+        ...(context.signal === undefined ? {} : { signal: context.signal }),
+      }),
+    };
   }
 
   const adapter = new PlaywrightLocatorAdapter(

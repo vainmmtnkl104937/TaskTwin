@@ -23,6 +23,17 @@ non-empty `name`. Version 1 supports:
 - `verify`
 - `approval`
 
+`verify` retains the existing `assertion` discriminated union and now supports
+URL origin/origin-and-path, normalized text, visible/hidden, exact field value,
+and checked-state rules. A Verify step may define a bounded `timeoutMs` from
+100 through 60,000 milliseconds. Secret and file expectation semantics are
+validated by `@tasktwin/workflow-verification`.
+
+Legacy text `equals`/`contains` operators remain readable. Legacy URL `equals`
+normalizes to origin-and-path. URL or field-value `contains` has no safe
+Session 19 equivalent and is blocked from save, publish and execution until
+the rule is edited.
+
 `setChecked` represents a deterministic resulting checkbox or radio state:
 
 ```json

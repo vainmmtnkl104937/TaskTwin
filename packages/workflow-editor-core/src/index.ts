@@ -1,14 +1,20 @@
 export {
   addApprovalStep,
+  addElementVerifyStep,
+  addUrlVerifyStep,
   addWaitStep,
   insertWorkflowStep,
+  listReusableStepLocators,
   moveWorkflowStepDown,
   moveWorkflowStepUp,
   removeWorkflowStep,
   updateWorkflowMetadata,
   updateWorkflowStep,
 } from './editor-operations.js';
-export type { WorkflowMetadataUpdate } from './editor-operations.js';
+export type {
+  ReusableStepLocator,
+  WorkflowMetadataUpdate,
+} from './editor-operations.js';
 
 export { deriveLinearGraph } from './graph-model.js';
 export type {

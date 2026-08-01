@@ -8,6 +8,7 @@ import {
   RunStatusSchema,
   RunStepStatusSchema,
   SetCheckedStepSchema,
+  VerifyStepSchema,
   ValueSourceSchema,
   WorkflowDefinitionSchema,
   WorkflowLifecycleStatusSchema,
@@ -121,6 +122,71 @@ describe('WorkflowDefinitionSchema', () => {
         },
         checked: true,
       }).success,
+    ).toBe(false);
+  });
+
+  it('accepts canonical Verify rules and a bounded timeout', () => {
+    for (const assertion of [
+      {
+        kind: 'url',
+        matchMode: 'origin',
+        expected: { kind: 'literal', value: 'https://example.com/path' },
+      },
+      {
+        kind: 'text',
+        locator: { kind: 'testId', value: 'result' },
+        matchMode: 'contains',
+        expected: { kind: 'literal', value: 'Done' },
+      },
+      {
+        kind: 'visible',
+        locator: { kind: 'testId', value: 'result' },
+      },
+      {
+        kind: 'hidden',
+        locator: { kind: 'testId', value: 'pending' },
+      },
+      {
+        kind: 'value',
+        locator: { kind: 'label', value: 'Customer name' },
+        expected: { kind: 'literal', value: 'Sample' },
+      },
+      {
+        kind: 'checked',
+        locator: { kind: 'label', value: 'Confirm' },
+        expected: false,
+      },
+    ]) {
+      expect(
+        VerifyStepSchema.safeParse({
+          id: 'verify',
+          type: 'verify',
+          name: 'Verify',
+          assertion,
+          timeoutMs: 5_000,
+        }).success,
+      ).toBe(true);
+    }
+  });
+
+  it('rejects invalid Verify combinations and timeout values', () => {
+    const base = {
+      id: 'verify',
+      type: 'verify',
+      name: 'Verify',
+      assertion: {
+        kind: 'url',
+        matchMode: 'origin',
+        operator: 'equals',
+        expected: { kind: 'literal', value: 'https://example.com/' },
+      },
+    };
+    expect(VerifyStepSchema.safeParse(base).success).toBe(false);
+    expect(VerifyStepSchema.safeParse({ ...base, timeoutMs: 99 }).success).toBe(
+      false,
+    );
+    expect(
+      VerifyStepSchema.safeParse({ ...base, timeoutMs: 60_001 }).success,
     ).toBe(false);
   });
 

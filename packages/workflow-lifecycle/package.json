@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@tasktwin/workflow-inputs": "workspace:*",
+    "@tasktwin/workflow-verification": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "zod": "4.4.3"
   },

@@ -19,7 +19,8 @@
   },
   "dependencies": {
     "@tasktwin/workflow-inputs": "workspace:*",
-    "@tasktwin/workflow-schema": "workspace:*"
+    "@tasktwin/workflow-schema": "workspace:*",
+    "@tasktwin/workflow-verification": "workspace:*"
   },
   "devDependencies": {
     "@tasktwin/config": "workspace:*",

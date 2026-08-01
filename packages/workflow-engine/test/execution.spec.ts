@@ -56,6 +56,37 @@ describe('workflow execution orchestration', () => {
     expect(result.steps[2]?.skippedReason).toBe('prior_step_failed');
   });
 
+  it('continues after Verify success and stops safely after Verify failure', async () => {
+    const request = executionRequest(['before', 'verify', 'after']);
+    request.workflow.steps[1] = {
+      id: 'verify',
+      type: 'verify',
+      name: 'Verify outcome',
+      assertion: {
+        kind: 'text',
+        locator: { kind: 'testId', value: 'result' },
+        matchMode: 'exact',
+        expected: { kind: 'literal', value: 'not-returned' },
+      },
+      timeoutMs: 500,
+    };
+
+    const successAdapter = new FakeAdapter();
+    successAdapter.behavior.set('verify', 'verify-succeed');
+    const success = await engine(successAdapter).execute(request);
+    expect(success.status).toBe('succeeded');
+    expect(success.steps[1]?.verification?.outcome).toBe('matched');
+
+    const failureAdapter = new FakeAdapter();
+    failureAdapter.behavior.set('verify', 'verify-fail');
+    const failure = await engine(failureAdapter).execute(request);
+    expect(failure.status).toBe('failed');
+    expect(failure.steps[1]?.error?.code).toBe('VERIFICATION_NOT_MATCHED');
+    expect(failure.steps[1]?.verification?.outcome).toBe('not_matched');
+    expect(failure.steps[2]?.status).toBe('skipped');
+    expect(JSON.stringify(failure)).not.toContain('not-returned');
+  });
+
   it('preserves a primary step error when cleanup also fails', async () => {
     const adapter = new FakeAdapter();
     adapter.behavior.set('second', 'fail');

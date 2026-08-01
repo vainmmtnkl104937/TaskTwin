@@ -21,7 +21,9 @@ export type {
 
 export {
   IdentifierSchema,
+  MAX_VERIFICATION_TIMEOUT_MS,
   MAX_WAIT_DURATION_MS,
+  MIN_VERIFICATION_TIMEOUT_MS,
   NonEmptyStringSchema,
   SecretReferenceNameSchema,
 } from './primitives.js';
@@ -46,18 +48,24 @@ export type {
 
 export {
   AssertionOperatorSchema,
+  CheckedAssertionSchema,
   HiddenAssertionSchema,
   TextAssertionSchema,
+  TextMatchModeSchema,
   UrlAssertionSchema,
+  UrlMatchModeSchema,
   ValueAssertionSchema,
   VisibleAssertionSchema,
   WorkflowAssertionSchema,
 } from './workflow-assertion.js';
 export type {
   AssertionOperator,
+  CheckedAssertion,
   HiddenAssertion,
   TextAssertion,
+  TextMatchMode,
   UrlAssertion,
+  UrlMatchMode,
   ValueAssertion,
   VisibleAssertion,
   WorkflowAssertion,

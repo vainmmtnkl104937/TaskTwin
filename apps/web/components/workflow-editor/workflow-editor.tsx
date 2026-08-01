@@ -2,10 +2,13 @@
 
 import {
   addApprovalStep,
+  addElementVerifyStep,
+  addUrlVerifyStep,
   addWaitStep,
   moveWorkflowStepDown,
   moveWorkflowStepUp,
   removeWorkflowStep,
+  listReusableStepLocators,
   updateStepValueSource,
   updateWorkflowMetadata,
   updateWorkflowStep,
@@ -58,6 +61,13 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
   const [showRunInputs, setShowRunInputs] = useState(false);
   const [pendingDeleteStepId, setPendingDeleteStepId] = useState<string | null>(
     null,
+  );
+  const reusableLocators = useMemo(
+    () => listReusableStepLocators(definition),
+    [definition],
+  );
+  const [locatorSourceStepId, setLocatorSourceStepId] = useState(
+    reusableLocators[0]?.stepId ?? '',
   );
   const readOnly =
     !detail.access.canEdit || detail.workflowVersion.status !== 'draft';
@@ -175,6 +185,24 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
         id,
         name: 'Approval',
         message: 'Review and approve before continuing.',
+      }),
+    );
+    setSelectedStepId(id);
+  }
+
+  function addUrlVerify(): void {
+    const id = `step-${crypto.randomUUID()}`;
+    apply(addUrlVerifyStep(definition, { id, name: 'Verify current URL' }));
+    setSelectedStepId(id);
+  }
+
+  function addElementVerify(): void {
+    if (locatorSourceStepId === '') return;
+    const id = `step-${crypto.randomUUID()}`;
+    apply(
+      addElementVerifyStep(definition, locatorSourceStepId, {
+        id,
+        name: 'Verify element is visible',
       }),
     );
     setSelectedStepId(id);
@@ -318,6 +346,34 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
               </button>
               <button type="button" onClick={addApproval} disabled={readOnly}>
                 Add Approval
+              </button>
+              <button type="button" onClick={addUrlVerify} disabled={readOnly}>
+                Add URL Verify
+              </button>
+              <select
+                aria-label="Locator source step"
+                value={locatorSourceStepId}
+                disabled={readOnly || reusableLocators.length === 0}
+                onChange={(event) =>
+                  setLocatorSourceStepId(event.currentTarget.value)
+                }
+              >
+                {reusableLocators.map((item) => (
+                  <option key={item.stepId} value={item.stepId}>
+                    {item.stepName}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={addElementVerify}
+                disabled={
+                  readOnly ||
+                  reusableLocators.length === 0 ||
+                  locatorSourceStepId === ''
+                }
+              >
+                Add Element Verify
               </button>
             </div>
           </div>

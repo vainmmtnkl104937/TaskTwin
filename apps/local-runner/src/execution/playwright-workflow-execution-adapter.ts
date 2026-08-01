@@ -2,6 +2,7 @@ import {
   SafeExecutionException,
   type AdapterStartContext,
   type AdapterStepContext,
+  type AdapterStepOutput,
   type SafeExecutionError,
   type WorkflowExecutionAdapter,
   type WorkflowStepType,
@@ -23,6 +24,7 @@ const SUPPORTED_STEP_TYPES = [
   'select',
   'setChecked',
   'wait',
+  'verify',
 ] as const satisfies readonly WorkflowStepType[];
 
 function isSupportedStep(step: WorkflowStep): step is SupportedWorkflowStep {
@@ -48,6 +50,8 @@ export class PlaywrightWorkflowExecutionAdapter implements WorkflowExecutionAdap
     }
     if ('locator' in step) {
       validateExecutableLocator(step.locator);
+    } else if (step.type === 'verify' && 'locator' in step.assertion) {
+      validateExecutableLocator(step.assertion.locator);
     }
   }
 
@@ -76,12 +80,14 @@ export class PlaywrightWorkflowExecutionAdapter implements WorkflowExecutionAdap
     }
   }
 
-  async executeStep(context: AdapterStepContext): Promise<void> {
+  async executeStep(
+    context: AdapterStepContext,
+  ): Promise<AdapterStepOutput | void> {
     const session = this.session;
     if (session === null || !isSupportedStep(context.step)) {
       throw new SafeExecutionException('ACTION_FAILED');
     }
-    await executeStep(context.step, {
+    return executeStep(context.step, {
       page: session.page,
       valueResolver: context.valueResolver,
       allowedOrigins: context.allowedOrigins,
