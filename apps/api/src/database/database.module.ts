@@ -6,6 +6,7 @@ import {
   RecordingRepository,
   RecordingWorkflowConversionRepository,
   RunnerRepository,
+  SecureRunInputRepository,
   WorkflowDraftRepository,
   WorkflowLifecycleRepository,
   WorkflowRunRepository,
@@ -63,6 +64,12 @@ import { PrismaService } from './prisma.service.js';
       inject: [DATABASE_CLIENT],
       useFactory: (client: PrismaClient) => new WorkflowRunRepository(client),
     },
+    {
+      provide: SecureRunInputRepository,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: PrismaClient) =>
+        new SecureRunInputRepository(client),
+    },
   ],
   exports: [
     IdentityRepository,
@@ -72,6 +79,7 @@ import { PrismaService } from './prisma.service.js';
     WorkflowLifecycleRepository,
     RunnerRepository,
     WorkflowRunRepository,
+    SecureRunInputRepository,
   ],
 })
 export class DatabaseModule {}

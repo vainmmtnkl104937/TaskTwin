@@ -9,6 +9,26 @@ import { SafeExecutionException } from './errors.js';
 
 export type RuntimeValueRecord = Readonly<Record<string, RuntimeInputValue>>;
 
+export interface WorkflowRuntimeValueResolver {
+  hasVariable(name: string, valueType: RuntimeInputValue['kind']): boolean;
+  hasSecret(name: string): boolean;
+  resolve(
+    source: ValueSource,
+    target: ValueSourceTarget,
+  ): string | number | boolean;
+}
+
+export function createRuntimeValueResolver(
+  runtimeValues: RuntimeValueRecord,
+): WorkflowRuntimeValueResolver {
+  return {
+    hasVariable: (name, valueType) => runtimeValues[name]?.kind === valueType,
+    hasSecret: () => false,
+    resolve: (source, target) =>
+      resolveValueSource(source, target, runtimeValues),
+  };
+}
+
 export function resolveValueSource(
   source: ValueSource,
   target: ValueSourceTarget,
@@ -55,6 +75,29 @@ export function resolveSelectValue(
   runtimeValues: RuntimeValueRecord,
 ): string {
   const value = resolveValueSource(source, 'select.value', runtimeValues);
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new SafeExecutionException('INVALID_RUNTIME_INPUTS');
+  }
+  return String(value);
+}
+
+export function resolveTextWithResolver(
+  source: ValueSource,
+  target: 'navigate.url' | 'fill.value',
+  resolver: WorkflowRuntimeValueResolver,
+): string {
+  const value = resolver.resolve(source, target);
+  if (typeof value !== 'string') {
+    throw new SafeExecutionException('INVALID_RUNTIME_INPUTS');
+  }
+  return value;
+}
+
+export function resolveSelectWithResolver(
+  source: ValueSource,
+  resolver: WorkflowRuntimeValueResolver,
+): string {
+  const value = resolver.resolve(source, 'select.value');
   if (typeof value !== 'string' && typeof value !== 'number') {
     throw new SafeExecutionException('INVALID_RUNTIME_INPUTS');
   }

@@ -1,4 +1,3 @@
-import type { RuntimeInputValue } from '@tasktwin/workflow-inputs';
 import type { WorkflowStep } from '@tasktwin/workflow-schema';
 
 import type {
@@ -6,12 +5,11 @@ import type {
   TerminationCause,
   WorkflowStepType,
 } from './contracts.js';
-
-export type SafeRuntimeInputs = Readonly<Record<string, RuntimeInputValue>>;
+import type { WorkflowRuntimeValueResolver } from './value-source-resolver.js';
 
 export interface AdapterStartContext {
   executionId: string;
-  runtimeInputs: SafeRuntimeInputs;
+  valueResolver: WorkflowRuntimeValueResolver;
   allowedOrigins: readonly string[];
   totalTimeoutMs: number;
   remainingTimeMs: number;

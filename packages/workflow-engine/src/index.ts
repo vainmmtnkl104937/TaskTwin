@@ -2,7 +2,6 @@ export type {
   AdapterStartContext,
   AdapterStepContext,
   AdapterStopContext,
-  SafeRuntimeInputs,
   WorkflowExecutionAdapter,
 } from './adapter.js';
 export { systemWorkflowEngineClock, timestampFromMs } from './clock.js';
@@ -75,10 +74,16 @@ export {
 } from './step-state-machine.js';
 export type { StepStateDescriptor } from './step-state-machine.js';
 export {
+  createRuntimeValueResolver,
   resolveSelectValue,
+  resolveSelectWithResolver,
   resolveTextValue,
+  resolveTextWithResolver,
   resolveValueSource,
 } from './value-source-resolver.js';
-export type { RuntimeValueRecord } from './value-source-resolver.js';
+export type {
+  RuntimeValueRecord,
+  WorkflowRuntimeValueResolver,
+} from './value-source-resolver.js';
 export { WorkflowEngine } from './workflow-engine.js';
 export type { WorkflowEngineDependencies } from './workflow-engine.js';

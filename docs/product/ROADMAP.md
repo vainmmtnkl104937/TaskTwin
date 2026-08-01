@@ -234,6 +234,19 @@ parallel execution, screenshots, secret resolution, scheduling, or AI repair.
 Session 17 excludes runtime input and secret delivery, automatic retry or
 requeue, resume, Redis, WebSocket, scheduling and parallel jobs.
 
+## Session 18: secure run-input delivery
+
+- Framework-independent secure run-input contracts and deterministic AAD
+- Runner-generated RSA-OAEP public/private key pair
+- Short-lived, idempotent run preparation and encrypted commit
+- Browser Web Crypto AES-256-GCM variable encryption
+- Ciphertext-only Control Plane persistence and claim delivery
+- Runner-only decryption and local no-echo secret provider
+- Disposable in-memory runtime values with existing run lifecycle preserved
+
+Session 18 excludes files, persistent secrets, key rotation, OS keychains,
+retry/resume, saved browser authentication and AI.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

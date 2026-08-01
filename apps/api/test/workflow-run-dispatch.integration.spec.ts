@@ -1,4 +1,13 @@
-import { randomUUID } from 'node:crypto';
+import {
+  constants,
+  createCipheriv,
+  createHash,
+  createPublicKey,
+  generateKeyPairSync,
+  publicEncrypt,
+  randomBytes,
+  randomUUID,
+} from 'node:crypto';
 
 import { type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -9,6 +18,12 @@ import {
   type PrismaClient,
 } from '@tasktwin/database';
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
+import {
+  PlaintextRunInputPayloadSchema,
+  RunInputPreparationMetadataSchema,
+  SecureRunInputEnvelopeSchema,
+  encodeRunInputAad,
+} from '@tasktwin/secure-run-inputs';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -25,6 +40,7 @@ interface Identity {
 
 const suffix = randomUUID();
 const workflowId = `session17-${suffix}`;
+const secureWorkflowId = `session18-${suffix}`;
 const credentialPepper = 'session17-credential-pepper-value-safe';
 const leasePepper = 'session17-run-lease-pepper-value-safe';
 const pairingPepper = 'session17-pairing-pepper-value-safe-123';
@@ -52,6 +68,32 @@ function definition(
   };
 }
 
+function secureDefinition(): WorkflowDefinition {
+  return {
+    schemaVersion: 1,
+    workflowId: secureWorkflowId,
+    version: 1,
+    name: 'Session 18 secure fixture',
+    status: 'published',
+    variables: [{ name: 'customerName', valueType: 'string', required: true }],
+    steps: [
+      {
+        id: 'navigate',
+        type: 'navigate',
+        name: 'Navigate',
+        url: { kind: 'literal', value: 'http://127.0.0.1:4177/' },
+      },
+      {
+        id: 'fill',
+        type: 'fill',
+        name: 'Fill',
+        locator: { kind: 'label', value: 'Name' },
+        value: { kind: 'variable', variableName: 'customerName' },
+      },
+    ],
+  };
+}
+
 describe('workflow run dispatch integration', () => {
   let app: INestApplication;
   let prisma: PrismaClient;
@@ -60,6 +102,7 @@ describe('workflow run dispatch integration', () => {
   let outsider: Identity;
   let publishedVersionId: string;
   let draftVersionId: string;
+  let secureVersionId: string;
   let runnerDeviceId: string;
   let runnerCredential: string;
   const userIds: string[] = [];
@@ -143,6 +186,25 @@ describe('workflow run dispatch integration', () => {
     });
     publishedVersionId = workflow.versions[0]!.id;
     draftVersionId = workflow.versions[1]!.id;
+    const secureWorkflow = await prisma.workflow.create({
+      data: {
+        id: secureWorkflowId,
+        workspaceId: owner.workspace.id,
+        name: 'Session 18 secure fixture',
+        versions: {
+          create: {
+            version: 1,
+            status: 'published',
+            schemaVersion: 1,
+            definition: secureDefinition(),
+            publishedAt: new Date(),
+            publishedById: owner.user.id,
+          },
+        },
+      },
+      select: { versions: { select: { id: true } } },
+    });
+    secureVersionId = secureWorkflow.versions[0]!.id;
 
     const pairing = await request(app.getHttpServer())
       .post('/runner-pairing/sessions')
@@ -171,15 +233,28 @@ describe('workflow run dispatch integration', () => {
   });
 
   afterAll(async () => {
+    await prisma.workflowRunInputEnvelope.deleteMany({
+      where: { workflowRun: { workflowId: secureWorkflowId } },
+    });
+    await prisma.workflowRunInputPreparation.deleteMany({
+      where: { workflowVersion: { workflowId: secureWorkflowId } },
+    });
     await prisma.workflowRunProgressBatch.deleteMany({
       where: { workflowRun: { workflowId } },
     });
     await prisma.workflowRunStep.deleteMany({
       where: { workflowRun: { workflowId } },
     });
-    await prisma.workflowRun.deleteMany({ where: { workflowId } });
-    await prisma.workflowVersion.deleteMany({ where: { workflowId } });
-    await prisma.workflow.deleteMany({ where: { id: workflowId } });
+    await prisma.workflowRun.deleteMany({
+      where: { workflowId: { in: [workflowId, secureWorkflowId] } },
+    });
+    await prisma.workflowVersion.deleteMany({
+      where: { workflowId: { in: [workflowId, secureWorkflowId] } },
+    });
+    await prisma.workflow.deleteMany({
+      where: { id: { in: [workflowId, secureWorkflowId] } },
+    });
+    await prisma.runnerEncryptionKey.deleteMany({ where: { runnerDeviceId } });
     await prisma.runnerCredential.deleteMany({ where: { runnerDeviceId } });
     await prisma.runnerDevice.deleteMany({ where: { id: runnerDeviceId } });
     await prisma.runnerPairingSession.deleteMany({
@@ -242,7 +317,7 @@ describe('workflow run dispatch integration', () => {
     const claimAttemptId = randomUUID();
     const claimBody = {
       schemaVersion: 1,
-      runProtocolVersion: 1,
+      runProtocolVersion: 2,
       workflowEngineSchemaVersion: 1,
       runnerVersion: '0.1.0',
       claimAttemptId,
@@ -439,7 +514,7 @@ describe('workflow run dispatch integration', () => {
         .set(runnerAuth())
         .send({
           schemaVersion: 1,
-          runProtocolVersion: 1,
+          runProtocolVersion: 2,
           workflowEngineSchemaVersion: 1,
           runnerVersion: '0.1.0',
           claimAttemptId: randomUUID(),
@@ -580,7 +655,7 @@ describe('workflow run dispatch integration', () => {
       .set(runnerAuth())
       .send({
         schemaVersion: 1,
-        runProtocolVersion: 1,
+        runProtocolVersion: 2,
         workflowEngineSchemaVersion: 1,
         runnerVersion: '0.1.0',
         claimAttemptId: randomUUID(),
@@ -600,5 +675,184 @@ describe('workflow run dispatch integration', () => {
     expect(
       await prisma.workflowRun.findUniqueOrThrow({ where: { id: runId } }),
     ).toMatchObject({ status: 'INTERRUPTED', leaseTokenHash: null });
+  });
+
+  it('prepares, commits and dispatches ciphertext only to the assigned Runner', async () => {
+    const pair = generateKeyPairSync('rsa', {
+      modulusLength: 3_072,
+      publicExponent: 0x10001,
+      publicKeyEncoding: { type: 'spki', format: 'der' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'der' },
+    });
+    const keyId = `rk1_${randomBytes(32).toString('base64url')}`;
+    const key = {
+      schemaVersion: 1,
+      keyId,
+      profile: 'secure_input_envelope_v1',
+      algorithm: 'RSA-OAEP-256',
+      publicKeyFormat: 'spki',
+      publicKeySpki: pair.publicKey.toString('base64url'),
+      fingerprint: createHash('sha256').update(pair.publicKey).digest('hex'),
+    };
+    await request(app.getHttpServer())
+      .post('/runner/heartbeat')
+      .set(runnerAuth())
+      .send({
+        schemaVersion: 1,
+        runnerVersion: '0.1.0',
+        capabilities: ['secure_input_envelope_v1'],
+      })
+      .expect(200);
+    const registration = { schemaVersion: 1, key };
+    await request(app.getHttpServer())
+      .post('/runner/encryption-keys')
+      .set(runnerAuth())
+      .send(registration)
+      .expect(200)
+      .expect(({ body }) => expect(body.idempotent).toBe(false));
+    await request(app.getHttpServer())
+      .post('/runner/encryption-keys')
+      .set(runnerAuth())
+      .send(registration)
+      .expect(200)
+      .expect(({ body }) => expect(body.idempotent).toBe(true));
+
+    await request(app.getHttpServer())
+      .post(`/workflow-versions/${secureVersionId}/runs`)
+      .set(auth(owner))
+      .send({ schemaVersion: 1, runnerDeviceId, clientRunId: randomUUID() })
+      .expect(409);
+
+    const preparationBody = {
+      schemaVersion: 1,
+      clientPreparationId: randomUUID(),
+      clientRunId: randomUUID(),
+      runnerDeviceId,
+      options: { totalTimeoutMs: 120_000, stepTimeoutMs: 30_000 },
+    };
+    await request(app.getHttpServer())
+      .post(`/workflow-versions/${secureVersionId}/run-preparations`)
+      .set(auth(viewer))
+      .send({ ...preparationBody, clientPreparationId: randomUUID() })
+      .expect(403);
+    await request(app.getHttpServer())
+      .post(`/workflow-versions/${secureVersionId}/run-preparations`)
+      .set(auth(outsider))
+      .send({ ...preparationBody, clientPreparationId: randomUUID() })
+      .expect(404);
+    const preparedResponse = await request(app.getHttpServer())
+      .post(`/workflow-versions/${secureVersionId}/run-preparations`)
+      .set(auth(owner))
+      .send(preparationBody)
+      .expect(200);
+    const prepared = RunInputPreparationMetadataSchema.parse(
+      preparedResponse.body.preparation,
+    );
+    expect(prepared.manifest.variables).toEqual([
+      expect.objectContaining({ name: 'customerName', requiredForRun: true }),
+    ]);
+    expect(JSON.stringify(prepared)).not.toContain('Session18 safe customer');
+
+    const plaintextValue = 'Session18 safe customer';
+    const payload = PlaintextRunInputPayloadSchema.parse({
+      schemaVersion: 1,
+      preparationId: prepared.preparationId,
+      workflowRunId: prepared.workflowRunId,
+      workflowVersionId: prepared.workflowVersionId,
+      runnerDeviceId: prepared.runnerDeviceId,
+      keyId,
+      expiresAt: prepared.expiresAt,
+      inputs: {
+        schemaVersion: 1,
+        values: {
+          customerName: { kind: 'string', value: plaintextValue },
+        },
+      },
+    });
+    const aad = Buffer.from(encodeRunInputAad(prepared.aad));
+    const aesKey = randomBytes(32);
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', aesKey, iv);
+    cipher.setAAD(aad);
+    const ciphertext = Buffer.concat([
+      cipher.update(JSON.stringify(payload), 'utf8'),
+      cipher.final(),
+      cipher.getAuthTag(),
+    ]);
+    const publicKey = createPublicKey({
+      key: pair.publicKey,
+      format: 'der',
+      type: 'spki',
+    });
+    const wrappedKey = publicEncrypt(
+      {
+        key: publicKey,
+        padding: constants.RSA_PKCS1_OAEP_PADDING,
+        oaepHash: 'sha256',
+      },
+      aesKey,
+    );
+    aesKey.fill(0);
+    const envelope = SecureRunInputEnvelopeSchema.parse({
+      schemaVersion: 1,
+      profile: 'secure_input_envelope_v1',
+      contentEncryption: 'AES-256-GCM',
+      keyEncryption: 'RSA-OAEP-256',
+      preparationId: prepared.preparationId,
+      workflowRunId: prepared.workflowRunId,
+      keyId,
+      expiresAt: prepared.expiresAt,
+      aad: aad.toString('base64url'),
+      iv: iv.toString('base64url'),
+      wrappedKey: wrappedKey.toString('base64url'),
+      ciphertext: ciphertext.toString('base64url'),
+      ciphertextDigest: createHash('sha256').update(ciphertext).digest('hex'),
+    });
+    const committed = await request(app.getHttpServer())
+      .post(`/run-preparations/${prepared.preparationId}/commit`)
+      .set(auth(owner))
+      .send({ schemaVersion: 1, envelope })
+      .expect(200);
+    expect(committed.body.run.id).toBe(prepared.workflowRunId);
+    await request(app.getHttpServer())
+      .post(`/run-preparations/${prepared.preparationId}/commit`)
+      .set(auth(owner))
+      .send({ schemaVersion: 1, envelope })
+      .expect(200)
+      .expect(({ body }) => expect(body.idempotent).toBe(true));
+    await request(app.getHttpServer())
+      .post(`/run-preparations/${prepared.preparationId}/commit`)
+      .set(auth(owner))
+      .send({
+        schemaVersion: 1,
+        envelope: { ...envelope, ciphertextDigest: 'f'.repeat(64) },
+      })
+      .expect(409);
+
+    const stored = await prisma.workflowRunInputEnvelope.findUniqueOrThrow({
+      where: { workflowRunId: prepared.workflowRunId },
+    });
+    expect(JSON.stringify(stored)).not.toContain(plaintextValue);
+    expect(stored.ciphertext).toBe(envelope.ciphertext);
+    expect(
+      await prisma.workflowRunStep.count({
+        where: { workflowRunId: prepared.workflowRunId },
+      }),
+    ).toBe(2);
+
+    const claimed = await request(app.getHttpServer())
+      .post('/runner/jobs/claim')
+      .set(runnerAuth())
+      .send({
+        schemaVersion: 1,
+        runProtocolVersion: 2,
+        workflowEngineSchemaVersion: 1,
+        runnerVersion: '0.1.0',
+        claimAttemptId: randomUUID(),
+      })
+      .expect(200);
+    expect(claimed.body.job.runId).toBe(prepared.workflowRunId);
+    expect(claimed.body.job.runtimeInput.kind).toBe('encrypted_envelope');
+    expect(JSON.stringify(claimed.body)).not.toContain(plaintextValue);
   });
 });

@@ -7,7 +7,13 @@ import {
   type PairingSessionCreateResponse,
   type RunnerHeartbeatResponse,
   type StoredRunnerCredential,
+  type RunnerCapability,
 } from '@tasktwin/runner-protocol';
+import {
+  RunnerEncryptionKeyRegistrationResponseSchema,
+  type RunnerEncryptionKeyRegistrationRequest,
+  type RunnerEncryptionKeyRegistrationResponse,
+} from '@tasktwin/secure-run-inputs';
 import {
   LeaseRenewalResponseSchema,
   RunnerJobClaimResponseSchema,
@@ -42,7 +48,12 @@ export interface RunnerControlPlaneTransport {
   heartbeat(
     credential: StoredRunnerCredential,
     runnerVersion: string,
+    capabilities?: RunnerCapability[],
   ): Promise<RunnerHeartbeatResponse>;
+  registerEncryptionKey(
+    credential: StoredRunnerCredential,
+    request: RunnerEncryptionKeyRegistrationRequest,
+  ): Promise<RunnerEncryptionKeyRegistrationResponse>;
 }
 
 export interface RunnerJobTransport {
@@ -105,6 +116,7 @@ export class HttpRunnerControlPlaneTransport
   heartbeat(
     credential: StoredRunnerCredential,
     runnerVersion: string,
+    capabilities: RunnerCapability[] = [],
   ): Promise<RunnerHeartbeatResponse> {
     return this.request(
       `${credential.controlPlaneOrigin}/runner/heartbeat`,
@@ -115,7 +127,22 @@ export class HttpRunnerControlPlaneTransport
           authorization: `TaskTwinRunner ${credential.runnerDeviceId}.${credential.credential}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ schemaVersion: 1, runnerVersion }),
+        body: JSON.stringify({ schemaVersion: 1, runnerVersion, capabilities }),
+      },
+    );
+  }
+
+  registerEncryptionKey(
+    credential: StoredRunnerCredential,
+    request: RunnerEncryptionKeyRegistrationRequest,
+  ): Promise<RunnerEncryptionKeyRegistrationResponse> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/encryption-keys`,
+      RunnerEncryptionKeyRegistrationResponseSchema,
+      {
+        method: 'POST',
+        headers: this.runnerHeaders(credential),
+        body: JSON.stringify(request),
       },
     );
   }

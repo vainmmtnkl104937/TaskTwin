@@ -6,6 +6,7 @@ import type {
   PersistedRunStepStatus,
   WorkflowRunReadinessReport,
   WorkflowRunStatus,
+  ClaimedRunInput,
 } from '@tasktwin/run-protocol';
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
 
@@ -64,6 +65,7 @@ export type ClaimWorkflowRunResult =
       definitionDigest: string;
       allowedOrigins: string[];
       options: { totalTimeoutMs: number; stepTimeoutMs: number };
+      runtimeInput: ClaimedRunInput;
       leaseExpiresAt: Date;
       idempotent: boolean;
     };

@@ -6,12 +6,15 @@ import {
   type ClaimedRunnerJob,
 } from '@tasktwin/run-protocol';
 import type { StoredRunnerCredential } from '@tasktwin/runner-protocol';
+import type { SecretProvider } from '@tasktwin/secure-run-inputs';
 
 import type { RunnerJobTransport } from '../control-plane-client.js';
 import type { BrowserSessionFactory } from '../execution/browser-session.js';
 import { LocalWorkflowExecutor } from '../execution/workflow-executor.js';
 import type { RunnerClock, RunnerOutput } from '../runner-service.js';
 import { RunProgressSink } from './run-progress-sink.js';
+import type { RunnerKeyManager } from '../secure-inputs/runner-key-manager.js';
+import { acquireSecureRuntime } from '../secure-inputs/secure-runtime.js';
 
 export class RunJobWorker {
   constructor(
@@ -20,6 +23,8 @@ export class RunJobWorker {
     private readonly clock: RunnerClock,
     private readonly output: RunnerOutput,
     private readonly runnerVersion: string,
+    private readonly keyManager?: RunnerKeyManager,
+    private readonly secretProvider?: SecretProvider,
   ) {}
 
   async runLoop(
@@ -29,7 +34,7 @@ export class RunJobWorker {
     while (!signal.aborted) {
       const claimRequest = RunnerJobClaimRequestSchema.parse({
         schemaVersion: 1,
-        runProtocolVersion: 1,
+        runProtocolVersion: 2,
         workflowEngineSchemaVersion: 1,
         runnerVersion: this.runnerVersion,
         claimAttemptId: randomUUID(),
@@ -85,8 +90,31 @@ export class RunJobWorker {
       execution,
       leaseLoop.signal,
     );
+    let secureRuntime: Awaited<ReturnType<typeof acquireSecureRuntime>> | null =
+      null;
+    let primaryError: unknown;
     try {
       this.output.write(`Workflow run ${job.runId} started.`);
+      let invalidSecureInput = false;
+      if (job.runtimeInput.kind === 'encrypted_envelope') {
+        try {
+          if (
+            this.keyManager === undefined ||
+            this.secretProvider === undefined
+          ) {
+            throw new Error('Secure runtime support is unavailable.');
+          }
+          secureRuntime = await acquireSecureRuntime({
+            runtimeInput: job.runtimeInput,
+            keyManager: this.keyManager,
+            secretProvider: this.secretProvider,
+            signal: execution.signal,
+            now: this.clock.now(),
+          });
+        } catch {
+          invalidSecureInput = true;
+        }
+      }
       const result = await new LocalWorkflowExecutor(
         this.sessions,
         sink,
@@ -94,7 +122,7 @@ export class RunJobWorker {
         {
           schemaVersion: 1,
           workflow: job.workflow,
-          inputs: job.inputs,
+          inputs: { schemaVersion: 1, values: {} },
           allowedOrigins: job.allowedOrigins,
           options: {
             headless: true,
@@ -103,8 +131,9 @@ export class RunJobWorker {
             ...job.options,
           },
         },
-        execution.signal,
+        invalidSecureInput ? AbortSignal.abort() : execution.signal,
         job.runId,
+        secureRuntime?.resolver,
       );
       await sink.flush();
       const completion = WorkflowRunCompletionRequestSchema.parse({
@@ -116,10 +145,22 @@ export class RunJobWorker {
       this.output.write(
         `Workflow run ${job.runId} completed: ${result.status}.`,
       );
+    } catch (error: unknown) {
+      primaryError = error;
     } finally {
       leaseLoop.abort();
       await renewal;
       shutdownSignal.removeEventListener('abort', stopExecution);
+    }
+    let cleanupError: unknown;
+    try {
+      await secureRuntime?.dispose();
+    } catch (error: unknown) {
+      cleanupError = error;
+    }
+    if (primaryError !== undefined) throw primaryError;
+    if (cleanupError !== undefined) {
+      throw new Error('Sensitive runtime cleanup failed.');
     }
   }
 

@@ -122,7 +122,7 @@ describe('persisted job Chromium dispatch', () => {
             runId,
             definitionDigest: 'a'.repeat(64),
             workflow: workflow(server.origin),
-            inputs: { schemaVersion: 1, values: {} },
+            runtimeInput: { kind: 'none' },
             allowedOrigins: [server.origin],
             options: { totalTimeoutMs: 30_000, stepTimeoutMs: 10_000 },
             leaseToken,

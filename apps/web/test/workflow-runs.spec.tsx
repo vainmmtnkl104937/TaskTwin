@@ -6,6 +6,8 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('@/app/(authenticated)/workspaces/[workspaceId]/runs/actions', () => ({
   createWorkflowRunAction: vi.fn(),
+  prepareWorkflowRunInputsAction: vi.fn(),
+  commitWorkflowRunInputsAction: vi.fn(),
   cancelWorkflowRunAction: vi.fn(),
 }));
 
@@ -23,8 +25,10 @@ describe('workflow run UI', () => {
             id: '215b770d-0566-42ad-8368-28db2cc2fd36',
             name: 'Office runner',
             status: 'online',
+            capabilities: [],
           },
         ]}
+        manifest={{ schemaVersion: 1, variables: [], secrets: [] }}
       />,
     );
     expect(screen.getByLabelText('Local Runner')).toHaveValue(

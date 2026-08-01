@@ -1,6 +1,7 @@
 import type { Locator, Page } from 'playwright';
 import { errors } from 'playwright';
 import { describe, expect, it, vi } from 'vitest';
+import { createRuntimeValueResolver } from '@tasktwin/workflow-engine';
 
 import { executeStep, type StepExecutionContext } from './step-executor.js';
 
@@ -22,9 +23,9 @@ function setup() {
   } as unknown as Page;
   const context: StepExecutionContext = {
     page,
-    runtimeValues: {
+    valueResolver: createRuntimeValueResolver({
       customerName: { kind: 'string', value: 'runtime text' },
-    },
+    }),
     allowedOrigins: ['http://127.0.0.1:4177'],
     options: {
       headless: true,

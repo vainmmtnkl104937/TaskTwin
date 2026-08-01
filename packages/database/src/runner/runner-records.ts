@@ -1,5 +1,6 @@
 import type {
   PairingStatus,
+  RunnerCapability,
   RunnerDeviceMetadata,
 } from '@tasktwin/runner-protocol';
 
@@ -24,6 +25,7 @@ export interface RunnerDeviceRecord {
   id: string;
   workspaceId: string;
   metadata: RunnerDeviceMetadata;
+  capabilities: RunnerCapability[];
   lastSeenAt: Date | null;
   revokedAt: Date | null;
   createdAt: Date;

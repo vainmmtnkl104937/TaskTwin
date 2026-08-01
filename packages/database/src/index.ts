@@ -100,3 +100,13 @@ export type {
   WorkflowRunStepRecord,
 } from './workflow-run/workflow-run-records.js';
 export { WorkflowRunRepository } from './workflow-run/workflow-run.repository.js';
+export {
+  SecureRunInputRepositoryError,
+  type SecureRunInputRepositoryErrorCode,
+} from './secure-run-input/secure-run-input-errors.js';
+export type {
+  RunInputCommitResult,
+  RunInputPreparationResult,
+  RunnerEncryptionKeyRegistrationResult,
+} from './secure-run-input/secure-run-input-records.js';
+export { SecureRunInputRepository } from './secure-run-input/secure-run-input.repository.js';

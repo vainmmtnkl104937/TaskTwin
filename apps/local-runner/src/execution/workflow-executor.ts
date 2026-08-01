@@ -5,6 +5,7 @@ import {
   WorkflowEngine,
   type WorkflowExecutionResult,
   type WorkflowProgressSink,
+  type WorkflowRuntimeValueResolver,
 } from '@tasktwin/workflow-engine';
 
 import type { BrowserSessionFactory } from './browser-session.js';
@@ -21,6 +22,7 @@ export class LocalWorkflowExecutor {
     input: unknown,
     signal?: AbortSignal,
     executionId?: string,
+    valueResolver?: WorkflowRuntimeValueResolver,
   ): Promise<WorkflowExecutionResult> {
     const request = LocalExecutionRequestSchema.safeParse(input);
     if (!request.success) {
@@ -37,6 +39,7 @@ export class LocalWorkflowExecutor {
       ...(this.progressSink === undefined
         ? {}
         : { progressSink: this.progressSink }),
+      ...(valueResolver === undefined ? {} : { valueResolver }),
     });
     return engine.execute(
       {

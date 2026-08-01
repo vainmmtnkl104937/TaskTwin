@@ -599,3 +599,31 @@ The Local Runner claims at most one run, renews its lease, executes through the
 workflow engine, uploads monotonically sequenced progress and delivers one
 validated completion. Cancellation is cooperative. Expired active runs become
 Interrupted and are never automatically requeued or executed again.
+
+## Secure run-input boundary
+
+`@tasktwin/secure-run-inputs` owns strict JSON contracts for Runner public
+keys, variable and secret-alias manifests, preparations, deterministic AAD,
+plaintext payloads and encrypted envelopes. It contains no framework,
+database, filesystem, browser DOM, Playwright or platform crypto objects.
+
+The assigned Runner creates a 3072-bit RSA key pair. Only SPKI public-key
+material and its SHA-256 fingerprint reach the Control Plane; the PKCS8 private
+key remains in the atomic local Runner key store. A Web client obtains a
+short-lived preparation, validates variables, generates a fresh AES-256 key
+and 96-bit IV, encrypts with AES-GCM, and wraps the content key with RSA-OAEP
+SHA-256. The browser posts only the envelope.
+
+AAD binds the preparation, reserved run, Workspace, Workflow and version,
+definition digest, assigned Runner, encryption key, client run ID, allowed
+origins, execution options and expiry. Commit verifies the exact canonical AAD
+and ciphertext digest without decrypting, then creates the run, all step rows,
+immutable envelope and consumed preparation in one transaction.
+
+The assigned authenticated Runner receives the envelope only after a valid
+claim. It validates binding and expiry, decrypts in memory, validates variables
+again, then supplies a non-serializable resolver to the workflow engine.
+Secret aliases are resolved by an attended no-echo local prompt; secret values
+never pass through Web or Control Plane. Secret leases and mutable buffers are
+disposed on terminal paths. JavaScript string memory cannot be guaranteed to
+be immediately zeroized.

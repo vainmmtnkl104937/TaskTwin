@@ -29,6 +29,7 @@ import {
 import { RunStateMachine } from './run-state-machine.js';
 import { StepStateMachine } from './step-state-machine.js';
 import { TerminationArbiter } from './termination-arbiter.js';
+import type { WorkflowRuntimeValueResolver } from './value-source-resolver.js';
 
 const TIMEOUT_ERROR_CODES = new Set<ExecutionErrorCode>([
   'ACTION_TIMEOUT',
@@ -40,6 +41,7 @@ export interface WorkflowEngineDependencies {
   createExecutionId(): string;
   clock?: WorkflowEngineClock;
   progressSink?: WorkflowProgressSink;
+  valueResolver?: WorkflowRuntimeValueResolver;
 }
 
 interface PrimaryTermination {
@@ -157,7 +159,11 @@ export class WorkflowEngine {
     }
 
     transitionRun('validating');
-    const preflight = preflightWorkflowExecution(input, this.adapter);
+    const preflight = preflightWorkflowExecution(
+      input,
+      this.adapter,
+      this.dependencies.valueResolver,
+    );
     const workflow = preflight.ok
       ? preflight.prepared.request.workflow
       : preflight.workflow;
@@ -375,7 +381,7 @@ export class WorkflowEngine {
       try {
         await this.adapter.start({
           executionId,
-          runtimeInputs: prepared.runtimeInputs,
+          valueResolver: prepared.valueResolver,
           allowedOrigins: prepared.allowedOrigins,
           totalTimeoutMs: prepared.request.options.totalTimeoutMs,
           remainingTimeMs: Math.max(0, deadlineMs - this.clock.nowMs()),
@@ -418,7 +424,7 @@ export class WorkflowEngine {
           try {
             await this.adapter.executeStep({
               executionId,
-              runtimeInputs: prepared.runtimeInputs,
+              valueResolver: prepared.valueResolver,
               allowedOrigins: prepared.allowedOrigins,
               totalTimeoutMs: prepared.request.options.totalTimeoutMs,
               remainingTimeMs,

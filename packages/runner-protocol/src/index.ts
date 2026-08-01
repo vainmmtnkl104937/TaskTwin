@@ -7,3 +7,14 @@ export {
   type PairingTransitionResult,
 } from './pairing-state.js';
 export { parseRunnerAuthorizationHeader } from './runner-auth.js';
+export {
+  RunnerCapabilitiesSchema,
+  RunnerCapabilitySchema,
+  RunnerEncryptionKeyRegistrationRequestSchema,
+  RunnerEncryptionKeyRegistrationResponseSchema,
+  RunnerPublicKeyMetadataSchema,
+} from '@tasktwin/secure-run-inputs';
+export type {
+  RunnerCapability,
+  RunnerPublicKeyMetadata,
+} from '@tasktwin/secure-run-inputs';
