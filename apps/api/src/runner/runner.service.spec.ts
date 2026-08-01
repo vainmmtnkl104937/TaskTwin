@@ -1,6 +1,8 @@
 import { ForbiddenException } from '@nestjs/common';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import {
   RunnerRepositoryError,
+  type SecureRunInputRepository,
   type RunnerRepository,
 } from '@tasktwin/database';
 import { describe, expect, it, vi } from 'vitest';
@@ -50,5 +52,43 @@ describe('RunnerService heartbeat', () => {
         runnerVersion: '0.1.0',
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe('RunnerService encryption key registration', () => {
+  it('recalculates the fingerprint and sends no private material to persistence', async () => {
+    const pair = generateKeyPairSync('rsa', {
+      modulusLength: 3_072,
+      publicExponent: 0x10001,
+      publicKeyEncoding: { type: 'spki', format: 'der' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'der' },
+    });
+    const key = {
+      schemaVersion: 1 as const,
+      keyId: `rk1_${'A'.repeat(43)}`,
+      profile: 'secure_input_envelope_v1' as const,
+      algorithm: 'RSA-OAEP-256' as const,
+      publicKeyFormat: 'spki' as const,
+      publicKeySpki: pair.publicKey.toString('base64url'),
+      fingerprint: createHash('sha256').update(pair.publicKey).digest('hex'),
+    };
+    const registerRunnerKey = vi.fn().mockResolvedValue({
+      key,
+      idempotent: false,
+    });
+    const service = new RunnerService(
+      {} as RunnerRepository,
+      { registerRunnerKey } as unknown as SecureRunInputRepository,
+    );
+    await expect(
+      service.registerEncryptionKey(runner, { schemaVersion: 1, key }),
+    ).resolves.toMatchObject({ key, idempotent: false });
+    expect(registerRunnerKey).toHaveBeenCalledWith({
+      runnerDeviceId: runner.runnerDeviceId,
+      key,
+    });
+    expect(JSON.stringify(registerRunnerKey.mock.calls)).not.toContain(
+      pair.privateKey.toString('base64url'),
+    );
   });
 });

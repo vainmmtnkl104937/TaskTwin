@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  SECURE_INPUT_CAPABILITIES,
+  type SecretProvider,
+} from '@tasktwin/secure-run-inputs';
+import {
   StoredRunnerCredentialSchema,
   type RunnerDeviceMetadata,
   type StoredRunnerCredential,
@@ -14,6 +18,7 @@ import {
 import type { RunnerCredentialStore } from './credential-store.js';
 import type { BrowserSessionFactory } from './execution/browser-session.js';
 import { RunJobWorker } from './job-dispatch/run-job-worker.js';
+import type { RunnerKeyManager } from './secure-inputs/runner-key-manager.js';
 
 export interface RunnerOutput {
   write(message: string): void;
@@ -40,6 +45,8 @@ export class LocalRunnerService {
     private readonly runnerVersion: string,
     private readonly jobTransport?: RunnerJobTransport,
     private readonly browserSessions?: BrowserSessionFactory,
+    private readonly keyManager?: RunnerKeyManager,
+    private readonly secretProvider?: SecretProvider,
   ) {}
 
   async pair(input: {
@@ -88,6 +95,7 @@ export class LocalRunnerService {
             savedAt: this.clock.now().toISOString(),
           });
           await this.store.save(credential);
+          await this.keyManager?.ensureRegistered(credential);
           await this.sendHeartbeat(credential);
           this.output.write('TaskTwin Local Runner paired successfully.');
           return;
@@ -103,6 +111,7 @@ export class LocalRunnerService {
       return;
     }
     try {
+      await this.keyManager?.ensureRegistered(credential);
       await this.sendHeartbeat(credential);
       this.output.write('Local status: paired. Remote status: online.');
     } catch (error: unknown) {
@@ -118,6 +127,7 @@ export class LocalRunnerService {
 
   async start(signal: AbortSignal): Promise<void> {
     const credential = await this.requireCredential();
+    await this.keyManager?.ensureRegistered(credential);
     this.output.write('TaskTwin Local Runner started safely.');
     if (this.jobTransport !== undefined && this.browserSessions !== undefined) {
       const operation = new AbortController();
@@ -129,6 +139,8 @@ export class LocalRunnerService {
         this.clock,
         this.output,
         this.runnerVersion,
+        this.keyManager,
+        this.secretProvider,
       );
       try {
         const jobs = worker
@@ -177,6 +189,7 @@ export class LocalRunnerService {
 
   async unpair(): Promise<void> {
     await this.store.clear();
+    await this.keyManager?.clear();
     this.output.write(
       'Local credential removed. Remote revocation is a separate administrative action.',
     );
@@ -197,6 +210,7 @@ export class LocalRunnerService {
       const response = await this.transport.heartbeat(
         credential,
         this.runnerVersion,
+        this.capabilities(),
       );
       return response.nextHeartbeatInSeconds;
     } catch (error: unknown) {
@@ -208,6 +222,16 @@ export class LocalRunnerService {
       }
       throw error;
     }
+  }
+
+  private capabilities() {
+    if (this.keyManager === undefined) return [];
+    return [
+      SECURE_INPUT_CAPABILITIES[0],
+      ...(this.secretProvider?.isAvailable() === true
+        ? [SECURE_INPUT_CAPABILITIES[1]]
+        : []),
+    ];
   }
 }
 

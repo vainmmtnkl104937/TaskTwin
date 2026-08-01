@@ -73,3 +73,14 @@ require `X-TaskTwin-Run-Lease`. Only its keyed hash is persisted.
 ```powershell
 pnpm workflow-runs:check
 ```
+
+Session 18 adds runner-authenticated public-key registration and
+user-authenticated secure run preparation/commit:
+
+- `POST /runner/encryption-keys`
+- `POST /workflow-versions/:workflowVersionId/run-preparations`
+- `POST /run-preparations/:preparationId/commit`
+
+The API verifies public-key fingerprints and exact AAD/ciphertext binding but
+has no private key and never decrypts runtime variables. PostgreSQL stores safe
+manifests, public keys and encrypted envelopes only.

@@ -14,6 +14,7 @@ import {
   WorkspaceListResponseSchema,
   WorkspaceWorkflowListResponseSchema,
   CreateWorkflowRunResponseSchema,
+  RunInputPreparationResponseSchema,
   WorkflowRunCancellationResponseSchema,
   WorkflowRunDetailResponseSchema,
   WorkflowRunListResponseSchema,
@@ -269,6 +270,43 @@ export function createWorkflowRun(
         runnerDeviceId,
         clientRunId,
       }),
+    },
+  );
+}
+
+export function prepareWorkflowRunInputs(
+  accessToken: string,
+  workflowVersionId: string,
+  input: {
+    clientPreparationId: string;
+    clientRunId: string;
+    runnerDeviceId: string;
+    options: { totalTimeoutMs: number; stepTimeoutMs: number };
+  },
+) {
+  return request(
+    `/workflow-versions/${encodeURIComponent(workflowVersionId)}/run-preparations`,
+    RunInputPreparationResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ schemaVersion: 1, ...input }),
+    },
+  );
+}
+
+export function commitWorkflowRunInputs(
+  accessToken: string,
+  preparationId: string,
+  envelope: unknown,
+) {
+  return request(
+    `/run-preparations/${encodeURIComponent(preparationId)}/commit`,
+    CreateWorkflowRunResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ schemaVersion: 1, envelope }),
     },
   );
 }

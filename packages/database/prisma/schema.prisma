@@ -73,6 +73,20 @@ enum WorkflowRunStepStatus {
   @@map("workflow_run_step_status")
 }
 
+enum RunnerEncryptionKeyStatus {
+  ACTIVE
+  REVOKED
+
+  @@map("runner_encryption_key_status")
+}
+
+enum WorkflowRunInputPreparationStatus {
+  PENDING
+  CONSUMED
+
+  @@map("workflow_run_input_preparation_status")
+}
+
 model User {
   id                         String                        @id @default(uuid()) @db.Uuid
   email                      String                        @unique(map: "users_email_key") @db.VarChar(254)
@@ -91,6 +105,7 @@ model User {
   revokedRunnerDevices       RunnerDevice[]                  @relation("RunnerDeviceRevoker")
   createdWorkflowRuns        WorkflowRun[]                   @relation("WorkflowRunCreator")
   cancelledWorkflowRuns      WorkflowRun[]                   @relation("WorkflowRunCanceller")
+  createdRunInputPreparations WorkflowRunInputPreparation[]  @relation("WorkflowRunInputPreparationCreator")
 
   @@map("users")
 }
@@ -134,6 +149,7 @@ model Workspace {
   runnerPairingSessions RunnerPairingSession[]
   runnerDevices         RunnerDevice[]
   workflowRuns          WorkflowRun[]
+  runInputPreparations  WorkflowRunInputPreparation[]
 
   @@unique([organizationId, slug], map: "workspaces_organization_id_slug_key")
   @@map("workspaces")
@@ -192,6 +208,10 @@ model RunnerDevice {
   revokedBy        User?                @relation("RunnerDeviceRevoker", fields: [revokedById], references: [id], onDelete: Restrict)
   credential       RunnerCredential?
   workflowRuns     WorkflowRun[]
+  capabilities     String[]             @default([])
+  capabilitiesUpdatedAt DateTime?       @map("capabilities_updated_at") @db.Timestamptz(3)
+  encryptionKeys  RunnerEncryptionKey[]
+  runInputPreparations WorkflowRunInputPreparation[]
 
   @@index([workspaceId, revokedAt, lastSeenAt], map: "runner_devices_workspace_id_revoked_at_last_seen_at_idx")
   @@index([revokedById], map: "runner_devices_revoked_by_id_idx")
@@ -251,6 +271,7 @@ model WorkflowVersion {
   archivedBy           User?                        @relation("WorkflowVersionArchiver", fields: [archivedById], references: [id], onDelete: Restrict)
   recordingConversion  RecordingWorkflowConversion?
   runs                 WorkflowRun[]
+  runInputPreparations WorkflowRunInputPreparation[]
 
   @@unique([workflowId, version], map: "workflow_versions_workflow_id_version_key")
   @@unique([workflowId, clientCreationId], map: "workflow_versions_workflow_id_client_creation_id_key")
@@ -300,6 +321,7 @@ model WorkflowRun {
   cancelRequestedBy       User?             @relation("WorkflowRunCanceller", fields: [cancelRequestedByUserId], references: [id], onDelete: Restrict)
   steps                   WorkflowRunStep[]
   progressBatches         WorkflowRunProgressBatch[]
+  inputEnvelope           WorkflowRunInputEnvelope?
 
   @@unique([workspaceId, clientRunId], map: "workflow_runs_workspace_id_client_run_id_key")
   @@unique([runnerDeviceId, claimAttemptId], map: "workflow_runs_runner_device_id_claim_attempt_id_key")
@@ -311,6 +333,89 @@ model WorkflowRun {
   @@index([createdByUserId, createdAt], map: "workflow_runs_created_by_user_id_created_at_idx")
   @@index([cancelRequestedByUserId], map: "workflow_runs_cancel_requested_by_user_id_idx")
   @@map("workflow_runs")
+}
+
+model RunnerEncryptionKey {
+  id             String                    @id @default(uuid()) @db.Uuid
+  runnerDeviceId String                    @map("runner_device_id") @db.Uuid
+  keyId          String                    @map("key_id") @db.VarChar(64)
+  profile        String                    @db.VarChar(64)
+  algorithm      String                    @db.VarChar(32)
+  publicKeySpki  String                    @map("public_key_spki") @db.Text
+  fingerprint    String                    @unique(map: "runner_encryption_keys_fingerprint_key") @db.Char(64)
+  status         RunnerEncryptionKeyStatus @default(ACTIVE)
+  revokedAt      DateTime?                 @map("revoked_at") @db.Timestamptz(3)
+  createdAt      DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  runnerDevice   RunnerDevice              @relation(fields: [runnerDeviceId], references: [id], onDelete: Restrict)
+  preparations   WorkflowRunInputPreparation[]
+  envelopes      WorkflowRunInputEnvelope[]
+
+  @@unique([runnerDeviceId, keyId], map: "runner_encryption_keys_runner_device_id_key_id_key")
+  @@index([runnerDeviceId, status], map: "runner_encryption_keys_runner_device_id_status_idx")
+  @@map("runner_encryption_keys")
+}
+
+model WorkflowRunInputPreparation {
+  id                    String                            @id @default(uuid()) @db.Uuid
+  workspaceId           String                            @map("workspace_id") @db.Uuid
+  workflowVersionId     String                            @map("workflow_version_id") @db.Uuid
+  runnerDeviceId        String                            @map("runner_device_id") @db.Uuid
+  runnerEncryptionKeyId String                            @map("runner_encryption_key_id") @db.Uuid
+  createdByUserId       String                            @map("created_by_user_id") @db.Uuid
+  clientPreparationId   String                            @map("client_preparation_id") @db.Uuid
+  clientRunId           String                            @map("client_run_id") @db.Uuid
+  reservedRunId         String                            @unique(map: "workflow_run_input_preparations_reserved_run_id_key") @map("reserved_run_id") @db.Uuid
+  status                WorkflowRunInputPreparationStatus @default(PENDING)
+  variableManifest      Json                              @map("variable_manifest") @db.JsonB
+  secretManifest        Json                              @map("secret_manifest") @db.JsonB
+  allowedOrigins        Json                              @map("allowed_origins") @db.JsonB
+  executionOptions      Json                              @map("execution_options") @db.JsonB
+  definitionDigest      String                            @map("definition_digest") @db.Char(64)
+  aad                   Json                              @db.JsonB
+  requestDigest         String                            @map("request_digest") @db.Char(64)
+  expiresAt             DateTime                          @map("expires_at") @db.Timestamptz(3)
+  consumedAt            DateTime?                         @map("consumed_at") @db.Timestamptz(3)
+  createdAt             DateTime                          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace             Workspace                         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  workflowVersion       WorkflowVersion                   @relation(fields: [workflowVersionId], references: [id], onDelete: Restrict)
+  runnerDevice          RunnerDevice                      @relation(fields: [runnerDeviceId], references: [id], onDelete: Restrict)
+  runnerEncryptionKey   RunnerEncryptionKey               @relation(fields: [runnerEncryptionKeyId], references: [id], onDelete: Restrict)
+  createdBy             User                              @relation("WorkflowRunInputPreparationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  envelope              WorkflowRunInputEnvelope?
+
+  @@unique([workspaceId, clientPreparationId], map: "run_input_preparations_workspace_client_prep_key")
+  @@unique([workspaceId, clientRunId], map: "workflow_run_input_preparations_workspace_client_run_key")
+  @@index([status, expiresAt], map: "workflow_run_input_preparations_status_expires_at_idx")
+  @@index([workflowVersionId, createdAt], map: "workflow_run_input_preparations_workflow_version_created_at_idx")
+  @@index([runnerDeviceId, createdAt], map: "workflow_run_input_preparations_runner_device_created_at_idx")
+  @@map("workflow_run_input_preparations")
+}
+
+model WorkflowRunInputEnvelope {
+  id                    String                      @id @default(uuid()) @db.Uuid
+  workflowRunId         String                      @unique(map: "workflow_run_input_envelopes_workflow_run_id_key") @map("workflow_run_id") @db.Uuid
+  preparationId         String                      @unique(map: "workflow_run_input_envelopes_preparation_id_key") @map("preparation_id") @db.Uuid
+  runnerEncryptionKeyId String                      @map("runner_encryption_key_id") @db.Uuid
+  schemaVersion         Int                         @map("schema_version")
+  profile               String                      @db.VarChar(64)
+  contentEncryption     String                      @map("content_encryption") @db.VarChar(32)
+  keyEncryption         String                      @map("key_encryption") @db.VarChar(32)
+  keyId                 String                      @map("key_id") @db.VarChar(64)
+  expiresAt             DateTime                    @map("expires_at") @db.Timestamptz(3)
+  aad                    String                      @db.Text
+  iv                     String                      @db.VarChar(32)
+  wrappedKey             String                      @map("wrapped_key") @db.Text
+  ciphertext             String                      @db.Text
+  ciphertextDigest       String                      @map("ciphertext_digest") @db.Char(64)
+  createdAt              DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  workflowRun            WorkflowRun                 @relation(fields: [workflowRunId], references: [id], onDelete: Restrict)
+  preparation            WorkflowRunInputPreparation @relation(fields: [preparationId], references: [id], onDelete: Restrict)
+  runnerEncryptionKey    RunnerEncryptionKey         @relation(fields: [runnerEncryptionKeyId], references: [id], onDelete: Restrict)
+
+  @@index([runnerEncryptionKeyId, createdAt], map: "workflow_run_input_envelopes_key_created_at_idx")
+  @@map("workflow_run_input_envelopes")
 }
 
 model WorkflowRunStep {

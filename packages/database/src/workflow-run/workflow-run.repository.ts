@@ -16,6 +16,11 @@ import {
   type WorkflowRunStatus as ProtocolRunStatus,
 } from '@tasktwin/run-protocol';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import {
+  RunInputAdditionalAuthenticatedDataSchema,
+  SecureRunInputEnvelopeSchema,
+  SecureRunInputManifestSchema,
+} from '@tasktwin/secure-run-inputs';
 
 import {
   OrganizationRole,
@@ -376,6 +381,17 @@ export class WorkflowRunRepository {
           allowedOrigins: true,
           executionOptions: true,
           workflowVersion: { select: { definition: true } },
+          inputEnvelope: {
+            include: {
+              preparation: {
+                select: {
+                  variableManifest: true,
+                  secretManifest: true,
+                  aad: true,
+                },
+              },
+            },
+          },
         },
       });
       if (retried !== null) {
@@ -445,6 +461,17 @@ export class WorkflowRunRepository {
           allowedOrigins: true,
           executionOptions: true,
           workflowVersion: { select: { definition: true } },
+          inputEnvelope: {
+            include: {
+              preparation: {
+                select: {
+                  variableManifest: true,
+                  secretManifest: true,
+                  aad: true,
+                },
+              },
+            },
+          },
         },
       });
       return this.claimedRecord(row, false);
@@ -859,6 +886,26 @@ export class WorkflowRunRepository {
       allowedOrigins: Prisma.JsonValue;
       executionOptions: Prisma.JsonValue;
       workflowVersion: { definition: Prisma.JsonValue };
+      inputEnvelope: {
+        schemaVersion: number;
+        profile: string;
+        contentEncryption: string;
+        keyEncryption: string;
+        preparationId: string;
+        workflowRunId: string;
+        keyId: string;
+        expiresAt: Date;
+        aad: string;
+        iv: string;
+        wrappedKey: string;
+        ciphertext: string;
+        ciphertextDigest: string;
+        preparation: {
+          variableManifest: Prisma.JsonValue;
+          secretManifest: Prisma.JsonValue;
+          aad: Prisma.JsonValue;
+        };
+      } | null;
     },
     idempotent: boolean,
   ): ClaimWorkflowRunResult {
@@ -872,6 +919,35 @@ export class WorkflowRunRepository {
       definitionDigest: row.definitionDigest,
       allowedOrigins: parseJsonArray(row.allowedOrigins),
       options: parseOptions(row.executionOptions),
+      runtimeInput:
+        row.inputEnvelope === null
+          ? { kind: 'none' }
+          : {
+              kind: 'encrypted_envelope',
+              envelope: SecureRunInputEnvelopeSchema.parse({
+                schemaVersion: row.inputEnvelope.schemaVersion,
+                profile: row.inputEnvelope.profile,
+                contentEncryption: row.inputEnvelope.contentEncryption,
+                keyEncryption: row.inputEnvelope.keyEncryption,
+                preparationId: row.inputEnvelope.preparationId,
+                workflowRunId: row.inputEnvelope.workflowRunId,
+                keyId: row.inputEnvelope.keyId,
+                expiresAt: row.inputEnvelope.expiresAt.toISOString(),
+                aad: row.inputEnvelope.aad,
+                iv: row.inputEnvelope.iv,
+                wrappedKey: row.inputEnvelope.wrappedKey,
+                ciphertext: row.inputEnvelope.ciphertext,
+                ciphertextDigest: row.inputEnvelope.ciphertextDigest,
+              }),
+              aad: RunInputAdditionalAuthenticatedDataSchema.parse(
+                row.inputEnvelope.preparation.aad,
+              ),
+              manifest: SecureRunInputManifestSchema.parse({
+                schemaVersion: 1,
+                variables: row.inputEnvelope.preparation.variableManifest,
+                secrets: row.inputEnvelope.preparation.secretManifest,
+              }),
+            },
       leaseExpiresAt: row.leaseExpiresAt,
       idempotent,
     };

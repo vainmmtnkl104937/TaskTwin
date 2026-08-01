@@ -1,7 +1,7 @@
 import {
-  resolveSelectValue,
-  resolveTextValue,
-  type RuntimeValueRecord,
+  resolveSelectWithResolver,
+  resolveTextWithResolver,
+  type WorkflowRuntimeValueResolver,
 } from '@tasktwin/workflow-engine';
 import type { ElementLocator, WorkflowStep } from '@tasktwin/workflow-schema';
 import type { Page } from 'playwright';
@@ -23,7 +23,7 @@ export type SupportedWorkflowStep = Extract<
 
 export interface StepExecutionContext {
   page: Page;
-  runtimeValues: RuntimeValueRecord;
+  valueResolver: WorkflowRuntimeValueResolver;
   allowedOrigins: readonly string[];
   options: BrowserExecutionOptions;
   effectiveTimeoutMs: number;
@@ -72,10 +72,10 @@ export async function executeStep(
   }
 
   if (step.type === 'navigate') {
-    const value = resolveTextValue(
+    const value = resolveTextWithResolver(
       step.url,
       'navigate.url',
-      context.runtimeValues,
+      context.valueResolver,
     );
     const url = validateNavigationUrl(value, context.allowedOrigins);
     try {
@@ -118,10 +118,10 @@ export async function executeStep(
         });
         return;
       case 'fill': {
-        const value = resolveTextValue(
+        const value = resolveTextWithResolver(
           step.value,
           'fill.value',
-          context.runtimeValues,
+          context.valueResolver,
         );
         await locator.fill(value, {
           timeout: Math.min(
@@ -132,7 +132,10 @@ export async function executeStep(
         return;
       }
       case 'select': {
-        const value = resolveSelectValue(step.value, context.runtimeValues);
+        const value = resolveSelectWithResolver(
+          step.value,
+          context.valueResolver,
+        );
         await locator.selectOption(
           { value },
           {

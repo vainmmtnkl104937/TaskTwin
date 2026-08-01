@@ -52,6 +52,28 @@ export class WorkflowRunsController {
     return this.service.create(user.id, workflowVersionId, body);
   }
 
+  @Post('workflow-versions/:workflowVersionId/run-preparations')
+  @HttpCode(HttpStatus.OK)
+  @ResolveOrganizationResource('workflowVersion', 'workflowVersionId')
+  @RequireOrganizationRoles(...WRITERS)
+  prepareInputs(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workflowVersionId') workflowVersionId: string,
+    @Body() body: unknown,
+  ) {
+    return this.service.prepareInputs(user.id, workflowVersionId, body);
+  }
+
+  @Post('run-preparations/:preparationId/commit')
+  @HttpCode(HttpStatus.OK)
+  commitInputs(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('preparationId') preparationId: string,
+    @Body() body: unknown,
+  ) {
+    return this.service.commitInputs(user.id, preparationId, body);
+  }
+
   @Post('workflow-runs/:workflowRunId/cancel')
   @HttpCode(HttpStatus.OK)
   @ResolveOrganizationResource('workflowRun', 'workflowRunId')

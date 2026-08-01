@@ -38,6 +38,16 @@ export class RunnerController {
     return this.service.heartbeat(runner, body);
   }
 
+  @Post('runner/encryption-keys')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RunnerCredentialGuard)
+  registerEncryptionKey(
+    @CurrentRunner() runner: AuthenticatedRunner,
+    @Body() body: unknown,
+  ) {
+    return this.service.registerEncryptionKey(runner, body);
+  }
+
   @Get('workspaces/:workspaceId/runner-devices')
   @UseGuards(JwtAuthGuard, OrganizationResourceContextGuard)
   @ResolveOrganizationResource('workspace', 'workspaceId')

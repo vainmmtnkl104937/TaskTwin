@@ -3,8 +3,14 @@ import {
   WorkflowExecutionResultSchema,
   WorkflowProgressEventSchema,
 } from '@tasktwin/workflow-engine';
-import { WorkflowRunInputSubmissionSchema } from '@tasktwin/workflow-inputs';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import {
+  RunInputPreparationResponseSchema,
+  RunInputAdditionalAuthenticatedDataSchema,
+  SecureExecutionOptionsSchema,
+  SecureRunInputEnvelopeSchema,
+  SecureRunInputManifestSchema,
+} from '@tasktwin/secure-run-inputs';
 import { z } from 'zod';
 
 import {
@@ -88,6 +94,21 @@ export const CreateWorkflowRunRequestSchema = z.strictObject({
   runnerDeviceId: UuidSchema,
 });
 
+export const CreateRunInputPreparationRequestSchema = z.strictObject({
+  schemaVersion: z.literal(RUN_PROTOCOL_SCHEMA_VERSION),
+  clientPreparationId: UuidSchema,
+  clientRunId: UuidSchema,
+  runnerDeviceId: UuidSchema,
+  options: SecureExecutionOptionsSchema,
+});
+
+export { RunInputPreparationResponseSchema };
+
+export const CommitRunInputPreparationRequestSchema = z.strictObject({
+  schemaVersion: z.literal(RUN_PROTOCOL_SCHEMA_VERSION),
+  envelope: SecureRunInputEnvelopeSchema,
+});
+
 export const SafeRunStepMetadataSchema = z.strictObject({
   stepId: z.string().trim().min(1).max(256),
   stepIndex: z.number().int().nonnegative(),
@@ -165,11 +186,21 @@ export const RunnerJobClaimRequestSchema = z.strictObject({
   claimAttemptId: UuidSchema,
 });
 
+export const ClaimedRunInputSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('none') }),
+  z.strictObject({
+    kind: z.literal('encrypted_envelope'),
+    envelope: SecureRunInputEnvelopeSchema,
+    aad: RunInputAdditionalAuthenticatedDataSchema,
+    manifest: SecureRunInputManifestSchema,
+  }),
+]);
+
 export const ClaimedRunnerJobSchema = z.strictObject({
   runId: UuidSchema,
   definitionDigest: Sha256DigestSchema,
   workflow: WorkflowDefinitionSchema,
-  inputs: WorkflowRunInputSubmissionSchema,
+  runtimeInput: ClaimedRunInputSchema,
   allowedOrigins: z.array(z.string().url().max(512)).min(1).max(32),
   options: WorkflowEngineExecutionOptionsSchema,
   leaseToken: LeaseTokenSchema,
@@ -301,6 +332,12 @@ export type WorkflowRunReadinessReport = z.infer<
 export type CreateWorkflowRunRequest = z.infer<
   typeof CreateWorkflowRunRequestSchema
 >;
+export type CreateRunInputPreparationRequest = z.infer<
+  typeof CreateRunInputPreparationRequestSchema
+>;
+export type CommitRunInputPreparationRequest = z.infer<
+  typeof CommitRunInputPreparationRequestSchema
+>;
 export type SafeWorkflowRunMetadata = z.infer<
   typeof SafeWorkflowRunMetadataSchema
 >;
@@ -310,6 +347,7 @@ export type RunnerJobClaimResponse = z.infer<
   typeof RunnerJobClaimResponseSchema
 >;
 export type ClaimedRunnerJob = z.infer<typeof ClaimedRunnerJobSchema>;
+export type ClaimedRunInput = z.infer<typeof ClaimedRunInputSchema>;
 export type LeaseRenewalResponse = z.infer<typeof LeaseRenewalResponseSchema>;
 export type SequencedWorkflowProgressEvent = z.infer<
   typeof SequencedWorkflowProgressEventSchema

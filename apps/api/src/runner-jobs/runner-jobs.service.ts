@@ -91,7 +91,7 @@ export class RunnerJobsService {
                 runId: result.runId,
                 definitionDigest: result.definitionDigest,
                 workflow: result.workflow,
-                inputs: { schemaVersion: 1, values: {} },
+                runtimeInput: result.runtimeInput,
                 allowedOrigins: result.allowedOrigins,
                 options: result.options,
                 leaseToken: token,

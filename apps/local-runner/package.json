@@ -21,6 +21,7 @@
     "@tasktwin/locator-engine": "workspace:*",
     "@tasktwin/run-protocol": "workspace:*",
     "@tasktwin/runner-protocol": "workspace:*",
+    "@tasktwin/secure-run-inputs": "workspace:*",
     "@tasktwin/shared-types": "workspace:*",
     "@tasktwin/workflow-engine": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",

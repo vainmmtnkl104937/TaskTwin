@@ -79,6 +79,21 @@ is delivered. A cancellation request aborts the workflow engine and waits for
 browser cleanup. A stopped Runner does not re-execute work; its expired lease
 causes the Control Plane to mark the run Interrupted.
 
-Runtime input and secret delivery, saved browser authentication, persistent
-profiles, retry or resume, screenshots, tracing, AI and scheduling remain out
-of scope.
+## Secure runtime inputs
+
+The Runner creates a 3072-bit RSA key pair and registers only the SPKI public
+key. Its PKCS8 private key is stored atomically at
+`.tasktwin/runner-encryption-key.json`, is never printed or sent, and survives
+restart. Corrupted key files fail closed. POSIX modes request `0600`; Windows
+relies on the current user-profile ACL because mode bits are not a complete
+Windows permission boundary.
+
+Encrypted variables are authenticated and decrypted only after claim and
+before Chromium starts. Attended TTY sessions advertise interactive secret
+support and prompt declared aliases without echo or persistence. Secret leases
+and decrypted variable references are disposed on every terminal path.
+JavaScript strings cannot be guaranteed to be immediately zeroized.
+
+File delivery, persistent secrets, automatic key rotation, OS keychains,
+saved browser authentication, persistent profiles, retry/resume, screenshots,
+tracing, AI and scheduling remain out of scope.

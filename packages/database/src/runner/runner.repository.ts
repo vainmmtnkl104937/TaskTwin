@@ -2,6 +2,7 @@ import {
   CREDENTIAL_DELIVERY_WINDOW_SECONDS,
   MAX_POLL_INTERVAL_SECONDS,
   POLL_SLOW_DOWN_INCREMENT_SECONDS,
+  type RunnerCapability,
   type RunnerDeviceMetadata,
 } from '@tasktwin/runner-protocol';
 
@@ -68,6 +69,7 @@ function toDeviceRecord(row: {
   lastSeenAt: Date | null;
   revokedAt: Date | null;
   createdAt: Date;
+  capabilities: string[];
 }): RunnerDeviceRecord {
   return {
     id: row.id,
@@ -79,6 +81,7 @@ function toDeviceRecord(row: {
       runnerVersion: row.runnerVersion,
       installationId: row.installationId,
     },
+    capabilities: row.capabilities as RunnerCapability[],
     lastSeenAt: row.lastSeenAt,
     revokedAt: row.revokedAt,
     createdAt: row.createdAt,
@@ -424,6 +427,7 @@ export class RunnerRepository {
         lastSeenAt: true,
         revokedAt: true,
         createdAt: true,
+        capabilities: true,
       },
     });
     return {
@@ -467,6 +471,7 @@ export class RunnerRepository {
     runnerDeviceId: string;
     credentialId: string;
     runnerVersion: string;
+    capabilities: RunnerCapability[];
     now: Date;
   }): Promise<void> {
     return this.runSerializable(async (transaction) => {
@@ -492,6 +497,8 @@ export class RunnerRepository {
         data: {
           lastSeenAt: input.now,
           runnerVersion: input.runnerVersion,
+          capabilities: input.capabilities,
+          capabilitiesUpdatedAt: input.now,
         },
       });
       await transaction.runnerCredential.update({
@@ -520,6 +527,7 @@ export class RunnerRepository {
           lastSeenAt: true,
           revokedAt: true,
           createdAt: true,
+          capabilities: true,
         },
       });
       if (device === null) {
@@ -553,6 +561,7 @@ export class RunnerRepository {
           lastSeenAt: true,
           revokedAt: true,
           createdAt: true,
+          capabilities: true,
         },
       });
       return toDeviceRecord(revoked);

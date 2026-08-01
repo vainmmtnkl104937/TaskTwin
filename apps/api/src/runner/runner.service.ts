@@ -1,11 +1,16 @@
 import {
+  BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash, createPublicKey } from 'node:crypto';
 import {
   RunnerRepository,
   RunnerRepositoryError,
+  SecureRunInputRepository,
+  SecureRunInputRepositoryError,
   type RunnerDeviceRecord,
 } from '@tasktwin/database';
 import {
@@ -20,6 +25,10 @@ import {
   type RunnerDeviceRevokeResponse,
   type RunnerHeartbeatResponse,
 } from '@tasktwin/runner-protocol';
+import {
+  RunnerEncryptionKeyRegistrationRequestSchema,
+  RunnerEncryptionKeyRegistrationResponseSchema,
+} from '@tasktwin/secure-run-inputs';
 
 import type { AuthenticatedRunner } from '../runner-auth/runner-authenticated-request.js';
 
@@ -28,6 +37,7 @@ function safeDevice(record: RunnerDeviceRecord, now: Date) {
     id: record.id,
     workspaceId: record.workspaceId,
     metadata: record.metadata,
+    capabilities: record.capabilities,
     connectionStatus: deriveRunnerConnectionStatus({
       lastSeenAt: record.lastSeenAt?.toISOString() ?? null,
       revokedAt: record.revokedAt?.toISOString() ?? null,
@@ -42,7 +52,10 @@ function safeDevice(record: RunnerDeviceRecord, now: Date) {
 
 @Injectable()
 export class RunnerService {
-  constructor(private readonly repository: RunnerRepository) {}
+  constructor(
+    private readonly repository: RunnerRepository,
+    private readonly secureInputs?: SecureRunInputRepository,
+  ) {}
 
   async heartbeat(
     runner: AuthenticatedRunner,
@@ -56,6 +69,7 @@ export class RunnerService {
       await this.repository.heartbeat({
         ...runner,
         runnerVersion: request.data.runnerVersion,
+        capabilities: request.data.capabilities,
         now: new Date(),
       });
     } catch (error: unknown) {
@@ -72,8 +86,62 @@ export class RunnerService {
       runnerDeviceId: runner.runnerDeviceId,
       workspaceId: runner.workspaceId,
       connectionStatus: 'online',
+      capabilities: request.data.capabilities,
       nextHeartbeatInSeconds: DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
     });
+  }
+
+  async registerEncryptionKey(runner: AuthenticatedRunner, input: unknown) {
+    const request =
+      RunnerEncryptionKeyRegistrationRequestSchema.safeParse(input);
+    if (!request.success) {
+      throw new BadRequestException('Invalid Runner encryption key.');
+    }
+    try {
+      const der = Buffer.from(request.data.key.publicKeySpki, 'base64url');
+      const publicKey = createPublicKey({
+        key: der,
+        format: 'der',
+        type: 'spki',
+      });
+      const details = publicKey.asymmetricKeyDetails;
+      const fingerprint = createHash('sha256').update(der).digest('hex');
+      if (
+        publicKey.asymmetricKeyType !== 'rsa' ||
+        details?.modulusLength !== 3_072 ||
+        details.publicExponent !== 65_537n ||
+        fingerprint !== request.data.key.fingerprint
+      ) {
+        throw new BadRequestException('Invalid Runner encryption key.');
+      }
+      if (this.secureInputs === undefined) {
+        throw new ConflictException(
+          'Secure input registration is unavailable.',
+        );
+      }
+      const result = await this.secureInputs.registerRunnerKey({
+        runnerDeviceId: runner.runnerDeviceId,
+        key: request.data.key,
+      });
+      return RunnerEncryptionKeyRegistrationResponseSchema.parse({
+        schemaVersion: 1,
+        ...result,
+      });
+    } catch (error: unknown) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      if (error instanceof SecureRunInputRepositoryError) {
+        if (error.code === 'RUNNER_UNAVAILABLE') {
+          throw new ForbiddenException();
+        }
+        throw new ConflictException({
+          code: error.code,
+          message: 'The Runner encryption key conflicts with current state.',
+        });
+      }
+      throw new BadRequestException('Invalid Runner encryption key.');
+    }
   }
 
   async listDevices(

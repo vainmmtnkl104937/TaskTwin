@@ -28,8 +28,10 @@ import {
   validateNavigationUrl,
 } from './origin-policy.js';
 import {
-  resolveSelectValue,
-  resolveTextValue,
+  createRuntimeValueResolver,
+  resolveSelectWithResolver,
+  resolveTextWithResolver,
+  type WorkflowRuntimeValueResolver,
 } from './value-source-resolver.js';
 
 const RawExecutionEnvelopeSchema = z.strictObject({
@@ -48,6 +50,7 @@ const AllowedOriginsSchema = z
 export interface PreparedWorkflowExecution {
   request: WorkflowExecutionRequest;
   runtimeInputs: Readonly<Record<string, RuntimeInputValue>>;
+  valueResolver: WorkflowRuntimeValueResolver;
   allowedOrigins: readonly string[];
 }
 
@@ -86,6 +89,7 @@ export function findTypedWorkflow(
 export function preflightWorkflowExecution(
   input: unknown,
   adapter: WorkflowExecutionAdapter,
+  externalResolver?: WorkflowRuntimeValueResolver,
 ): PreflightResult {
   const envelope = RawExecutionEnvelopeSchema.safeParse(input);
   if (!envelope.success) {
@@ -118,15 +122,37 @@ export function preflightWorkflowExecution(
   if (inputAnalysis.hasBlockingIssues) {
     return failure('INVALID_WORKFLOW', workflow);
   }
-  if (inputAnalysis.secretRequirements.length > 0) {
-    return failure('SECRET_RESOLUTION_UNAVAILABLE', workflow);
-  }
-  const inputValidation = validateWorkflowRunInputs(
-    workflow,
-    submittedInputs.data,
-  );
-  if (!inputValidation.summary.valid) {
-    return failure('INVALID_RUNTIME_INPUTS', workflow);
+  if (externalResolver === undefined) {
+    if (inputAnalysis.secretRequirements.length > 0) {
+      return failure('SECRET_RESOLUTION_UNAVAILABLE', workflow);
+    }
+    const inputValidation = validateWorkflowRunInputs(
+      workflow,
+      submittedInputs.data,
+    );
+    if (!inputValidation.summary.valid) {
+      return failure('INVALID_RUNTIME_INPUTS', workflow);
+    }
+  } else {
+    for (const item of inputAnalysis.variables) {
+      if (
+        (item.variable.required || item.usageCount > 0) &&
+        (item.variable.valueType === 'file' ||
+          !externalResolver.hasVariable(
+            item.variable.name,
+            item.variable.valueType,
+          ))
+      ) {
+        return failure('INVALID_RUNTIME_INPUTS', workflow);
+      }
+    }
+    if (
+      inputAnalysis.secretRequirements.some(
+        (requirement) => !externalResolver.hasSecret(requirement.secretName),
+      )
+    ) {
+      return failure('SECRET_RESOLUTION_UNAVAILABLE', workflow);
+    }
   }
 
   const originInput = AllowedOriginsSchema.safeParse(
@@ -148,6 +174,8 @@ export function preflightWorkflowExecution(
   }
 
   const runtimeInputs = Object.freeze({ ...submittedInputs.data.values });
+  const valueResolver =
+    externalResolver ?? createRuntimeValueResolver(runtimeInputs);
   const supported = new Set(adapter.supportedStepTypes);
   try {
     for (const step of workflow.steps) {
@@ -157,13 +185,13 @@ export function preflightWorkflowExecution(
       adapter.validateStep(step);
       if (step.type === 'navigate') {
         validateNavigationUrl(
-          resolveTextValue(step.url, 'navigate.url', runtimeInputs),
+          resolveTextWithResolver(step.url, 'navigate.url', valueResolver),
           allowedOrigins,
         );
       } else if (step.type === 'fill') {
-        resolveTextValue(step.value, 'fill.value', runtimeInputs);
+        resolveTextWithResolver(step.value, 'fill.value', valueResolver);
       } else if (step.type === 'select') {
-        resolveSelectValue(step.value, runtimeInputs);
+        resolveSelectWithResolver(step.value, valueResolver);
       }
     }
   } catch (error: unknown) {
@@ -186,6 +214,7 @@ export function preflightWorkflowExecution(
     prepared: {
       request,
       runtimeInputs,
+      valueResolver,
       allowedOrigins,
     },
   };

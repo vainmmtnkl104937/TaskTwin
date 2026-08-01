@@ -23,8 +23,10 @@ step types without connecting a Control Plane job system.
 Session 16 adds a deterministic framework-independent workflow engine with
 explicit lifecycle, timeout, cancellation, progress, skipped-step, and cleanup
 semantics behind a Playwright adapter.
-It still does not poll for workflow jobs, persist workflow runs, reuse browser
-profiles, resolve secrets, or capture screenshots.
+Session 17 adds persisted run dispatch and Session 18 adds end-to-end encrypted
+runtime variables plus local-only secret resolution for an assigned Runner.
+It still does not transfer files, rotate Runner keys, reuse browser profiles,
+persist secrets, or capture screenshots.
 
 ## Browser-first MVP
 
@@ -362,3 +364,14 @@ existing workflow engine and isolated Playwright adapter.
 It does not deliver runtime variables, files or secrets; requeue or retry an
 Interrupted run; add Redis, WebSocket, scheduling, parallel jobs, persistent
 browser profiles, screenshots or AI.
+
+## Session 18 scope
+
+Session 18 adds a framework-independent secure-input contract, Runner-owned
+RSA key pairs, browser-side AES-GCM encryption, short-lived run preparation,
+ciphertext-only persistence and assigned-Runner decryption. Declared secret
+aliases are prompted locally without echo and disposed after execution.
+
+It does not transfer files, send secret values through Web or API, persist
+plaintext inputs, rotate keys, use an OS keychain, retry or resume runs, or add
+AI.

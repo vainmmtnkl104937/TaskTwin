@@ -45,3 +45,11 @@ Session 17 adds Published workflow run creation, required Local Runner
 selection, Workspace run history, safe run/step detail, terminal-aware polling
 and cooperative cancellation. Access tokens remain in the HTTP-only cookie and
 runner credentials or lease tokens never reach browser code.
+
+Session 18 adds a two-phase run form for workflows with runtime variables.
+Preparation returns the selected Runner public key and safe manifest; the
+browser validates variables and encrypts them with Web Crypto before the
+commit Server Action. Plaintext values stay in component memory, are cleared
+after success, and are never written to localStorage or sessionStorage.
+Secret aliases are displayed only as local Runner requirements; Web never asks
+for a secret value.

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { deriveSecureRunInputManifest } from '@tasktwin/secure-run-inputs';
 
 import { CreateDraftButton } from '@/components/workflow-lifecycle/create-draft-button';
 import { LifecycleStatusBadge } from '@/components/workflow-lifecycle/lifecycle-status-badge';
@@ -8,6 +9,7 @@ import {
   ControlPlaneError,
   listRunnerDevices,
   listWorkflowVersions,
+  getWorkflowVersion,
 } from '@/lib/server/control-plane';
 import { RunWorkflowPanel } from '@/components/workflow-runs/run-workflow-panel';
 
@@ -43,6 +45,20 @@ export default async function WorkflowVersionHistoryPage({
   ) {
     notFound();
   }
+
+  const runInputManifests = new Map(
+    await Promise.all(
+      history.versions
+        .filter((version) => version.status === 'published')
+        .map(async (version) => {
+          const detail = await getWorkflowVersion(accessToken, version.id);
+          return [
+            version.id,
+            deriveSecureRunInputManifest(detail.workflowVersion.definition),
+          ] as const;
+        }),
+    ),
+  );
 
   return (
     <main className="dashboard-page">
@@ -98,12 +114,14 @@ export default async function WorkflowVersionHistoryPage({
                 <RunWorkflowPanel
                   workspaceId={workspaceId}
                   workflowVersionId={version.id}
+                  manifest={runInputManifests.get(version.id)!}
                   runners={runners.devices
                     .filter((device) => device.connectionStatus !== 'revoked')
                     .map((device) => ({
                       id: device.id,
                       name: device.metadata.displayName,
                       status: device.connectionStatus,
+                      capabilities: device.capabilities,
                     }))}
                 />
               ) : null}

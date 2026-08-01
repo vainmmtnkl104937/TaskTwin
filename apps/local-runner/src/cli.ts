@@ -13,6 +13,9 @@ import { executeFixtureCommand } from './execution/fixture-command.js';
 import { PlaywrightBrowserSessionFactory } from './execution/playwright-browser-session.js';
 import { validateControlPlaneOrigin } from './origin.js';
 import { LocalRunnerService, systemClock } from './runner-service.js';
+import { FileRunnerEncryptionKeyStore } from './secure-inputs/runner-encryption-key-store.js';
+import { RunnerKeyManager } from './secure-inputs/runner-key-manager.js';
+import { InteractiveSecretProvider } from './secure-inputs/interactive-secret-provider.js';
 
 const RUNNER_VERSION = '0.1.0';
 
@@ -83,6 +86,11 @@ export async function runCli(
     strict: true,
   });
   const transport = new HttpRunnerControlPlaneTransport();
+  const keyManager = new RunnerKeyManager(
+    new FileRunnerEncryptionKeyStore(),
+    transport,
+  );
+  const secretProvider = new InteractiveSecretProvider();
   const service = new LocalRunnerService(
     new FileCredentialStore(),
     transport,
@@ -91,6 +99,8 @@ export async function runCli(
     RUNNER_VERSION,
     transport,
     new PlaywrightBrowserSessionFactory(),
+    keyManager,
+    secretProvider,
   );
   switch (command) {
     case 'execute-fixture': {

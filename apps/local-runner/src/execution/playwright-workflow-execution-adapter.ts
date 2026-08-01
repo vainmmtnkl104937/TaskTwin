@@ -83,7 +83,7 @@ export class PlaywrightWorkflowExecutionAdapter implements WorkflowExecutionAdap
     }
     await executeStep(context.step, {
       page: session.page,
-      runtimeValues: context.runtimeInputs,
+      valueResolver: context.valueResolver,
       allowedOrigins: context.allowedOrigins,
       options: this.options,
       effectiveTimeoutMs: context.effectiveTimeoutMs,

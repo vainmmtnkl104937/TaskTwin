@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RunnerCapabilitiesSchema } from '@tasktwin/secure-run-inputs';
 
 import {
   DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
@@ -166,6 +167,7 @@ export const SafeRunnerDeviceSchema = z.strictObject({
   id: UuidSchema,
   workspaceId: UuidSchema,
   metadata: RunnerDeviceMetadataSchema,
+  capabilities: RunnerCapabilitiesSchema,
   connectionStatus: RunnerConnectionStatusSchema,
   lastSeenAt: IsoDateSchema.nullable(),
   revokedAt: IsoDateSchema.nullable(),
@@ -190,6 +192,7 @@ export const RunnerDeviceRevokeResponseSchema = z.strictObject({
 export const RunnerHeartbeatRequestSchema = z.strictObject({
   schemaVersion: z.literal(RUNNER_PROTOCOL_SCHEMA_VERSION),
   runnerVersion: RunnerVersionSchema,
+  capabilities: RunnerCapabilitiesSchema.default([]),
 });
 
 export const RunnerHeartbeatResponseSchema = z.strictObject({
@@ -197,6 +200,7 @@ export const RunnerHeartbeatResponseSchema = z.strictObject({
   runnerDeviceId: UuidSchema,
   workspaceId: UuidSchema,
   connectionStatus: z.literal('online'),
+  capabilities: RunnerCapabilitiesSchema,
   nextHeartbeatInSeconds: z
     .number()
     .int()
