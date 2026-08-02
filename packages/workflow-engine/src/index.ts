@@ -5,6 +5,7 @@ export type {
   AdapterStopContext,
   WorkflowExecutionAdapter,
 } from './adapter.js';
+export type { WorkflowApprovalCoordinator } from './approval-coordinator.js';
 export { systemWorkflowEngineClock, timestampFromMs } from './clock.js';
 export type { WorkflowEngineClock, WorkflowEngineTimer } from './clock.js';
 export {
@@ -18,6 +19,7 @@ export {
 } from './constants.js';
 export {
   AllowedOriginSchema,
+  ApprovalStatusProgressEventSchema,
   ExecutionErrorCodeSchema,
   RunStatusProgressEventSchema,
   SafeExecutionErrorSchema,

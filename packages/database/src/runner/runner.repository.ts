@@ -9,6 +9,9 @@ import {
 import {
   OrganizationRole,
   Prisma,
+  WorkflowApprovalRequestStatus,
+  WorkflowRunStatus,
+  WorkflowRunStepStatus,
   type PrismaClient,
 } from '../generated/prisma/client.js';
 import { RunnerRepositoryError } from './runner-errors.js';
@@ -564,6 +567,70 @@ export class RunnerRepository {
           capabilities: true,
         },
       });
+      await transaction.workflowApprovalRequest.updateMany({
+        where: {
+          runnerDeviceId,
+          status: WorkflowApprovalRequestStatus.PENDING,
+        },
+        data: {
+          status: WorkflowApprovalRequestStatus.INVALIDATED,
+          resolvedAt: now,
+        },
+      });
+      const activeRuns = await transaction.workflowRun.findMany({
+        where: {
+          runnerDeviceId,
+          status: {
+            in: [
+              WorkflowRunStatus.CLAIMED,
+              WorkflowRunStatus.RUNNING,
+              WorkflowRunStatus.WAITING_FOR_APPROVAL,
+              WorkflowRunStatus.CANCEL_REQUESTED,
+            ],
+          },
+        },
+        select: { id: true },
+      });
+      const activeRunIds = activeRuns.map((run) => run.id);
+      if (activeRunIds.length > 0) {
+        await transaction.workflowRunStep.updateMany({
+          where: {
+            workflowRunId: { in: activeRunIds },
+            status: {
+              in: [
+                WorkflowRunStepStatus.RUNNING,
+                WorkflowRunStepStatus.WAITING_FOR_APPROVAL,
+              ],
+            },
+          },
+          data: {
+            status: WorkflowRunStepStatus.INTERRUPTED,
+            errorCode: 'RUNNER_REVOKED',
+            finishedAt: now,
+          },
+        });
+        await transaction.workflowRunStep.updateMany({
+          where: {
+            workflowRunId: { in: activeRunIds },
+            status: WorkflowRunStepStatus.PENDING,
+          },
+          data: {
+            status: WorkflowRunStepStatus.SKIPPED,
+            skippedReason: 'run_interrupted',
+            finishedAt: now,
+          },
+        });
+        await transaction.workflowRun.updateMany({
+          where: { id: { in: activeRunIds } },
+          data: {
+            status: WorkflowRunStatus.INTERRUPTED,
+            terminationCause: 'runner_revoked',
+            finishedAt: now,
+            leaseTokenHash: null,
+            leaseExpiresAt: null,
+          },
+        });
+      }
       return toDeviceRecord(revoked);
     });
   }

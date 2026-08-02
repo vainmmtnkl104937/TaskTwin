@@ -46,3 +46,11 @@ pnpm --filter @tasktwin/workflow-engine build
 ```
 
 Default tests use fake adapters and an injected clock; Chromium is not needed.
+
+## Approval coordination
+
+Approval steps are handled by an injected `WorkflowApprovalCoordinator`, not
+the browser adapter. The run and Approval Step enter `waiting_for_approval`;
+approval resumes sequential execution, rejection cancels, expiry times out,
+and invalidation interrupts. Progress contains only safe IDs, risk, status,
+decision, and timestamps.

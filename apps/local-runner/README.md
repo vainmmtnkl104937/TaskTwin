@@ -110,3 +110,11 @@ JavaScript strings cannot be guaranteed to be immediately zeroized.
 File delivery, persistent secrets, automatic key rotation, OS keychains,
 saved browser authentication, persistent profiles, retry/resume, screenshots,
 tracing, AI and scheduling remain out of scope.
+
+## Human approval gates
+
+For `workflow_approval_v1`, the Runner creates one run-bound approval request,
+polls at the bounded server interval, and keeps heartbeat and lease renewal
+active. Playwright receives no Approval action. The existing BrowserContext
+stays open but inactive until approval; every terminal outcome still waits for
+browser cleanup. Approval messages and runtime values are not logged.

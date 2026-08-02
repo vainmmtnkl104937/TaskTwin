@@ -5,12 +5,27 @@ const TRANSITIONS = {
   pending: ['validating', 'cancelling'],
   validating: ['starting', 'cancelling', 'failed'],
   starting: ['running', 'cancelling', 'failed', 'timed_out'],
-  running: ['cancelling', 'succeeded', 'failed', 'timed_out'],
+  running: [
+    'waiting_for_approval',
+    'cancelling',
+    'succeeded',
+    'failed',
+    'timed_out',
+    'interrupted',
+  ],
+  waiting_for_approval: [
+    'running',
+    'cancelling',
+    'failed',
+    'timed_out',
+    'interrupted',
+  ],
   cancelling: ['cancelled'],
   succeeded: [],
   failed: [],
   cancelled: [],
   timed_out: [],
+  interrupted: [],
 } as const satisfies Record<
   WorkflowEngineRunStatus,
   readonly WorkflowEngineRunStatus[]

@@ -2,6 +2,7 @@ import { analyzeWorkflowInputs } from '@tasktwin/workflow-inputs';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
 import { analyzeWorkflowVerifications } from '@tasktwin/workflow-verification';
 import { analyzeWorkflowExtraction } from '@tasktwin/workflow-extraction';
+import { analyzeWorkflowApprovals } from '@tasktwin/workflow-approval';
 
 import {
   MAX_LIFECYCLE_ISSUES,
@@ -104,6 +105,14 @@ const ISSUE_DETAILS = {
   UNUSED_OUTPUT: {
     severity: 'warning',
     message: 'A workflow output is not used.',
+  },
+  APPROVAL_STEP_ORPHANED: {
+    severity: 'blocking',
+    message: 'An Approval step must gate an immediate following step.',
+  },
+  APPROVAL_GATED_STEP_INVALID: {
+    severity: 'blocking',
+    message: 'The Approval Step has an invalid gated-step binding.',
   },
 } as const satisfies Record<
   PublishReadinessIssueCode,
@@ -258,6 +267,17 @@ export function analyzePublishReadiness(
       path: issue.path,
       ...(issue.stepId === undefined ? {} : { stepId: issue.stepId }),
       ...(issue.stepIndex === undefined ? {} : { stepIndex: issue.stepIndex }),
+    })),
+  );
+  const approvals = analyzeWorkflowApprovals(parsed.data);
+  issues.push(
+    ...approvals.issues.map((issue) => ({
+      code: issue.code,
+      severity: 'blocking' as const,
+      message: ISSUE_DETAILS[issue.code].message,
+      path: issue.path,
+      stepId: issue.stepId,
+      stepIndex: issue.stepIndex,
     })),
   );
   const blockingCount = issues.filter(

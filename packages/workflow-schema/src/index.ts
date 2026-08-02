@@ -21,8 +21,12 @@ export type {
 
 export {
   IdentifierSchema,
+  DEFAULT_APPROVAL_TIMEOUT_MS,
+  MAX_APPROVAL_MESSAGE_LENGTH,
+  MAX_APPROVAL_TIMEOUT_MS,
   MAX_VERIFICATION_TIMEOUT_MS,
   MAX_WAIT_DURATION_MS,
+  MIN_APPROVAL_TIMEOUT_MS,
   MIN_VERIFICATION_TIMEOUT_MS,
   NonEmptyStringSchema,
   SecretReferenceNameSchema,
@@ -85,6 +89,7 @@ export type {
 } from './workflow-definition.js';
 
 export {
+  ApprovalRiskLevelSchema,
   ApprovalStepSchema,
   AttributeExtractSourceSchema,
   CheckedExtractSourceSchema,
@@ -103,6 +108,7 @@ export {
   WorkflowStepSchema,
 } from './workflow-step.js';
 export type {
+  ApprovalRiskLevel,
   ApprovalStep,
   AttributeExtractSource,
   CheckedExtractSource,

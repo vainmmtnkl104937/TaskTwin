@@ -12,6 +12,7 @@ import {
 } from '@tasktwin/workflow-schema';
 import { analyzeWorkflowVerifications } from '@tasktwin/workflow-verification';
 import { analyzeWorkflowExtraction } from '@tasktwin/workflow-extraction';
+import { analyzeWorkflowApprovals } from '@tasktwin/workflow-approval';
 
 import { RUN_PROTOCOL_SCHEMA_VERSION } from './constants.js';
 import {
@@ -28,6 +29,7 @@ const SUPPORTED_STEPS = new Set([
   'wait',
   'verify',
   'extract',
+  'approval',
 ]);
 
 function issue(
@@ -94,6 +96,14 @@ export function analyzeWorkflowRunReadiness(
       issue(
         'INVALID_WORKFLOW_DEFINITION',
         'The workflow contains an invalid output data flow.',
+      ),
+    );
+  }
+  if (analyzeWorkflowApprovals(workflow).hasBlockingIssues) {
+    issues.push(
+      issue(
+        'INVALID_WORKFLOW_DEFINITION',
+        'The workflow contains an invalid approval gate.',
       ),
     );
   }

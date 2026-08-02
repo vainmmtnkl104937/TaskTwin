@@ -267,6 +267,13 @@ Deterministic Extract steps produce string or boolean values for compatible
 later steps. Values remain in Local Runner memory; only safe producer and status
 metadata is persisted by the Control Plane.
 
+## Session 21: human approval gates
+
+An Approval Step pauses local execution before its immediate next step. A
+Workspace OWNER or ADMIN decides a persisted, run-bound request while the
+Runner keeps the lease and isolated browser session alive. Rejection,
+expiration, cancellation, lease loss, and Runner revocation fail closed.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

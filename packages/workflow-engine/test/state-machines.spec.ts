@@ -13,18 +13,20 @@ describe('RunStateMachine', () => {
     for (const [from, targets] of Object.entries(validRunTransitions())) {
       for (const target of targets) {
         const machine = new RunStateMachine();
-        const path =
-          from === 'pending'
-            ? []
-            : from === 'validating'
-              ? ['validating']
-              : from === 'starting'
-                ? ['validating', 'starting']
-                : from === 'running'
-                  ? ['validating', 'starting', 'running']
-                  : from === 'cancelling'
-                    ? ['cancelling']
-                    : [];
+        const paths: Record<string, string[]> = {
+          pending: [],
+          validating: ['validating'],
+          starting: ['validating', 'starting'],
+          running: ['validating', 'starting', 'running'],
+          waiting_for_approval: [
+            'validating',
+            'starting',
+            'running',
+            'waiting_for_approval',
+          ],
+          cancelling: ['cancelling'],
+        };
+        const path = paths[from] ?? [];
         for (const state of path) {
           machine.transition(state as never);
         }
@@ -83,6 +85,7 @@ describe('StepStateMachine', () => {
       'cancelled',
       'timed_out',
       'skipped',
+      'interrupted',
     ] as const) {
       expect(transitions[terminal]).toEqual([]);
     }

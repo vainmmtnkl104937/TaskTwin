@@ -18,6 +18,9 @@ import {
   WorkflowRunCancellationResponseSchema,
   WorkflowRunDetailResponseSchema,
   WorkflowRunListResponseSchema,
+  ApprovalDecisionResponseSchema,
+  ApprovalRequestDetailResponseSchema,
+  ApprovalRequestListResponseSchema,
 } from '../control-plane-contracts';
 import { getControlPlaneOrigin } from './environment';
 
@@ -341,6 +344,48 @@ export function cancelWorkflowRun(accessToken: string, workflowRunId: string) {
       method: 'POST',
       headers: { authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ schemaVersion: 1 }),
+    },
+  );
+}
+
+export function listApprovalRequests(accessToken: string, workspaceId: string) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/approval-requests`,
+    ApprovalRequestListResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function getApprovalRequest(
+  accessToken: string,
+  approvalRequestId: string,
+) {
+  return request(
+    `/approval-requests/${encodeURIComponent(approvalRequestId)}`,
+    ApprovalRequestDetailResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function decideApprovalRequest(
+  accessToken: string,
+  approvalRequestId: string,
+  decision: 'approve' | 'reject',
+  clientDecisionId: string,
+) {
+  return request(
+    `/approval-requests/${encodeURIComponent(approvalRequestId)}/${decision}`,
+    ApprovalDecisionResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ clientDecisionId }),
     },
   );
 }

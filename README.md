@@ -399,3 +399,14 @@ or persisted.
 
 It does not add arrays, transformations, loops, branching, network extraction,
 custom JavaScript, output previews, screenshots, or AI.
+
+## Session 21 scope
+
+Session 21 adds explicit human approval gates for the immediate next workflow
+step. The Runner preserves its browser session and lease while OWNER or ADMIN
+users approve or reject through a safe Workspace Approval Center. Requests,
+decisions, expiry, cancellation, and invalidation are persisted without runtime
+values, secrets, outputs, locators, or full URLs.
+
+It does not add email approval, comments, quorum policies, approver groups,
+workflow-wide approval, crash resume, automatic requeue, or AI decisions.

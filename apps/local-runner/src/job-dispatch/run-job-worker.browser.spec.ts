@@ -70,6 +70,15 @@ function workflow(origin: string): WorkflowDefinition {
         checked: true,
       },
       {
+        id: 'approve-submit',
+        type: 'approval',
+        name: 'Approve submit',
+        message: 'Approve the fixture submission.',
+        riskLevel: 'medium',
+        scope: 'next_step',
+        timeoutMs: 10_000,
+      },
+      {
         id: 'submit',
         type: 'click',
         name: 'Submit fixture',
@@ -91,7 +100,7 @@ function workflow(origin: string): WorkflowDefinition {
 }
 
 describe('persisted job Chromium dispatch', () => {
-  it('claims one job, streams safe ordered progress and completes it', async () => {
+  it('waits for approval, then executes the gated browser action exactly once', async () => {
     const server = await startFixtureServer();
     servers.push(server);
     const runId = randomUUID();
@@ -111,6 +120,11 @@ describe('persisted job Chromium dispatch', () => {
     const progress: WorkflowProgressBatch[] = [];
     let completion: WorkflowRunCompletionRequest | undefined;
     let claimCount = 0;
+    let approvalCreateCount = 0;
+    let approvalPollCount = 0;
+    const approvalRequestId = randomUUID();
+    const approvalRequestedAt = new Date().toISOString();
+    const approvalExpiresAt = new Date(Date.now() + 10_000).toISOString();
 
     const transport: RunnerJobTransport = {
       claimJob: async () => {
@@ -149,6 +163,27 @@ describe('persisted job Chromium dispatch', () => {
           cancelRequested: false,
         };
       },
+      createApprovalRequest: async () => {
+        approvalCreateCount += 1;
+        return {
+          approvalRequestId,
+          status: 'PENDING',
+          requestedAt: approvalRequestedAt,
+          expiresAt: approvalExpiresAt,
+          pollAfterSeconds: 1,
+          idempotent: false,
+        };
+      },
+      getApprovalStatus: async () => {
+        approvalPollCount += 1;
+        return {
+          status: 'APPROVED',
+          requestedAt: approvalRequestedAt,
+          expiresAt: approvalExpiresAt,
+          resolvedAt: new Date().toISOString(),
+          pollAfterSeconds: 1,
+        };
+      },
       completeJob: async (
         _storedCredential: StoredRunnerCredential,
         _runId: string,
@@ -171,10 +206,21 @@ describe('persisted job Chromium dispatch', () => {
     ).runLoop(credential, controller.signal);
 
     expect(claimCount).toBe(1);
+    expect(approvalCreateCount).toBe(1);
+    expect(approvalPollCount).toBe(1);
     expect(completion?.result.status, JSON.stringify(completion?.result)).toBe(
       'succeeded',
     );
     expect(server.completed()).toBe(true);
+    expect(
+      progress.some((batch) =>
+        batch.events.some(
+          ({ event }) =>
+            event.kind === 'run_status_changed' &&
+            event.status === 'waiting_for_approval',
+        ),
+      ),
+    ).toBe(true);
     expect(
       progress.flatMap((batch) => batch.events.map((event) => event.sequence)),
     ).toEqual(progress.map((_, index) => index + 1));

@@ -181,13 +181,16 @@ describe('local execution validation and preflight', () => {
         type: 'approval',
         name: 'Approval',
         message: 'Approval is not executable.',
+        riskLevel: 'medium',
+        scope: 'next_step',
+        timeoutMs: 30_000,
       },
     ]);
     input.workflow.variables = [];
     input.inputs.values = {} as typeof input.inputs.values;
     expect(preflight(input)).toMatchObject({
       ok: false,
-      error: { code: 'UNSUPPORTED_STEP_TYPE' },
+      error: { code: 'APPROVAL_BINDING_INVALID' },
     });
   });
 

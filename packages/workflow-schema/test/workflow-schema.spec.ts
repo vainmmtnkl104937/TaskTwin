@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ElementLocatorSchema,
+  ApprovalStepSchema,
+  DEFAULT_APPROVAL_TIMEOUT_MS,
   ExtractStepSchema,
   MAX_WAIT_DURATION_MS,
   RunStatusSchema,
@@ -63,7 +65,44 @@ describe('WorkflowDefinitionSchema', () => {
       'extract',
       'verify',
       'approval',
+      'wait',
     ]);
+  });
+
+  it('keeps existing Approval steps compatible through safe defaults', () => {
+    const result = ApprovalStepSchema.parse({
+      id: 'approve',
+      type: 'approval',
+      name: 'Approve',
+      message: 'Review before continuing.',
+    });
+
+    expect(result).toMatchObject({
+      riskLevel: 'medium',
+      scope: 'next_step',
+      timeoutMs: DEFAULT_APPROVAL_TIMEOUT_MS,
+    });
+  });
+
+  it('rejects invalid Approval scope, timeout and interpolation', () => {
+    const base = {
+      id: 'approve',
+      type: 'approval',
+      name: 'Approve',
+      message: 'Review before continuing.',
+    };
+    expect(
+      ApprovalStepSchema.safeParse({ ...base, scope: 'workflow' }).success,
+    ).toBe(false);
+    expect(
+      ApprovalStepSchema.safeParse({ ...base, timeoutMs: 1 }).success,
+    ).toBe(false);
+    expect(
+      ApprovalStepSchema.safeParse({
+        ...base,
+        message: 'Approve ${customerName}',
+      }).success,
+    ).toBe(false);
   });
 
   it('parses deterministic checked and unchecked state steps', () => {

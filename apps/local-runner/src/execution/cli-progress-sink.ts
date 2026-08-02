@@ -18,6 +18,11 @@ export class CliProgressSink implements WorkflowProgressSink {
           `Step ${event.stepId} (${event.stepType}): ${event.status}`,
         );
         return;
+      case 'approval_status_changed':
+        this.output.write(
+          `Approval ${event.approvalStepId}: ${event.status.toLowerCase()}`,
+        );
+        return;
       case 'warning':
         this.output.write(`Execution warning: ${event.warningCode}`);
     }

@@ -90,3 +90,9 @@ user-authenticated secure run preparation/commit:
 The API verifies public-key fingerprints and exact AAD/ciphertext binding but
 has no private key and never decrypts runtime variables. PostgreSQL stores safe
 manifests, public keys and encrypted envelopes only.
+
+Session 21 adds runner-authenticated approval creation/status endpoints and
+user-authenticated Workspace approval APIs. Request metadata is derived from
+the immutable Published WorkflowVersion. OWNER and ADMIN may approve or reject;
+MEMBER and VIEWER remain read-only. Decisions require `clientDecisionId` and
+use atomic first-terminal-decision-wins semantics.

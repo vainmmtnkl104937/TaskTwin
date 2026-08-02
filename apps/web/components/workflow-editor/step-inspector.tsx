@@ -18,6 +18,7 @@ import { ValueSourceField } from './value-source-field';
 
 interface StepInspectorProps {
   step: WorkflowStep;
+  gatedStep?: WorkflowStep;
   variables: WorkflowVariable[];
   outputs: WorkflowOutputDefinition[];
   readOnly: boolean;
@@ -244,6 +245,7 @@ function VerifyFields({
 
 export function StepInspector({
   step,
+  gatedStep,
   variables,
   outputs,
   readOnly,
@@ -350,17 +352,61 @@ export function StepInspector({
       ) : null}
 
       {step.type === 'approval' ? (
-        <label>
-          Approval message
-          <textarea
-            value={step.message}
-            disabled={readOnly}
-            maxLength={1_000}
-            onChange={(event) =>
-              onChange({ ...step, message: event.currentTarget.value })
-            }
-          />
-        </label>
+        <>
+          <p className="metadata">
+            Scope: immediate next step (read-only).
+            <br />
+            Gates the immediate next step:{' '}
+            {gatedStep === undefined
+              ? 'No following step (invalid)'
+              : `${gatedStep.name} (${gatedStep.type})`}
+          </p>
+          <label>
+            Approval message
+            <textarea
+              value={step.message}
+              disabled={readOnly}
+              maxLength={1_000}
+              onChange={(event) =>
+                onChange({ ...step, message: event.currentTarget.value })
+              }
+            />
+          </label>
+          <label>
+            Risk level
+            <select
+              value={step.riskLevel}
+              disabled={readOnly}
+              onChange={(event) =>
+                onChange({
+                  ...step,
+                  riskLevel: event.currentTarget.value as
+                    'low' | 'medium' | 'high',
+                })
+              }
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+          <label>
+            Approval timeout (milliseconds)
+            <input
+              type="number"
+              min={5_000}
+              max={300_000}
+              value={step.timeoutMs}
+              disabled={readOnly}
+              onChange={(event) =>
+                onChange({
+                  ...step,
+                  timeoutMs: Number(event.currentTarget.value),
+                })
+              }
+            />
+          </label>
+        </>
       ) : null}
 
       {step.type === 'extract' ? (

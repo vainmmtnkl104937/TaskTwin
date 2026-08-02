@@ -56,3 +56,9 @@ pnpm --filter @tasktwin/workflow-schema typecheck
 pnpm --filter @tasktwin/workflow-schema test
 pnpm --filter @tasktwin/workflow-schema build
 ```
+
+An `approval` step has a bounded non-interpolated message, deterministic risk
+level, scope fixed to `next_step`, and a bounded timeout. Older definitions
+receive safe defaults when parsed. Cross-step analysis in
+`@tasktwin/workflow-approval` rejects an Approval Step without a following
+step.

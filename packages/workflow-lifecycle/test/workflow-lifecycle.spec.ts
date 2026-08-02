@@ -177,6 +177,27 @@ describe('publish readiness', () => {
       'OUTCOME_VERIFICATION_MISSING',
     ]);
   });
+
+  it('blocks an Approval step without an immediate gated step', () => {
+    const input = workflow();
+    input.steps.push({
+      id: 'approve-last',
+      type: 'approval',
+      name: 'Approve',
+      message: 'Review before continuing.',
+      riskLevel: 'medium',
+      scope: 'next_step',
+      timeoutMs: 30_000,
+    });
+
+    expect(analyzePublishReadiness(input).issues).toContainEqual(
+      expect.objectContaining({
+        code: 'APPROVAL_STEP_ORPHANED',
+        severity: 'blocking',
+        stepId: 'approve-last',
+      }),
+    );
+  });
 });
 
 describe('draft version cloning', () => {

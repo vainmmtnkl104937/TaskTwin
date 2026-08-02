@@ -54,6 +54,9 @@ function createWorkflow(): WorkflowDefinition {
         type: 'approval',
         name: 'Review',
         message: 'Continue?',
+        riskLevel: 'medium',
+        scope: 'next_step',
+        timeoutMs: 30_000,
       },
     ],
   };
@@ -204,6 +207,9 @@ describe('workflow editor operations', () => {
       id: 'step-5',
       name: 'Extra approval',
       message: 'Approve the next action.',
+      riskLevel: 'medium',
+      scope: 'next_step',
+      timeoutMs: 30_000,
     });
 
     expect(withApproval.steps.slice(-2)).toEqual([
@@ -218,6 +224,9 @@ describe('workflow editor operations', () => {
         type: 'approval',
         name: 'Extra approval',
         message: 'Approve the next action.',
+        riskLevel: 'medium',
+        scope: 'next_step',
+        timeoutMs: 30_000,
       },
     ]);
   });
@@ -461,12 +470,16 @@ describe('editor validation', () => {
       },
     };
 
-    expect(validateEditorWorkflow(workflow)).toEqual([
-      expect.objectContaining({
-        code: 'NAVIGATE_URL_SENSITIVE_QUERY',
-        stepId: 'step-1',
-      }),
-    ]);
+    const issues = validateEditorWorkflow(workflow);
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'NAVIGATE_URL_SENSITIVE_QUERY',
+          stepId: 'step-1',
+        }),
+      ]),
+    );
+    expect(JSON.stringify(issues)).not.toContain('not-for-display');
     expect(
       summarizeNavigateUrl(
         'https://example.com/start?page=2&access_token=not-for-display',

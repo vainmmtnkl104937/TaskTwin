@@ -22,6 +22,7 @@ import {
 } from '@tasktwin/secure-run-inputs';
 import {
   WORKFLOW_EXTRACTION_CAPABILITY,
+  WORKFLOW_APPROVAL_CAPABILITY,
   WORKFLOW_VERIFICATION_CAPABILITY,
 } from '@tasktwin/runner-protocol';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
@@ -265,6 +266,12 @@ export class SecureRunInputRepository {
       if (
         parsed.data.steps.some((step) => step.type === 'extract') &&
         !runner.capabilities.includes(WORKFLOW_EXTRACTION_CAPABILITY)
+      ) {
+        throw new SecureRunInputRepositoryError('CAPABILITY_UNAVAILABLE');
+      }
+      if (
+        parsed.data.steps.some((step) => step.type === 'approval') &&
+        !runner.capabilities.includes(WORKFLOW_APPROVAL_CAPABILITY)
       ) {
         throw new SecureRunInputRepositoryError('CAPABILITY_UNAVAILABLE');
       }

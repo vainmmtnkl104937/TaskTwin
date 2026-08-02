@@ -36,6 +36,7 @@ export const WorkflowRunStatusSchema = z.enum([
   'QUEUED',
   'CLAIMED',
   'RUNNING',
+  'WAITING_FOR_APPROVAL',
   'CANCEL_REQUESTED',
   'SUCCEEDED',
   'FAILED',
@@ -47,6 +48,7 @@ export const WorkflowRunStatusSchema = z.enum([
 export const PersistedRunStepStatusSchema = z.enum([
   'PENDING',
   'RUNNING',
+  'WAITING_FOR_APPROVAL',
   'SUCCEEDED',
   'FAILED',
   'CANCELLED',

@@ -14,6 +14,7 @@ function result(
     failed: 'step_failed',
     cancelled: 'run_cancelled',
     timed_out: 'total_timeout',
+    interrupted: 'approval_invalidated',
   } as const;
   return WorkflowExecutionResultSchema.parse({
     schemaVersion: 1,
@@ -32,6 +33,7 @@ function result(
       failed: 0,
       cancelled: 0,
       timedOut: 0,
+      interrupted: 0,
       skipped: 0,
     },
     warnings: [],

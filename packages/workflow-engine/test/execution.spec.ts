@@ -136,6 +136,7 @@ describe('workflow execution orchestration', () => {
       failed: 0,
       cancelled: 0,
       timedOut: 0,
+      interrupted: 0,
       skipped: 0,
     });
     expect(adapter.stopCount).toBe(1);

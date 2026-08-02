@@ -14,6 +14,7 @@ import {
   normalizeVerificationUrl,
 } from '@tasktwin/workflow-verification';
 import { analyzeWorkflowExtraction } from '@tasktwin/workflow-extraction';
+import { analyzeWorkflowApprovals } from '@tasktwin/workflow-approval';
 import { z } from 'zod';
 
 import type { WorkflowExecutionAdapter } from './adapter.js';
@@ -96,6 +97,7 @@ export function preflightWorkflowExecution(
   input: unknown,
   adapter: WorkflowExecutionAdapter,
   externalResolver?: WorkflowRuntimeValueResolver,
+  approvalCoordinatorAvailable = false,
 ): PreflightResult {
   const envelope = RawExecutionEnvelopeSchema.safeParse(input);
   if (!envelope.success) {
@@ -133,6 +135,13 @@ export function preflightWorkflowExecution(
   }
   if (analyzeWorkflowExtraction(workflow).hasBlockingIssues) {
     return failure('INVALID_WORKFLOW', workflow);
+  }
+  const approvalAnalysis = analyzeWorkflowApprovals(workflow);
+  if (approvalAnalysis.hasBlockingIssues) {
+    return failure('APPROVAL_BINDING_INVALID', workflow);
+  }
+  if (approvalAnalysis.bindings.length > 0 && !approvalCoordinatorAvailable) {
+    return failure('APPROVAL_COORDINATOR_UNAVAILABLE', workflow);
   }
   if (externalResolver === undefined) {
     if (inputAnalysis.secretRequirements.length > 0) {
@@ -191,6 +200,9 @@ export function preflightWorkflowExecution(
   const supported = new Set(adapter.supportedStepTypes);
   try {
     for (const step of workflow.steps) {
+      if (step.type === 'approval') {
+        continue;
+      }
       if (!supported.has(step.type)) {
         throw new SafeExecutionException('UNSUPPORTED_STEP_TYPE');
       }

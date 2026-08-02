@@ -7,6 +7,9 @@ export type RacingTerminationCause = Extract<
   | 'step_timeout'
   | 'run_cancelled'
   | 'total_timeout'
+  | 'approval_rejected'
+  | 'approval_expired'
+  | 'approval_invalidated'
 >;
 
 export interface TerminationCandidate {
@@ -22,6 +25,9 @@ const TIE_PRIORITY: Readonly<Record<RacingTerminationCause, number>> = {
   adapter_start_failed: 2,
   step_timeout: 2,
   step_failed: 2,
+  approval_rejected: 2,
+  approval_expired: 2,
+  approval_invalidated: 2,
 };
 
 export class TerminationArbiter {

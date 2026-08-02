@@ -102,6 +102,12 @@
       "type": "approval",
       "name": "Approve completion",
       "message": "Review the order number before completing the workflow."
+    },
+    {
+      "id": "finishAfterApproval",
+      "type": "wait",
+      "name": "Finish after approval",
+      "durationMs": 1
     }
   ]
 }

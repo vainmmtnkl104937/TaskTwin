@@ -8,6 +8,7 @@ import {
   StoredRunnerCredentialSchema,
   WORKFLOW_VERIFICATION_CAPABILITY,
   WORKFLOW_EXTRACTION_CAPABILITY,
+  WORKFLOW_APPROVAL_CAPABILITY,
   type RunnerCapability,
   type RunnerDeviceMetadata,
   type StoredRunnerCredential,
@@ -234,6 +235,9 @@ export class LocalRunnerService {
         WORKFLOW_VERIFICATION_CAPABILITY,
         WORKFLOW_EXTRACTION_CAPABILITY,
       );
+      if (this.jobTransport !== undefined) {
+        capabilities.push(WORKFLOW_APPROVAL_CAPABILITY);
+      }
     }
     if (this.keyManager !== undefined) {
       capabilities.push(SECURE_INPUT_CAPABILITIES[0]);

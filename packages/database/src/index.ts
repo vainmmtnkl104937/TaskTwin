@@ -7,6 +7,8 @@ export {
   RunnerPairingStatus,
   WorkflowRunStatus,
   WorkflowRunStepStatus,
+  WorkflowApprovalRequestStatus,
+  WorkflowApprovalRiskLevel,
 } from './generated/prisma/client.js';
 export { DuplicateEmailError } from './identity/identity-errors.js';
 export { IdentityRepository } from './identity/identity.repository.js';
@@ -100,6 +102,16 @@ export type {
   WorkflowRunStepRecord,
 } from './workflow-run/workflow-run-records.js';
 export { WorkflowRunRepository } from './workflow-run/workflow-run.repository.js';
+export {
+  WorkflowApprovalRepositoryError,
+  type WorkflowApprovalRepositoryErrorCode,
+} from './workflow-approval/workflow-approval-errors.js';
+export type {
+  WorkflowApprovalAccess,
+  WorkflowApprovalDecisionResult,
+  WorkflowApprovalRecord,
+} from './workflow-approval/workflow-approval-records.js';
+export { WorkflowApprovalRepository } from './workflow-approval/workflow-approval.repository.js';
 export {
   SecureRunInputRepositoryError,
   type SecureRunInputRepositoryErrorCode,
