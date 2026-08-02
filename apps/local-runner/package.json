@@ -27,6 +27,7 @@
     "@tasktwin/workflow-approval": "workspace:*",
     "@tasktwin/workflow-extraction": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",
+    "@tasktwin/workflow-recovery": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "@tasktwin/workflow-verification": "workspace:*",
     "playwright": "1.62.0",

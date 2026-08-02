@@ -21,6 +21,9 @@ import {
   ApprovalDecisionResponseSchema,
   ApprovalRequestDetailResponseSchema,
   ApprovalRequestListResponseSchema,
+  RepairDecisionResponseSchema,
+  RepairRequestDetailResponseSchema,
+  RepairRequestListResponseSchema,
 } from '../control-plane-contracts';
 import { getControlPlaneOrigin } from './environment';
 
@@ -261,6 +264,7 @@ export function createWorkflowRun(
   workflowVersionId: string,
   runnerDeviceId: string,
   clientRunId: string,
+  recoveryMode: 'automatic_safe_only' | 'automatic_safe_and_manual',
 ) {
   return request(
     `/workflow-versions/${encodeURIComponent(workflowVersionId)}/runs`,
@@ -272,6 +276,11 @@ export function createWorkflowRun(
         schemaVersion: 1,
         runnerDeviceId,
         clientRunId,
+        options: {
+          totalTimeoutMs: 120_000,
+          stepTimeoutMs: 30_000,
+          recoveryMode,
+        },
       }),
     },
   );
@@ -284,7 +293,11 @@ export function prepareWorkflowRunInputs(
     clientPreparationId: string;
     clientRunId: string;
     runnerDeviceId: string;
-    options: { totalTimeoutMs: number; stepTimeoutMs: number };
+    options: {
+      totalTimeoutMs: number;
+      stepTimeoutMs: number;
+      recoveryMode: 'automatic_safe_only' | 'automatic_safe_and_manual';
+    };
   },
 ) {
   return request(
@@ -382,6 +395,45 @@ export function decideApprovalRequest(
   return request(
     `/approval-requests/${encodeURIComponent(approvalRequestId)}/${decision}`,
     ApprovalDecisionResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ clientDecisionId }),
+    },
+  );
+}
+
+export function listRepairRequests(accessToken: string, workspaceId: string) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/repair-requests`,
+    RepairRequestListResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function getRepairRequest(accessToken: string, repairRequestId: string) {
+  return request(
+    `/repair-requests/${encodeURIComponent(repairRequestId)}`,
+    RepairRequestDetailResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function decideRepairRequest(
+  accessToken: string,
+  repairRequestId: string,
+  decision: 'retry' | 'abort',
+  clientDecisionId: string,
+) {
+  return request(
+    `/repair-requests/${encodeURIComponent(repairRequestId)}/${decision}`,
+    RepairDecisionResponseSchema,
     {
       method: 'POST',
       headers: { authorization: `Bearer ${accessToken}` },

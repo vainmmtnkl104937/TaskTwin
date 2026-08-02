@@ -9,6 +9,7 @@ import {
   WORKFLOW_VERIFICATION_CAPABILITY,
   WORKFLOW_EXTRACTION_CAPABILITY,
   WORKFLOW_APPROVAL_CAPABILITY,
+  WORKFLOW_MANUAL_REPAIR_CAPABILITY,
   type RunnerCapability,
   type RunnerDeviceMetadata,
   type StoredRunnerCredential,
@@ -51,6 +52,10 @@ export class LocalRunnerService {
     private readonly browserSessions?: BrowserSessionFactory,
     private readonly keyManager?: RunnerKeyManager,
     private readonly secretProvider?: SecretProvider,
+    private readonly executionConfiguration: {
+      headed: boolean;
+      attended: boolean;
+    } = { headed: false, attended: false },
   ) {}
 
   async pair(input: {
@@ -145,6 +150,7 @@ export class LocalRunnerService {
         this.runnerVersion,
         this.keyManager,
         this.secretProvider,
+        this.executionConfiguration,
       );
       try {
         const jobs = worker
@@ -237,6 +243,12 @@ export class LocalRunnerService {
       );
       if (this.jobTransport !== undefined) {
         capabilities.push(WORKFLOW_APPROVAL_CAPABILITY);
+        if (
+          this.executionConfiguration.headed &&
+          this.executionConfiguration.attended
+        ) {
+          capabilities.push(WORKFLOW_MANUAL_REPAIR_CAPABILITY);
+        }
       }
     }
     if (this.keyManager !== undefined) {

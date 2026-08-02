@@ -1,0 +1,7 @@
+export const WORKFLOW_RECOVERY_SCHEMA_VERSION = 1;
+export const MAX_AUTOMATIC_RETRIES = 1;
+export const MAX_MANUAL_RETRIES = 1;
+export const MAX_TOTAL_ATTEMPTS = 3;
+export const REPAIR_POLL_INTERVAL_SECONDS = 2;
+export const MAX_REPAIR_TIMEOUT_MS = 300_000;
+export const MIN_REPAIR_TIMEOUT_MS = 5_000;

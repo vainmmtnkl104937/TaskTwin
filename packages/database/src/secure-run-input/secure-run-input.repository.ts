@@ -23,6 +23,7 @@ import {
 import {
   WORKFLOW_EXTRACTION_CAPABILITY,
   WORKFLOW_APPROVAL_CAPABILITY,
+  WORKFLOW_MANUAL_REPAIR_CAPABILITY,
   WORKFLOW_VERIFICATION_CAPABILITY,
 } from '@tasktwin/runner-protocol';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
@@ -289,8 +290,15 @@ export class SecureRunInputRepository {
         input.options ?? {
           totalTimeoutMs: DEFAULT_RUN_TOTAL_TIMEOUT_MS,
           stepTimeoutMs: DEFAULT_RUN_STEP_TIMEOUT_MS,
+          recoveryMode: 'automatic_safe_only',
         },
       );
+      if (
+        options.recoveryMode === 'automatic_safe_and_manual' &&
+        !runner.capabilities.includes(WORKFLOW_MANUAL_REPAIR_CAPABILITY)
+      ) {
+        throw new SecureRunInputRepositoryError('CAPABILITY_UNAVAILABLE');
+      }
       const preparationId = randomUUID();
       const workflowRunId = randomUUID();
       const expiresAt = new Date(

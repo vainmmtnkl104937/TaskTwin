@@ -80,6 +80,7 @@ export class WorkflowRunsService {
           workflowVersionId,
           runnerDeviceId: request.data.runnerDeviceId,
           clientRunId: request.data.clientRunId,
+          options: request.data.options,
         }),
       );
     } catch (error: unknown) {

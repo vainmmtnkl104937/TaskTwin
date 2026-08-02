@@ -6,6 +6,7 @@ import {
   IdentifierSchema,
   WorkflowVariableValueTypeSchema,
 } from '@tasktwin/workflow-schema';
+import { RecoveryModeSchema } from '@tasktwin/workflow-recovery';
 import { z } from 'zod';
 
 import {
@@ -99,6 +100,7 @@ export const SecureRunInputManifestSchema = z.strictObject({
 export const SecureExecutionOptionsSchema = z.strictObject({
   totalTimeoutMs: z.number().int().min(100).max(600_000),
   stepTimeoutMs: z.number().int().min(100).max(60_000),
+  recoveryMode: RecoveryModeSchema.default('automatic_safe_only'),
 });
 
 export const RunInputAdditionalAuthenticatedDataSchema = z.strictObject({

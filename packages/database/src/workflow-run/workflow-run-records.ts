@@ -11,6 +11,7 @@ import type {
 } from '@tasktwin/run-protocol';
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
 import type { SafeWorkflowOutputSummary } from '@tasktwin/workflow-extraction';
+import type { SafeStepAttempt } from '@tasktwin/workflow-recovery';
 
 export interface WorkflowRunOutputRecord extends SafeWorkflowOutputSummary {
   producerStepIndex: number;
@@ -28,6 +29,7 @@ export interface WorkflowRunStepRecord {
   errorCode: string | null;
   skippedReason: string | null;
   verification?: StepExecutionResult['verification'];
+  attempts: SafeStepAttempt[];
 }
 
 export interface WorkflowRunRecord {
@@ -73,7 +75,11 @@ export type ClaimWorkflowRunResult =
       workflow: WorkflowDefinition;
       definitionDigest: string;
       allowedOrigins: string[];
-      options: { totalTimeoutMs: number; stepTimeoutMs: number };
+      options: {
+        totalTimeoutMs: number;
+        stepTimeoutMs: number;
+        recoveryMode: 'automatic_safe_only' | 'automatic_safe_and_manual';
+      };
       runtimeInput: ClaimedRunInput;
       leaseExpiresAt: Date;
       idempotent: boolean;

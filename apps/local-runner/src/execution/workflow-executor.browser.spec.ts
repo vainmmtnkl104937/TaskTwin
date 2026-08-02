@@ -13,6 +13,7 @@ import {
 } from './fixture-server.js';
 import { PlaywrightBrowserSessionFactory } from './playwright-browser-session.js';
 import { LocalWorkflowExecutor } from './workflow-executor.js';
+import type { WorkflowRecoveryCoordinator } from '@tasktwin/workflow-engine';
 
 const workflowFile = new URL(
   '../../fixtures/execution/workflow.v1.json',
@@ -289,5 +290,75 @@ describe('Chromium local workflow integration', () => {
     } finally {
       clearTimeout(cancellation);
     }
+  });
+
+  it('retains Chromium and retries only the repaired Fill step', async () => {
+    const context = await fixture();
+    const workflow: WorkflowDefinition = {
+      ...context.request.workflow,
+      steps: [
+        {
+          id: 'navigate-repair',
+          type: 'navigate',
+          name: 'Navigate to repair fixture',
+          url: {
+            kind: 'literal',
+            value: `${context.server.origin}/?repair=enabled`,
+          },
+        },
+        {
+          id: 'repair-fill',
+          type: 'fill',
+          name: 'Fill repaired field',
+          locator: { kind: 'label', value: 'Repair target' },
+          value: { kind: 'literal', value: 'safe repair fixture' },
+        },
+        { id: 'later-wait', type: 'wait', name: 'Later wait', durationMs: 1 },
+      ],
+    };
+    let repairCalls = 0;
+    const coordinator: WorkflowRecoveryCoordinator = {
+      async awaitRepair(_request, signal) {
+        repairCalls += 1;
+        await fetch(`${context.server.origin}/repair`, { method: 'POST' });
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 100);
+          signal.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer);
+              resolve();
+            },
+            { once: true },
+          );
+        });
+        return {
+          repairRequestId: '00000000-0000-4000-8000-000000000051',
+          decision: signal.aborted ? 'cancelled' : 'retry',
+          decidedAt: new Date().toISOString(),
+        };
+      },
+    };
+    const result = await new LocalWorkflowExecutor(
+      new PlaywrightBrowserSessionFactory(),
+      undefined,
+      undefined,
+      coordinator,
+    ).execute({
+      ...context.request,
+      workflow,
+      options: {
+        ...context.request.options,
+        recoveryMode: 'automatic_safe_and_manual',
+      },
+    });
+
+    expect(result.status, JSON.stringify(result)).toBe('succeeded');
+    expect(repairCalls).toBe(1);
+    expect(
+      result.steps[1]?.attempts?.map((attempt) => attempt.trigger),
+    ).toEqual(['initial', 'manual_retry']);
+    expect(result.steps[2]?.status).toBe('succeeded');
+    expect(JSON.stringify(result)).not.toContain('safe repair fixture');
   });
 });

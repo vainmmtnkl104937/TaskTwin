@@ -16,6 +16,7 @@ import { RunProgressSink } from './run-progress-sink.js';
 import type { RunnerKeyManager } from '../secure-inputs/runner-key-manager.js';
 import { acquireSecureRuntime } from '../secure-inputs/secure-runtime.js';
 import { HttpApprovalCoordinator } from './http-approval-coordinator.js';
+import { HttpRecoveryCoordinator } from './http-recovery-coordinator.js';
 
 export class RunJobWorker {
   constructor(
@@ -26,6 +27,10 @@ export class RunJobWorker {
     private readonly runnerVersion: string,
     private readonly keyManager?: RunnerKeyManager,
     private readonly secretProvider?: SecretProvider,
+    private readonly executionConfiguration: {
+      headed: boolean;
+      attended: boolean;
+    } = { headed: false, attended: false },
   ) {}
 
   async runLoop(
@@ -125,6 +130,16 @@ export class RunJobWorker {
           job.runId,
           job.leaseToken,
         ),
+        this.executionConfiguration.headed &&
+          this.executionConfiguration.attended
+          ? new HttpRecoveryCoordinator(
+              this.transport,
+              credential,
+              job.runId,
+              job.leaseToken,
+              () => sink.flush(),
+            )
+          : undefined,
       ).execute(
         {
           schemaVersion: 1,
@@ -132,7 +147,7 @@ export class RunJobWorker {
           inputs: { schemaVersion: 1, values: {} },
           allowedOrigins: job.allowedOrigins,
           options: {
-            headless: true,
+            headless: !this.executionConfiguration.headed,
             actionTimeoutMs: Math.min(job.options.stepTimeoutMs, 30_000),
             navigationTimeoutMs: Math.min(job.options.stepTimeoutMs, 60_000),
             ...job.options,

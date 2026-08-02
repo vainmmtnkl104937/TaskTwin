@@ -61,7 +61,11 @@ function preparation(): RunInputPreparationMetadata {
       keyFingerprint: createHash('sha256').update(pair.publicKey).digest('hex'),
       clientRunId: '88e07996-d768-4643-a93b-132ac5a5661b',
       allowedOrigins: ['http://127.0.0.1:4177'],
-      executionOptions: { totalTimeoutMs: 120_000, stepTimeoutMs: 30_000 },
+      executionOptions: {
+        totalTimeoutMs: 120_000,
+        stepTimeoutMs: 30_000,
+        recoveryMode: 'automatic_safe_only',
+      },
       expiresAt,
     },
   };

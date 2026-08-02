@@ -23,6 +23,7 @@
     "@tasktwin/secure-run-inputs": "workspace:*",
     "@tasktwin/workflow-engine": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",
+    "@tasktwin/workflow-recovery": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "@tasktwin/workflow-verification": "workspace:*",
     "zod": "4.4.3"

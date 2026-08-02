@@ -68,6 +68,19 @@ export default async function WorkflowRunDetailPage({
                     : ` · ${step.verification.observedState}`}
                 </p>
               )}
+              {step.attempts.length === 0 ? null : (
+                <ol aria-label={`Attempts for ${step.stepId}`}>
+                  {step.attempts.map((attempt) => (
+                    <li key={attempt.attemptNumber} className="metadata">
+                      Attempt {attempt.attemptNumber} · {attempt.trigger} ·{' '}
+                      {attempt.status} · {attempt.effectCertainty}
+                      {attempt.errorCode === undefined
+                        ? ''
+                        : ` · ${attempt.errorCode}`}
+                    </li>
+                  ))}
+                </ol>
+              )}
             </div>
           </article>
         ))}

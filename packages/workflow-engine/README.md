@@ -54,3 +54,13 @@ the browser adapter. The run and Approval Step enter `waiting_for_approval`;
 approval resumes sequential execution, rejection cancels, expiry times out,
 and invalidation interrupts. Progress contains only safe IDs, risk, status,
 decision, and timestamps.
+
+## Recovery coordination
+
+The engine classifies safe failures through `@tasktwin/workflow-recovery`.
+Only transient read-only Verify and Extract failures receive one automatic
+retry. Optional manual repair uses an injected `WorkflowRecoveryCoordinator`;
+the engine enters `waiting_for_repair`, executes no later step, and retries
+only the exact current step after an approved request. Abort, expiry,
+cancellation and invalidation preserve cleanup and sensitive-state disposal.
+Progress and results expose bounded attempt metadata only.

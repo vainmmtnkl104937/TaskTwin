@@ -10,6 +10,9 @@ export type RacingTerminationCause = Extract<
   | 'approval_rejected'
   | 'approval_expired'
   | 'approval_invalidated'
+  | 'repair_aborted'
+  | 'repair_expired'
+  | 'repair_invalidated'
 >;
 
 export interface TerminationCandidate {
@@ -28,6 +31,9 @@ const TIE_PRIORITY: Readonly<Record<RacingTerminationCause, number>> = {
   approval_rejected: 2,
   approval_expired: 2,
   approval_invalidated: 2,
+  repair_aborted: 2,
+  repair_expired: 2,
+  repair_invalidated: 2,
 };
 
 export class TerminationArbiter {

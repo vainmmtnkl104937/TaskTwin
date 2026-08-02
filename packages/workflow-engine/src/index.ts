@@ -6,6 +6,7 @@ export type {
   WorkflowExecutionAdapter,
 } from './adapter.js';
 export type { WorkflowApprovalCoordinator } from './approval-coordinator.js';
+export type { WorkflowRecoveryCoordinator } from './recovery-coordinator.js';
 export { systemWorkflowEngineClock, timestampFromMs } from './clock.js';
 export type { WorkflowEngineClock, WorkflowEngineTimer } from './clock.js';
 export {
@@ -20,6 +21,7 @@ export {
 export {
   AllowedOriginSchema,
   ApprovalStatusProgressEventSchema,
+  RepairStatusProgressEventSchema,
   ExecutionErrorCodeSchema,
   RunStatusProgressEventSchema,
   SafeExecutionErrorSchema,
@@ -27,6 +29,7 @@ export {
   StepCountSummarySchema,
   StepExecutionResultSchema,
   StepStatusProgressEventSchema,
+  StepAttemptProgressEventSchema,
   OutputProducedProgressEventSchema,
   TerminalRunStatusSchema,
   TerminalStepStatusSchema,

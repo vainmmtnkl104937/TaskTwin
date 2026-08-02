@@ -118,3 +118,13 @@ polls at the bounded server interval, and keeps heartbeat and lease renewal
 active. Playwright receives no Approval action. The existing BrowserContext
 stays open but inactive until approval; every terminal outcome still waits for
 browser cleanup. Approval messages and runtime values are not logged.
+
+## Attended manual repair
+
+Start with `--headed --attended` to advertise
+`workflow_manual_repair_v1`. A run must also select
+`automatic_safe_and_manual`. When an eligible pre-action or read-only failure
+occurs, the Runner retains its BrowserContext, keeps heartbeat and lease
+renewal active, performs no browser action, and polls the repair request. Retry
+executes only the failed step; every terminal outcome closes browser resources.
+Manual page changes are not fully audited and must never contain secrets.

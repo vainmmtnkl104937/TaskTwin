@@ -5,6 +5,15 @@ import {
   type SafeWorkflowOutputSummary,
   type WorkflowOutputDefinition,
 } from '@tasktwin/workflow-extraction';
+import {
+  MAX_REPAIR_TIMEOUT_MS,
+  RecoveryCoordinatorResultSchema,
+  decideRetry,
+  isApprovalGatedStep,
+  type ExecutionEffectCertainty,
+  type RetryTrigger,
+  type SafeStepAttempt,
+} from '@tasktwin/workflow-recovery';
 
 import type { WorkflowExecutionAdapter } from './adapter.js';
 import {
@@ -39,6 +48,7 @@ import type { WorkflowRuntimeValueResolver } from './value-source-resolver.js';
 import { withRuntimeOutputs } from './value-source-resolver.js';
 import { RuntimeOutputStore } from './runtime-output-store.js';
 import type { WorkflowApprovalCoordinator } from './approval-coordinator.js';
+import type { WorkflowRecoveryCoordinator } from './recovery-coordinator.js';
 import {
   ApprovalCoordinatorResultSchema,
   requireApprovalBinding,
@@ -60,6 +70,7 @@ export interface WorkflowEngineDependencies {
   progressSink?: WorkflowProgressSink;
   valueResolver?: WorkflowRuntimeValueResolver;
   approvalCoordinator?: WorkflowApprovalCoordinator;
+  recoveryCoordinator?: WorkflowRecoveryCoordinator;
 }
 
 interface PrimaryTermination {
@@ -100,6 +111,12 @@ function skipReasonFor(cause: PrimaryTermination['cause']): SkippedStepReason {
       return 'approval_expired';
     case 'approval_invalidated':
       return 'approval_invalidated';
+    case 'repair_aborted':
+      return 'repair_aborted';
+    case 'repair_expired':
+      return 'repair_expired';
+    case 'repair_invalidated':
+      return 'repair_invalidated';
     case 'step_failed':
     case 'step_timeout':
       return 'prior_step_failed';
@@ -115,10 +132,13 @@ function terminalStatusFor(
     case 'total_timeout':
       return 'timed_out';
     case 'approval_rejected':
+    case 'repair_aborted':
       return 'cancelled';
     case 'approval_expired':
+    case 'repair_expired':
       return 'timed_out';
     case 'approval_invalidated':
+    case 'repair_invalidated':
       return 'interrupted';
     case 'adapter_start_failed':
     case 'step_failed':
@@ -194,6 +214,7 @@ export class WorkflowEngine {
       this.adapter,
       this.dependencies.valueResolver,
       this.dependencies.approvalCoordinator !== undefined,
+      this.dependencies.recoveryCoordinator !== undefined,
     );
     const workflow = preflight.ok
       ? preflight.prepared.request.workflow
@@ -415,6 +436,66 @@ export class WorkflowEngine {
           };
     };
 
+    const beginAttempt = (
+      record: ExecutionStepRecord,
+      trigger: RetryTrigger,
+      repairRequestId?: string,
+    ): SafeStepAttempt => {
+      const attempt: SafeStepAttempt = {
+        attemptNumber: (record.attempts?.length ?? 0) + 1,
+        trigger,
+        status: 'running',
+        startedAt: timestampFromMs(this.clock.nowMs()),
+        effectCertainty: 'unknown',
+        ...(repairRequestId === undefined ? {} : { repairRequestId }),
+      };
+      record.attempts ??= [];
+      record.attempts.push(attempt);
+      progress.emit({
+        kind: 'step_attempt_status_changed',
+        executionId,
+        timestamp: attempt.startedAt,
+        stepId: record.step.id,
+        attemptNumber: attempt.attemptNumber,
+        trigger,
+        status: 'running',
+        effectCertainty: 'unknown',
+        retryAllowed: false,
+      });
+      return attempt;
+    };
+
+    const finishAttempt = (
+      record: ExecutionStepRecord,
+      attempt: SafeStepAttempt,
+      status: Exclude<SafeStepAttempt['status'], 'running'>,
+      effectCertainty: ExecutionEffectCertainty,
+      retryAllowed: boolean,
+      error?: SafeExecutionError,
+    ): void => {
+      const finishedAt = timestampFromMs(this.clock.nowMs());
+      attempt.status = status;
+      attempt.finishedAt = finishedAt;
+      attempt.durationMs = Math.max(
+        0,
+        Date.parse(finishedAt) - Date.parse(attempt.startedAt),
+      );
+      attempt.effectCertainty = effectCertainty;
+      if (error !== undefined) attempt.errorCode = error.code;
+      progress.emit({
+        kind: 'step_attempt_status_changed',
+        executionId,
+        timestamp: finishedAt,
+        stepId: record.step.id,
+        attemptNumber: attempt.attemptNumber,
+        trigger: attempt.trigger,
+        status,
+        ...(error === undefined ? {} : { errorCode: error.code }),
+        effectCertainty,
+        retryAllowed,
+      });
+    };
+
     transitionRun('starting');
     try {
       adapterStartupAttempted = true;
@@ -439,7 +520,7 @@ export class WorkflowEngine {
 
       if (primary === null) {
         transitionRun('running');
-        for (const record of records) {
+        stepLoop: for (const record of records) {
           recordDeadlineIfElapsed();
           primary = choosePrimary();
           if (primary !== null) {
@@ -461,8 +542,9 @@ export class WorkflowEngine {
           record.startedAtMs = this.clock.nowMs();
           this.transitionStep(record, steps, 'running', executionId, progress);
           let stepError: SafeExecutionError | null = null;
-          try {
-            if (record.step.type === 'approval') {
+          if (record.step.type === 'approval') {
+            const attempt = beginAttempt(record, 'initial');
+            try {
               const coordinator = this.dependencies.approvalCoordinator;
               if (coordinator === undefined) {
                 throw new SafeExecutionException(
@@ -539,7 +621,8 @@ export class WorkflowEngine {
                   executionId,
                   progress,
                 );
-                continue;
+                finishAttempt(record, attempt, 'succeeded', 'completed', false);
+                continue stepLoop;
               }
               if (approval.decision === 'rejected') {
                 arbiter.record({
@@ -570,64 +653,269 @@ export class WorkflowEngine {
                   stepId: record.step.id,
                 });
               }
-            } else {
-              const output = await this.adapter.executeStep({
-                executionId,
-                valueResolver: executionValueResolver,
-                allowedOrigins: prepared.allowedOrigins,
-                totalTimeoutMs: prepared.request.options.totalTimeoutMs,
-                remainingTimeMs,
-                effectiveTimeoutMs: Math.min(
-                  prepared.request.options.stepTimeoutMs,
-                  remainingTimeMs,
-                ),
-                signal: controller.signal,
-                step: record.step,
-              });
-              if (output?.verification !== undefined) {
-                record.verification = output.verification;
-              }
-              if (output?.producedOutput !== undefined) {
-                if (record.step.type !== 'extract') {
-                  throw new SafeExecutionException('INVALID_WORKFLOW');
-                }
-                const expectedType = outputTypeForExtractStep(record.step);
-                if (
-                  output.producedOutput.outputName !== record.step.outputName ||
-                  output.producedOutput.outputType !== expectedType
-                ) {
-                  throw new SafeExecutionException('OUTPUT_TYPE_MISMATCH');
-                }
-                outputStore.set(
-                  output.producedOutput.outputName,
-                  output.producedOutput.outputType,
-                  output.producedOutput.value,
-                );
-                progress.emit({
-                  kind: 'output_produced',
-                  executionId,
-                  timestamp: timestampFromMs(this.clock.nowMs()),
-                  producerStepId: record.step.id,
-                  outputName: record.step.outputName,
-                  outputType: output.producedOutput.outputType,
-                });
-              } else if (record.step.type === 'extract') {
-                throw new SafeExecutionException(
-                  'EXTRACTION_VALUE_UNAVAILABLE',
+              if (approval.decision !== 'approved') {
+                const approvalError =
+                  approval.decision === 'rejected'
+                    ? safeError('APPROVAL_REJECTED')
+                    : approval.decision === 'expired'
+                      ? safeError('APPROVAL_EXPIRED')
+                      : approval.decision === 'invalidated'
+                        ? safeError('APPROVAL_INVALIDATED')
+                        : safeError('EXECUTION_CANCELLED');
+                finishAttempt(
+                  record,
+                  attempt,
+                  approval.decision === 'expired'
+                    ? 'timed_out'
+                    : approval.decision === 'invalidated'
+                      ? 'interrupted'
+                      : 'cancelled',
+                  'read_only',
+                  false,
+                  approvalError,
                 );
               }
+            } catch (error: unknown) {
+              stepError = toSafeError(error, 'APPROVAL_REQUEST_FAILED');
+              finishAttempt(
+                record,
+                attempt,
+                stepError.code === 'EXECUTION_CANCELLED'
+                  ? 'cancelled'
+                  : TIMEOUT_ERROR_CODES.has(stepError.code)
+                    ? 'timed_out'
+                    : 'failed',
+                'unknown',
+                false,
+                stepError,
+              );
             }
-          } catch (error: unknown) {
-            stepError = toSafeError(
-              error,
-              record.step.type === 'approval'
-                ? 'APPROVAL_REQUEST_FAILED'
-                : 'ACTION_FAILED',
-            );
-            if (error instanceof SafeExecutionException) {
-              if (error.verification !== undefined) {
-                record.verification = error.verification;
+          } else {
+            let trigger: RetryTrigger = 'initial';
+            let repairRequestId: string | undefined;
+            while (stepError === null) {
+              recordDeadlineIfElapsed();
+              primary = choosePrimary();
+              if (primary !== null) break;
+              const attempt = beginAttempt(record, trigger, repairRequestId);
+              const attemptRemainingMs = Math.max(
+                0,
+                deadlineMs - this.clock.nowMs(),
+              );
+              let attemptError: SafeExecutionError | null = null;
+              let effectCertainty: ExecutionEffectCertainty = 'unknown';
+              try {
+                const output = await this.adapter.executeStep({
+                  executionId,
+                  valueResolver: executionValueResolver,
+                  allowedOrigins: prepared.allowedOrigins,
+                  totalTimeoutMs: prepared.request.options.totalTimeoutMs,
+                  remainingTimeMs: attemptRemainingMs,
+                  effectiveTimeoutMs: Math.min(
+                    prepared.request.options.stepTimeoutMs,
+                    attemptRemainingMs,
+                  ),
+                  signal: controller.signal,
+                  step: record.step,
+                });
+                if (output?.verification !== undefined) {
+                  record.verification = output.verification;
+                }
+                if (output?.producedOutput !== undefined) {
+                  if (record.step.type !== 'extract') {
+                    throw new SafeExecutionException('INVALID_WORKFLOW');
+                  }
+                  const expectedType = outputTypeForExtractStep(record.step);
+                  if (
+                    output.producedOutput.outputName !==
+                      record.step.outputName ||
+                    output.producedOutput.outputType !== expectedType
+                  ) {
+                    throw new SafeExecutionException('OUTPUT_TYPE_MISMATCH');
+                  }
+                  outputStore.set(
+                    output.producedOutput.outputName,
+                    output.producedOutput.outputType,
+                    output.producedOutput.value,
+                  );
+                  progress.emit({
+                    kind: 'output_produced',
+                    executionId,
+                    timestamp: timestampFromMs(this.clock.nowMs()),
+                    producerStepId: record.step.id,
+                    outputName: record.step.outputName,
+                    outputType: output.producedOutput.outputType,
+                  });
+                } else if (record.step.type === 'extract') {
+                  throw new SafeExecutionException(
+                    'EXTRACTION_VALUE_UNAVAILABLE',
+                    undefined,
+                    'read_only',
+                  );
+                }
+              } catch (error: unknown) {
+                attemptError = toSafeError(error, 'ACTION_FAILED');
+                if (error instanceof SafeExecutionException) {
+                  effectCertainty = error.effectCertainty ?? 'unknown';
+                  if (error.verification !== undefined) {
+                    record.verification = error.verification;
+                  }
+                }
               }
+              if (attemptError === null) {
+                finishAttempt(record, attempt, 'succeeded', 'completed', false);
+                break;
+              }
+              const automaticRetryCount =
+                record.attempts?.filter(
+                  (item) => item.trigger === 'automatic_retry',
+                ).length ?? 0;
+              const manualRetryCount =
+                record.attempts?.filter(
+                  (item) => item.trigger === 'manual_retry',
+                ).length ?? 0;
+              const decision = decideRetry({
+                stepType: record.step.type,
+                errorCode: attemptError.code,
+                effectCertainty,
+                recoveryMode: prepared.request.options.recoveryMode,
+                automaticRetryCount,
+                manualRetryCount,
+                totalAttemptCount: record.attempts?.length ?? 1,
+                approvalGated: isApprovalGatedStep(
+                  prepared.request.workflow,
+                  record.step.id,
+                ),
+              });
+              finishAttempt(
+                record,
+                attempt,
+                attemptError.code === 'EXECUTION_CANCELLED'
+                  ? 'cancelled'
+                  : TIMEOUT_ERROR_CODES.has(attemptError.code)
+                    ? 'timed_out'
+                    : 'failed',
+                effectCertainty,
+                decision.retryAllowed,
+                attemptError,
+              );
+              if (decision.disposition === 'automatic_retry') {
+                trigger = 'automatic_retry';
+                repairRequestId = undefined;
+                continue;
+              }
+              if (decision.disposition === 'manual_repair') {
+                const coordinator = this.dependencies.recoveryCoordinator;
+                if (coordinator === undefined) {
+                  stepError = safeError('RECOVERY_COORDINATOR_UNAVAILABLE');
+                  break;
+                }
+                this.transitionStep(
+                  record,
+                  steps,
+                  'waiting_for_repair',
+                  executionId,
+                  progress,
+                );
+                transitionRun('waiting_for_repair');
+                const expiresAt = timestampFromMs(
+                  this.clock.nowMs() +
+                    Math.min(
+                      MAX_REPAIR_TIMEOUT_MS,
+                      Math.max(1, deadlineMs - this.clock.nowMs()),
+                    ),
+                );
+                let repair;
+                try {
+                  repair = RecoveryCoordinatorResultSchema.parse(
+                    await coordinator.awaitRepair(
+                      {
+                        executionId,
+                        workflowId: prepared.request.workflow.workflowId,
+                        workflowVersion: prepared.request.workflow.version,
+                        stepId: record.step.id,
+                        stepIndex: prepared.request.workflow.steps.findIndex(
+                          (step) => step.id === record.step.id,
+                        ),
+                        stepType: record.step.type,
+                        attemptNumber: attempt.attemptNumber,
+                        safeErrorCode: attemptError.code,
+                        effectCertainty,
+                        expiresAt,
+                      },
+                      controller.signal,
+                    ),
+                  );
+                } catch {
+                  stepError = safeError('RECOVERY_REQUEST_FAILED');
+                  break;
+                }
+                const repairStatus = {
+                  retry: 'RETRY_APPROVED',
+                  abort: 'ABORTED',
+                  expired: 'EXPIRED',
+                  cancelled: 'CANCELLED',
+                  invalidated: 'INVALIDATED',
+                } as const;
+                progress.emit({
+                  kind: 'repair_status_changed',
+                  executionId,
+                  timestamp: repair.decidedAt,
+                  stepId: record.step.id,
+                  attemptNumber: attempt.attemptNumber,
+                  status: repairStatus[repair.decision],
+                  errorCode: attemptError.code,
+                  effectCertainty,
+                  retryAllowed: repair.decision === 'retry',
+                });
+                recordDeadlineIfElapsed();
+                primary = choosePrimary();
+                if (repair.decision === 'retry' && primary === null) {
+                  transitionRun('running');
+                  this.transitionStep(
+                    record,
+                    steps,
+                    'running',
+                    executionId,
+                    progress,
+                  );
+                  trigger = 'manual_retry';
+                  repairRequestId = repair.repairRequestId;
+                  continue;
+                }
+                const termination = {
+                  abort: {
+                    cause: 'repair_aborted' as const,
+                    error: safeError('RECOVERY_ABORTED'),
+                  },
+                  expired: {
+                    cause: 'repair_expired' as const,
+                    error: safeError('RECOVERY_EXPIRED'),
+                  },
+                  cancelled: {
+                    cause: 'run_cancelled' as const,
+                    error: safeError('EXECUTION_CANCELLED'),
+                  },
+                  invalidated: {
+                    cause: 'repair_invalidated' as const,
+                    error: safeError('RECOVERY_INVALIDATED'),
+                  },
+                };
+                if (repair.decision !== 'retry') {
+                  const selected = termination[repair.decision];
+                  arbiter.record({
+                    ...selected,
+                    atMs: this.clock.nowMs(),
+                    stepId: record.step.id,
+                  });
+                }
+                break;
+              }
+              stepError =
+                decision.disposition === 'new_run_required'
+                  ? safeError('APPROVAL_GATED_RETRY_REQUIRES_NEW_RUN')
+                  : attemptError;
+              break;
             }
           }
           recordDeadlineIfElapsed();
@@ -646,13 +934,16 @@ export class WorkflowEngine {
             record.error = primary.error;
             const status =
               primary.cause === 'run_cancelled' ||
-              primary.cause === 'approval_rejected'
+              primary.cause === 'approval_rejected' ||
+              primary.cause === 'repair_aborted'
                 ? 'cancelled'
                 : primary.cause === 'total_timeout' ||
                     primary.cause === 'step_timeout' ||
-                    primary.cause === 'approval_expired'
+                    primary.cause === 'approval_expired' ||
+                    primary.cause === 'repair_expired'
                   ? 'timed_out'
-                  : primary.cause === 'approval_invalidated'
+                  : primary.cause === 'approval_invalidated' ||
+                      primary.cause === 'repair_invalidated'
                     ? 'interrupted'
                     : 'failed';
             this.transitionStep(
@@ -685,7 +976,8 @@ export class WorkflowEngine {
         );
         if (
           primary.cause === 'run_cancelled' ||
-          primary.cause === 'approval_rejected'
+          primary.cause === 'approval_rejected' ||
+          primary.cause === 'repair_aborted'
         ) {
           transitionRun('cancelling', primary.error);
         } else {
@@ -727,7 +1019,8 @@ export class WorkflowEngine {
       resultError = primary.error;
       if (
         primary.cause === 'run_cancelled' ||
-        primary.cause === 'approval_rejected'
+        primary.cause === 'approval_rejected' ||
+        primary.cause === 'repair_aborted'
       ) {
         transitionRun('cancelled', primary.error);
       }

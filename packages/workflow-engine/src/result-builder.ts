@@ -1,5 +1,6 @@
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
 import type { SafeVerificationResult } from '@tasktwin/workflow-verification';
+import type { SafeStepAttempt } from '@tasktwin/workflow-recovery';
 import {
   defineWorkflowOutputs,
   type SafeWorkflowOutputSummary,
@@ -27,6 +28,7 @@ export interface ExecutionStepRecord {
   skippedReason?: SkippedStepReason;
   error?: SafeExecutionError;
   verification?: SafeVerificationResult;
+  attempts?: SafeStepAttempt[];
 }
 
 export interface FinalResultInput {
@@ -79,6 +81,7 @@ function stepResult(record: ExecutionStepRecord): StepExecutionResult {
     ...(record.verification === undefined
       ? {}
       : { verification: record.verification }),
+    ...(record.attempts === undefined ? {} : { attempts: record.attempts }),
   };
 }
 

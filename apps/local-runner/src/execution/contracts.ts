@@ -5,6 +5,7 @@ import {
   MIN_STEP_TIMEOUT_MS,
   WORKFLOW_ENGINE_SCHEMA_VERSION,
 } from '@tasktwin/workflow-engine';
+import { RecoveryModeSchema } from '@tasktwin/workflow-recovery';
 import { z } from 'zod';
 
 export const MIN_BROWSER_TIMEOUT_MS = 100;
@@ -39,6 +40,7 @@ export const LocalExecutionOptionsSchema = BrowserExecutionOptionsSchema.extend(
       .int()
       .min(MIN_STEP_TIMEOUT_MS)
       .max(MAX_STEP_TIMEOUT_MS),
+    recoveryMode: RecoveryModeSchema.default('automatic_safe_only'),
   },
 );
 

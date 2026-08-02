@@ -2,7 +2,11 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { WORKFLOW_VERIFICATION_CAPABILITY } from '@tasktwin/runner-protocol';
+import {
+  WORKFLOW_MANUAL_REPAIR_CAPABILITY,
+  WORKFLOW_VERIFICATION_CAPABILITY,
+} from '@tasktwin/runner-protocol';
+import type { RecoveryMode } from '@tasktwin/workflow-recovery';
 import type {
   RunInputPreparationMetadata,
   SecureRunInputManifest,
@@ -50,6 +54,9 @@ export function RunWorkflowPanel({
             runner.capabilities.includes('interactive_secret_prompt_v1')))),
   );
   const [runnerId, setRunnerId] = useState(compatibleRunners[0]?.id ?? '');
+  const [recoveryMode, setRecoveryMode] = useState<RecoveryMode>(
+    'automatic_safe_only',
+  );
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState(false);
   const [preparation, setPreparation] =
@@ -73,6 +80,7 @@ export function RunWorkflowPanel({
           workflowVersionId,
           runnerDeviceId: runnerId,
           clientRunId: clientRunId.current,
+          recoveryMode,
         });
         if (!result.ok) return setMessage(result.message);
         clientRunId.current = undefined;
@@ -87,6 +95,7 @@ export function RunWorkflowPanel({
           runnerDeviceId: runnerId,
           clientRunId: clientRunId.current,
           clientPreparationId: clientPreparationId.current,
+          recoveryMode,
         });
         if (!result.ok) return setMessage(result.message);
         setPreparation(result.preparation);
@@ -130,6 +139,13 @@ export function RunWorkflowPanel({
           value={runnerId}
           onChange={(event) => {
             setRunnerId(event.target.value);
+            if (
+              !compatibleRunners
+                .find((runner) => runner.id === event.target.value)
+                ?.capabilities.includes(WORKFLOW_MANUAL_REPAIR_CAPABILITY)
+            ) {
+              setRecoveryMode('automatic_safe_only');
+            }
             setPreparation(null);
             clientPreparationId.current = undefined;
           }}
@@ -139,6 +155,30 @@ export function RunWorkflowPanel({
               {runner.name} ({runner.status})
             </option>
           ))}
+        </select>
+      </label>
+      <label>
+        Recovery mode
+        <select
+          aria-label="Recovery mode"
+          value={recoveryMode}
+          onChange={(event) => {
+            setRecoveryMode(event.target.value as RecoveryMode);
+            setPreparation(null);
+            clientPreparationId.current = undefined;
+          }}
+        >
+          <option value="automatic_safe_only">Safe automatic retry only</option>
+          <option
+            value="automatic_safe_and_manual"
+            disabled={
+              !compatibleRunners
+                .find((runner) => runner.id === runnerId)
+                ?.capabilities.includes(WORKFLOW_MANUAL_REPAIR_CAPABILITY)
+            }
+          >
+            Attended manual repair
+          </option>
         </select>
       </label>
       {preparation === null

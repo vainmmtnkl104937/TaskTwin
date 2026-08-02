@@ -103,48 +103,70 @@ export async function executeStep(
       assertFinalOriginAllowed(context.page.url(), context.allowedOrigins);
       return;
     } catch (error: unknown) {
-      throw mapActionError(error, 'navigation', context.signal);
+      throw mapActionError(
+        error,
+        'navigation',
+        context.signal,
+        'side_effect_possible',
+      );
     }
   }
 
   if (step.type === 'wait') {
-    await cancellableWait(
-      step.durationMs,
-      context.effectiveTimeoutMs,
-      context.signal,
-    );
+    try {
+      await cancellableWait(
+        step.durationMs,
+        context.effectiveTimeoutMs,
+        context.signal,
+      );
+    } catch (error: unknown) {
+      throw mapActionError(error, 'action', context.signal, 'read_only');
+    }
     return;
   }
 
   if (step.type === 'verify') {
-    return {
-      verification: await executeVerification(step, {
-        page: context.page,
-        valueResolver: context.valueResolver,
-        effectiveTimeoutMs: context.effectiveTimeoutMs,
-        actionTimeoutMs: context.options.actionTimeoutMs,
-        ...(context.signal === undefined ? {} : { signal: context.signal }),
-      }),
-    };
+    try {
+      return {
+        verification: await executeVerification(step, {
+          page: context.page,
+          valueResolver: context.valueResolver,
+          effectiveTimeoutMs: context.effectiveTimeoutMs,
+          actionTimeoutMs: context.options.actionTimeoutMs,
+          ...(context.signal === undefined ? {} : { signal: context.signal }),
+        }),
+      };
+    } catch (error: unknown) {
+      throw mapActionError(error, 'action', context.signal, 'read_only');
+    }
   }
 
   if (step.type === 'extract') {
-    return {
-      producedOutput: await executeExtraction(step, {
-        page: context.page,
-        allowedOrigins: context.allowedOrigins,
-        effectiveTimeoutMs: context.effectiveTimeoutMs,
-        actionTimeoutMs: context.options.actionTimeoutMs,
-        ...(context.signal === undefined ? {} : { signal: context.signal }),
-      }),
-    };
+    try {
+      return {
+        producedOutput: await executeExtraction(step, {
+          page: context.page,
+          allowedOrigins: context.allowedOrigins,
+          effectiveTimeoutMs: context.effectiveTimeoutMs,
+          actionTimeoutMs: context.options.actionTimeoutMs,
+          ...(context.signal === undefined ? {} : { signal: context.signal }),
+        }),
+      };
+    } catch (error: unknown) {
+      throw mapActionError(error, 'action', context.signal, 'read_only');
+    }
   }
 
   const adapter = new PlaywrightLocatorAdapter(
     context.page,
     Math.min(context.options.actionTimeoutMs, context.effectiveTimeoutMs),
   );
-  const locator = await adapter.resolveUnique(step.locator, context.signal);
+  let locator;
+  try {
+    locator = await adapter.resolveUnique(step.locator, context.signal);
+  } catch (error: unknown) {
+    throw mapActionError(error, 'action', context.signal, 'not_started');
+  }
   try {
     switch (step.type) {
       case 'click':
@@ -195,6 +217,11 @@ export async function executeStep(
         return;
     }
   } catch (error: unknown) {
-    throw mapActionError(error, 'action', context.signal);
+    throw mapActionError(
+      error,
+      'action',
+      context.signal,
+      'side_effect_possible',
+    );
   }
 }

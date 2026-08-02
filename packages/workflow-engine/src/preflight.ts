@@ -98,6 +98,7 @@ export function preflightWorkflowExecution(
   adapter: WorkflowExecutionAdapter,
   externalResolver?: WorkflowRuntimeValueResolver,
   approvalCoordinatorAvailable = false,
+  recoveryCoordinatorAvailable = false,
 ): PreflightResult {
   const envelope = RawExecutionEnvelopeSchema.safeParse(input);
   if (!envelope.success) {
@@ -117,6 +118,12 @@ export function preflightWorkflowExecution(
   );
   if (!options.success) {
     return failure('INVALID_EXECUTION_TIMEOUT', workflow);
+  }
+  if (
+    options.data.recoveryMode === 'automatic_safe_and_manual' &&
+    !recoveryCoordinatorAvailable
+  ) {
+    return failure('RECOVERY_COORDINATOR_UNAVAILABLE', workflow);
   }
 
   const submittedInputs = WorkflowRunInputSubmissionSchema.safeParse(

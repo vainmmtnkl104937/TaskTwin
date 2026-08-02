@@ -6,8 +6,6 @@ import {
   type WorkflowEngineStepStatus,
 } from '@tasktwin/workflow-engine';
 import {
-  DEFAULT_RUN_STEP_TIMEOUT_MS,
-  DEFAULT_RUN_TOTAL_TIMEOUT_MS,
   RUN_PROTOCOL_VERSION,
   analyzeWorkflowRunReadiness,
   canTransitionRunStep,
@@ -20,7 +18,9 @@ import {
   WORKFLOW_EXTRACTION_CAPABILITY,
   WORKFLOW_APPROVAL_CAPABILITY,
   WORKFLOW_VERIFICATION_CAPABILITY,
+  WORKFLOW_MANUAL_REPAIR_CAPABILITY,
 } from '@tasktwin/runner-protocol';
+import { SafeStepAttemptListSchema } from '@tasktwin/workflow-recovery';
 import { defineWorkflowOutputs } from '@tasktwin/workflow-extraction';
 import {
   RunInputAdditionalAuthenticatedDataSchema,
@@ -36,6 +36,10 @@ import {
   WorkflowRunOutputStatus,
   WorkflowRunOutputType,
   WorkflowApprovalRequestStatus,
+  WorkflowRepairRequestStatus,
+  WorkflowExecutionEffectCertainty,
+  WorkflowRunStepAttemptStatus,
+  WorkflowRunStepAttemptTrigger,
   type PrismaClient,
 } from '../generated/prisma/client.js';
 import { createCanonicalJsonDigest } from '../recording/canonical-json.js';
@@ -55,6 +59,7 @@ const ACTIVE_STATUSES = [
   WorkflowRunStatus.CLAIMED,
   WorkflowRunStatus.RUNNING,
   WorkflowRunStatus.WAITING_FOR_APPROVAL,
+  WorkflowRunStatus.WAITING_FOR_REPAIR,
   WorkflowRunStatus.CANCEL_REQUESTED,
 ] as const;
 const TERMINAL_STATUSES = [
@@ -73,9 +78,13 @@ const SERIALIZATION_RETRY_COUNT = 3;
 
 const runInclude = {
   workflowVersion: { select: { version: true } },
-  steps: { orderBy: { sourceStepIndex: 'asc' as const } },
+  steps: {
+    orderBy: { sourceStepIndex: 'asc' as const },
+    include: { attempts: { orderBy: { attemptNumber: 'asc' as const } } },
+  },
   outputs: { orderBy: { producerStepIndex: 'asc' as const } },
   approvalRequests: { orderBy: { requestedAt: 'asc' as const } },
+  repairRequests: { orderBy: { requestedAt: 'asc' as const } },
 } as const satisfies Prisma.WorkflowRunInclude;
 
 type RunRow = Prisma.WorkflowRunGetPayload<{ include: typeof runInclude }>;
@@ -169,6 +178,40 @@ function toRecord(row: RunRow): WorkflowRunRecord {
       durationMs: step.durationMs,
       errorCode: step.errorCode,
       skippedReason: step.skippedReason,
+      attempts:
+        step.attempts.length === 0
+          ? []
+          : SafeStepAttemptListSchema.parse(
+              step.attempts.map((attempt) => ({
+                attemptNumber: attempt.attemptNumber,
+                trigger: {
+                  INITIAL: 'initial',
+                  AUTOMATIC_RETRY: 'automatic_retry',
+                  MANUAL_RETRY: 'manual_retry',
+                }[attempt.trigger],
+                status: attempt.status.toLowerCase(),
+                startedAt: attempt.startedAt.toISOString(),
+                ...(attempt.finishedAt === null
+                  ? {}
+                  : { finishedAt: attempt.finishedAt.toISOString() }),
+                ...(attempt.durationMs === null
+                  ? {}
+                  : { durationMs: attempt.durationMs }),
+                ...(attempt.safeErrorCode === null
+                  ? {}
+                  : { errorCode: attempt.safeErrorCode }),
+                effectCertainty: {
+                  NOT_STARTED: 'not_started',
+                  READ_ONLY: 'read_only',
+                  SIDE_EFFECT_POSSIBLE: 'side_effect_possible',
+                  COMPLETED: 'completed',
+                  UNKNOWN: 'unknown',
+                }[attempt.effectCertainty],
+                ...(attempt.authorizedByRepairRequestId === null
+                  ? {}
+                  : { repairRequestId: attempt.authorizedByRepairRequestId }),
+              })),
+            ),
       ...(verificationByStep.get(step.sourceStepId) === undefined
         ? {}
         : { verification: verificationByStep.get(step.sourceStepId)! }),
@@ -206,6 +249,8 @@ function persistedStepStatus(
       return WorkflowRunStepStatus.RUNNING;
     case 'waiting_for_approval':
       return WorkflowRunStepStatus.WAITING_FOR_APPROVAL;
+    case 'waiting_for_repair':
+      return WorkflowRunStepStatus.WAITING_FOR_REPAIR;
     case 'succeeded':
       return WorkflowRunStepStatus.SUCCEEDED;
     case 'failed':
@@ -233,6 +278,32 @@ function persistedRunStatus(
   }[status];
 }
 
+function persistedAttemptTrigger(
+  trigger: string,
+): WorkflowRunStepAttemptTrigger {
+  return (
+    {
+      initial: WorkflowRunStepAttemptTrigger.INITIAL,
+      automatic_retry: WorkflowRunStepAttemptTrigger.AUTOMATIC_RETRY,
+      manual_retry: WorkflowRunStepAttemptTrigger.MANUAL_RETRY,
+    }[trigger] ?? WorkflowRunStepAttemptTrigger.INITIAL
+  );
+}
+
+function persistedAttemptStatus(status: string): WorkflowRunStepAttemptStatus {
+  const value =
+    status.toUpperCase() as keyof typeof WorkflowRunStepAttemptStatus;
+  return WorkflowRunStepAttemptStatus[value];
+}
+
+function persistedEffectCertainty(
+  certainty: string,
+): WorkflowExecutionEffectCertainty {
+  const value =
+    certainty.toUpperCase() as keyof typeof WorkflowExecutionEffectCertainty;
+  return WorkflowExecutionEffectCertainty[value];
+}
+
 function parseJsonArray(input: Prisma.JsonValue): string[] {
   if (
     !Array.isArray(input) ||
@@ -243,16 +314,26 @@ function parseJsonArray(input: Prisma.JsonValue): string[] {
   return input;
 }
 
-function parseOptions(input: Prisma.JsonValue) {
+function parseOptions(input: Prisma.JsonValue): {
+  totalTimeoutMs: number;
+  stepTimeoutMs: number;
+  recoveryMode: 'automatic_safe_only' | 'automatic_safe_and_manual';
+} {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     throw new WorkflowRunRepositoryError('RUN_CONFLICT');
   }
   const totalTimeoutMs = input.totalTimeoutMs;
   const stepTimeoutMs = input.stepTimeoutMs;
-  if (typeof totalTimeoutMs !== 'number' || typeof stepTimeoutMs !== 'number') {
+  const recoveryMode: unknown = input.recoveryMode ?? 'automatic_safe_only';
+  if (
+    typeof totalTimeoutMs !== 'number' ||
+    typeof stepTimeoutMs !== 'number' ||
+    (recoveryMode !== 'automatic_safe_only' &&
+      recoveryMode !== 'automatic_safe_and_manual')
+  ) {
     throw new WorkflowRunRepositoryError('RUN_CONFLICT');
   }
-  return { totalTimeoutMs, stepTimeoutMs };
+  return { totalTimeoutMs, stepTimeoutMs, recoveryMode };
 }
 
 export class WorkflowRunRepository {
@@ -301,6 +382,11 @@ export class WorkflowRunRepository {
     workflowVersionId: string;
     runnerDeviceId: string;
     clientRunId: string;
+    options: {
+      totalTimeoutMs: number;
+      stepTimeoutMs: number;
+      recoveryMode: 'automatic_safe_only' | 'automatic_safe_and_manual';
+    };
   }): Promise<CreateWorkflowRunResult> {
     return this.runSerializable(async (transaction) => {
       const version = await transaction.workflowVersion.findFirst({
@@ -440,11 +526,25 @@ export class WorkflowRunRepository {
           ],
         });
       }
+      if (
+        input.options.recoveryMode === 'automatic_safe_and_manual' &&
+        !runner.capabilities.includes(WORKFLOW_MANUAL_REPAIR_CAPABILITY)
+      ) {
+        throw new WorkflowRunRepositoryError('RUN_NOT_READY', {
+          ...readiness,
+          ready: false,
+          issues: [
+            ...readiness.issues,
+            {
+              code: 'RUNNER_CAPABILITY_UNAVAILABLE',
+              message:
+                'The selected Runner does not support attended manual repair.',
+            },
+          ],
+        });
+      }
       const outputDefinitions = defineWorkflowOutputs(parsed.data);
-      const executionOptions = {
-        totalTimeoutMs: DEFAULT_RUN_TOTAL_TIMEOUT_MS,
-        stepTimeoutMs: DEFAULT_RUN_STEP_TIMEOUT_MS,
-      };
+      const executionOptions = input.options;
       const created = await transaction.workflowRun.create({
         data: {
           workspaceId: version.workflow.workspaceId,
@@ -715,7 +815,8 @@ export class WorkflowRunRepository {
           if (
             event.status === 'running' &&
             (run.status === WorkflowRunStatus.CLAIMED ||
-              run.status === WorkflowRunStatus.WAITING_FOR_APPROVAL)
+              run.status === WorkflowRunStatus.WAITING_FOR_APPROVAL ||
+              run.status === WorkflowRunStatus.WAITING_FOR_REPAIR)
           ) {
             run.status = WorkflowRunStatus.RUNNING;
             run.startedAt ??= new Date(event.timestamp);
@@ -725,6 +826,12 @@ export class WorkflowRunRepository {
             run.status === WorkflowRunStatus.RUNNING
           ) {
             run.status = WorkflowRunStatus.WAITING_FOR_APPROVAL;
+          }
+          if (
+            event.status === 'waiting_for_repair' &&
+            run.status === WorkflowRunStatus.RUNNING
+          ) {
+            run.status = WorkflowRunStatus.WAITING_FOR_REPAIR;
           }
           continue;
         }
@@ -762,6 +869,108 @@ export class WorkflowRunRepository {
               request.status !== event.status)
           ) {
             throw new WorkflowRunRepositoryError('PROGRESS_TRANSITION_INVALID');
+          }
+          continue;
+        }
+        if (event.kind === 'repair_status_changed') {
+          const request = run.repairRequests.find(
+            (candidate) =>
+              candidate.stepId === event.stepId &&
+              candidate.attemptNumber === event.attemptNumber,
+          );
+          if (
+            request === undefined ||
+            request.status !== event.status ||
+            request.retryAllowed !== event.retryAllowed ||
+            request.safeErrorCode !== event.errorCode
+          ) {
+            throw new WorkflowRunRepositoryError('PROGRESS_TRANSITION_INVALID');
+          }
+          continue;
+        }
+        if (event.kind === 'step_attempt_status_changed') {
+          const step = stepById.get(event.stepId);
+          if (step === undefined) {
+            throw new WorkflowRunRepositoryError('PROGRESS_TRANSITION_INVALID');
+          }
+          if (event.status === 'running') {
+            if (event.attemptNumber !== step.attempts.length + 1) {
+              throw new WorkflowRunRepositoryError(
+                'PROGRESS_TRANSITION_INVALID',
+              );
+            }
+            const expectedTrigger =
+              event.attemptNumber === 1
+                ? 'initial'
+                : event.trigger === 'initial'
+                  ? null
+                  : event.trigger;
+            if (expectedTrigger === null) {
+              throw new WorkflowRunRepositoryError(
+                'PROGRESS_TRANSITION_INVALID',
+              );
+            }
+            let repairRequestId: string | null = null;
+            if (event.trigger === 'manual_retry') {
+              const request = run.repairRequests.find(
+                (candidate) =>
+                  candidate.stepId === event.stepId &&
+                  candidate.attemptNumber === event.attemptNumber - 1 &&
+                  candidate.status ===
+                    WorkflowRepairRequestStatus.RETRY_APPROVED,
+              );
+              if (request === undefined) {
+                throw new WorkflowRunRepositoryError(
+                  'PROGRESS_TRANSITION_INVALID',
+                );
+              }
+              repairRequestId = request.id;
+            }
+            const created = await transaction.workflowRunStepAttempt.create({
+              data: {
+                workflowRunId: run.id,
+                workflowRunStepId: step.id,
+                attemptNumber: event.attemptNumber,
+                trigger: persistedAttemptTrigger(event.trigger),
+                status: WorkflowRunStepAttemptStatus.RUNNING,
+                startedAt: new Date(event.timestamp),
+                effectCertainty: persistedEffectCertainty(
+                  event.effectCertainty,
+                ),
+                authorizedByRepairRequestId: repairRequestId,
+              },
+            });
+            step.attempts.push(created);
+          } else {
+            const attempt = step.attempts.find(
+              (candidate) => candidate.attemptNumber === event.attemptNumber,
+            );
+            if (
+              attempt === undefined ||
+              attempt.status !== WorkflowRunStepAttemptStatus.RUNNING ||
+              persistedAttemptTrigger(event.trigger) !== attempt.trigger
+            ) {
+              throw new WorkflowRunRepositoryError(
+                'PROGRESS_TRANSITION_INVALID',
+              );
+            }
+            const finishedAt = new Date(event.timestamp);
+            const updated = await transaction.workflowRunStepAttempt.update({
+              where: { id: attempt.id },
+              data: {
+                status: persistedAttemptStatus(event.status),
+                finishedAt,
+                durationMs: Math.max(
+                  0,
+                  finishedAt.getTime() - attempt.startedAt.getTime(),
+                ),
+                safeErrorCode: event.errorCode ?? null,
+                effectCertainty: persistedEffectCertainty(
+                  event.effectCertainty,
+                ),
+              },
+            });
+            Object.assign(attempt, updated);
           }
           continue;
         }
@@ -938,6 +1147,29 @@ export class WorkflowRunRepository {
         ) {
           throw new WorkflowRunRepositoryError('COMPLETION_INVALID');
         }
+        if (source.attempts.length > 0) {
+          const attempts = step.attempts ?? [];
+          if (
+            attempts.length !== source.attempts.length ||
+            attempts.some((attempt, attemptIndex) => {
+              const persisted = source.attempts[attemptIndex];
+              return (
+                persisted === undefined ||
+                persisted.attemptNumber !== attempt.attemptNumber ||
+                persistedAttemptTrigger(attempt.trigger) !==
+                  persisted.trigger ||
+                persistedAttemptStatus(attempt.status) !== persisted.status ||
+                persistedEffectCertainty(attempt.effectCertainty) !==
+                  persisted.effectCertainty ||
+                (attempt.errorCode ?? null) !== persisted.safeErrorCode ||
+                (attempt.repairRequestId ?? null) !==
+                  persisted.authorizedByRepairRequestId
+              );
+            })
+          ) {
+            throw new WorkflowRunRepositoryError('COMPLETION_INVALID');
+          }
+        }
       });
       for (const approval of run.approvalRequests) {
         const approvalStep = result.steps.find(
@@ -1093,6 +1325,16 @@ export class WorkflowRunRepository {
         },
         data: {
           status: WorkflowApprovalRequestStatus.CANCELLED,
+          resolvedAt: now,
+        },
+      });
+      await transaction.workflowRepairRequest.updateMany({
+        where: {
+          workflowRunId,
+          status: WorkflowRepairRequestStatus.PENDING,
+        },
+        data: {
+          status: WorkflowRepairRequestStatus.CANCELLED,
           resolvedAt: now,
         },
       });
@@ -1365,6 +1607,7 @@ export class WorkflowRunRepository {
           in: [
             WorkflowRunStepStatus.RUNNING,
             WorkflowRunStepStatus.WAITING_FOR_APPROVAL,
+            WorkflowRunStepStatus.WAITING_FOR_REPAIR,
           ],
         },
       },
@@ -1382,6 +1625,28 @@ export class WorkflowRunRepository {
       data: {
         status: WorkflowApprovalRequestStatus.INVALIDATED,
         resolvedAt: now,
+      },
+    });
+    await transaction.workflowRepairRequest.updateMany({
+      where: {
+        workflowRunId: runId,
+        status: WorkflowRepairRequestStatus.PENDING,
+      },
+      data: {
+        status: WorkflowRepairRequestStatus.INVALIDATED,
+        resolvedAt: now,
+      },
+    });
+    await transaction.workflowRunStepAttempt.updateMany({
+      where: {
+        workflowRunId: runId,
+        status: WorkflowRunStepAttemptStatus.RUNNING,
+      },
+      data: {
+        status: WorkflowRunStepAttemptStatus.INTERRUPTED,
+        safeErrorCode: 'LEASE_EXPIRED',
+        effectCertainty: WorkflowExecutionEffectCertainty.UNKNOWN,
+        finishedAt: now,
       },
     });
     await transaction.workflowRunStep.updateMany({

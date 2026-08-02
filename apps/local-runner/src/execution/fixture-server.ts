@@ -17,6 +17,7 @@ export async function startFixtureServer(
   port = 0,
 ): Promise<RunningFixtureServer> {
   let completed = false;
+  let repaired = false;
   const html = await readFile(FIXTURE_FILE);
   const server = createServer((request, response) => {
     const requestUrl = new URL(request.url ?? '/', `http://${HOST}`);
@@ -37,12 +38,18 @@ export async function startFixtureServer(
       response.end();
       return;
     }
+    if (request.method === 'POST' && requestUrl.pathname === '/repair') {
+      repaired = true;
+      response.writeHead(204, { 'cache-control': 'no-store' });
+      response.end();
+      return;
+    }
     if (request.method === 'GET' && requestUrl.pathname === '/state') {
       response.writeHead(200, {
         'cache-control': 'no-store',
         'content-type': 'application/json; charset=utf-8',
       });
-      response.end(JSON.stringify({ completed }));
+      response.end(JSON.stringify({ completed, repaired }));
       return;
     }
     response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });

@@ -80,6 +80,7 @@ export async function runCli(
       origin: { type: 'string' },
       name: { type: 'string' },
       headed: { type: 'boolean' },
+      attended: { type: 'boolean' },
       'fixture-wait-ms': { type: 'string' },
       'total-timeout-ms': { type: 'string' },
     },
@@ -101,6 +102,10 @@ export async function runCli(
     new PlaywrightBrowserSessionFactory(),
     keyManager,
     secretProvider,
+    {
+      headed: parsed.values.headed ?? false,
+      attended: parsed.values.attended ?? false,
+    },
   );
   switch (command) {
     case 'execute-fixture': {

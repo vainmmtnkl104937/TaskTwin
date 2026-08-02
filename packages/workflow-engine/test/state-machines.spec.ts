@@ -24,6 +24,12 @@ describe('RunStateMachine', () => {
             'running',
             'waiting_for_approval',
           ],
+          waiting_for_repair: [
+            'validating',
+            'starting',
+            'running',
+            'waiting_for_repair',
+          ],
           cancelling: ['cancelling'],
         };
         const path = paths[from] ?? [];

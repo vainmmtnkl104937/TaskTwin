@@ -96,3 +96,10 @@ user-authenticated Workspace approval APIs. Request metadata is derived from
 the immutable Published WorkflowVersion. OWNER and ADMIN may approve or reject;
 MEMBER and VIEWER remain read-only. Decisions require `clientDecisionId` and
 use atomic first-terminal-decision-wins semantics.
+
+Session 22 adds runner-authenticated repair creation/status endpoints and
+membership-scoped Repair Center endpoints. Runner calls require the assigned
+device and current run lease. The server derives retry eligibility from the
+Published workflow and deterministic recovery policy; it never accepts a
+client-provided permission. OWNER/ADMIN may Retry, MEMBER may Abort, and exact
+request/decision retries are idempotent.

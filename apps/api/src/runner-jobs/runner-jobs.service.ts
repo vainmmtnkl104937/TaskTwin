@@ -12,6 +12,8 @@ import {
   WorkflowApprovalRepository,
   WorkflowApprovalRepositoryError,
   WorkflowRunRepositoryError,
+  WorkflowRepairRepository,
+  WorkflowRepairRepositoryError,
   createCanonicalJsonDigest,
 } from '@tasktwin/database';
 import {
@@ -26,6 +28,7 @@ import {
   WorkflowProgressBatchSchema,
   WorkflowRunCompletionRequestSchema,
   WorkflowRunCompletionResponseSchema,
+  UuidSchema,
 } from '@tasktwin/run-protocol';
 import {
   APPROVAL_POLL_INTERVAL_SECONDS,
@@ -33,6 +36,12 @@ import {
   RunnerApprovalRequestCreatedSchema,
   RunnerApprovalStatusSchema,
 } from '@tasktwin/workflow-approval';
+import {
+  REPAIR_POLL_INTERVAL_SECONDS,
+  RunnerRepairRequestCreateSchema,
+  RunnerRepairRequestCreatedSchema,
+  RunnerRepairStatusSchema,
+} from '@tasktwin/workflow-recovery';
 
 import type { AuthenticatedRunner } from '../runner-auth/runner-authenticated-request.js';
 import type { AuthenticatedRunLease } from './runner-job-lease-context.js';
@@ -67,6 +76,7 @@ export class RunnerJobsService {
     private readonly repository: WorkflowRunRepository,
     private readonly crypto: RunnerJobLeaseCryptoService,
     private readonly approvalRepository: WorkflowApprovalRepository,
+    private readonly repairRepository: WorkflowRepairRepository,
   ) {}
 
   private rethrowApproval(error: unknown): never {
@@ -84,6 +94,86 @@ export class RunnerJobsService {
           code: error.code,
           message: 'The approval operation conflicts with current state.',
         });
+    }
+  }
+
+  private rethrowRepair(error: unknown): never {
+    if (!(error instanceof WorkflowRepairRepositoryError)) throw error;
+    switch (error.code) {
+      case 'RUN_NOT_FOUND':
+      case 'REPAIR_NOT_FOUND':
+        throw new NotFoundException();
+      case 'RUNNER_MISMATCH':
+        throw new ForbiddenException();
+      case 'LEASE_INVALID':
+        throw new UnauthorizedException();
+      default:
+        throw new ConflictException({
+          code: error.code,
+          message: 'The repair operation conflicts with current state.',
+        });
+    }
+  }
+
+  async createRepair(
+    runner: AuthenticatedRunner,
+    lease: AuthenticatedRunLease,
+    input: unknown,
+  ) {
+    const request = RunnerRepairRequestCreateSchema.safeParse(input);
+    if (!request.success) {
+      throw new BadRequestException('Invalid runner repair request.');
+    }
+    try {
+      const result = await this.repairRepository.createForRunner({
+        workflowRunId: lease.workflowRunId,
+        runnerDeviceId: runner.runnerDeviceId,
+        leaseTokenHash: lease.leaseTokenHash,
+        request: request.data,
+        now: new Date(),
+      });
+      return RunnerRepairRequestCreatedSchema.parse({
+        schemaVersion: 1,
+        repairRequestId: result.record.id,
+        status: result.record.status,
+        retryAllowed: result.record.retryAllowed,
+        requestedAt: result.record.requestedAt.toISOString(),
+        expiresAt: result.record.expiresAt.toISOString(),
+        pollAfterSeconds: REPAIR_POLL_INTERVAL_SECONDS,
+        idempotent: result.idempotent,
+      });
+    } catch (error: unknown) {
+      this.rethrowRepair(error);
+    }
+  }
+
+  async repairStatus(
+    runner: AuthenticatedRunner,
+    lease: AuthenticatedRunLease,
+    repairRequestId: string,
+  ) {
+    if (!UuidSchema.safeParse(repairRequestId).success) {
+      throw new BadRequestException('Invalid repair request identifier.');
+    }
+    try {
+      const record = await this.repairRepository.getForRunner({
+        workflowRunId: lease.workflowRunId,
+        repairRequestId,
+        runnerDeviceId: runner.runnerDeviceId,
+        leaseTokenHash: lease.leaseTokenHash,
+        now: new Date(),
+      });
+      return RunnerRepairStatusSchema.parse({
+        schemaVersion: 1,
+        status: record.status,
+        retryAllowed: record.retryAllowed,
+        requestedAt: record.requestedAt.toISOString(),
+        expiresAt: record.expiresAt.toISOString(),
+        resolvedAt: record.resolvedAt?.toISOString() ?? null,
+        pollAfterSeconds: REPAIR_POLL_INTERVAL_SECONDS,
+      });
+    } catch (error: unknown) {
+      this.rethrowRepair(error);
     }
   }
 
