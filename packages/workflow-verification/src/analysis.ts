@@ -128,6 +128,9 @@ function analyzeExpected(
     }
     return [];
   }
+  // Output producer ordering and type compatibility are validated by
+  // @tasktwin/workflow-extraction. Verification keeps the shared source valid.
+  if (source.kind === 'output') return [];
   if (!isLiteralCompatible(target, source.value)) {
     return [
       issue(

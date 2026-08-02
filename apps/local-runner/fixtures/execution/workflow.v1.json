@@ -42,6 +42,22 @@
       }
     },
     {
+      "id": "extractCustomerId",
+      "type": "extract",
+      "name": "Extract customer ID",
+      "locator": {
+        "kind": "testId",
+        "value": "customer-id"
+      },
+      "source": {
+        "kind": "text"
+      },
+      "outputName": "customerId",
+      "outputLabel": "Customer ID",
+      "retention": "ephemeral",
+      "timeoutMs": 5000
+    },
+    {
       "id": "fillCustomerName",
       "type": "fill",
       "name": "Fill customer name",
@@ -51,8 +67,8 @@
         "exact": true
       },
       "value": {
-        "kind": "variable",
-        "variableName": "customerName"
+        "kind": "output",
+        "outputName": "customerId"
       }
     },
     {
@@ -79,6 +95,23 @@
         "exact": true
       },
       "checked": true
+    },
+    {
+      "id": "extractConfirmedState",
+      "type": "extract",
+      "name": "Extract confirmation state",
+      "locator": {
+        "kind": "label",
+        "value": "Confirm fixture",
+        "exact": true
+      },
+      "source": {
+        "kind": "checked"
+      },
+      "outputName": "confirmedState",
+      "outputLabel": "Confirmed state",
+      "retention": "ephemeral",
+      "timeoutMs": 5000
     },
     {
       "id": "boundedWait",
@@ -147,8 +180,8 @@
           "exact": true
         },
         "expected": {
-          "kind": "variable",
-          "variableName": "customerName"
+          "kind": "output",
+          "outputName": "customerId"
         }
       },
       "timeoutMs": 5000

@@ -42,6 +42,7 @@ const suffix = randomUUID();
 const workflowId = `session17-${suffix}`;
 const secureWorkflowId = `session18-${suffix}`;
 const verificationWorkflowId = `session19-${suffix}`;
+const extractionWorkflowId = `session20-${suffix}`;
 const credentialPepper = 'session17-credential-pepper-value-safe';
 const leasePepper = 'session17-run-lease-pepper-value-safe';
 const pairingPepper = 'session17-pairing-pepper-value-safe-123';
@@ -124,6 +125,41 @@ function verificationDefinition(): WorkflowDefinition {
   };
 }
 
+function extractionDefinition(): WorkflowDefinition {
+  return {
+    schemaVersion: 1,
+    workflowId: extractionWorkflowId,
+    version: 1,
+    name: 'Session 20 extraction fixture',
+    status: 'published',
+    variables: [],
+    steps: [
+      {
+        id: 'navigate',
+        type: 'navigate',
+        name: 'Navigate',
+        url: { kind: 'literal', value: 'http://127.0.0.1:4177/' },
+      },
+      {
+        id: 'extract',
+        type: 'extract',
+        name: 'Extract customer ID',
+        locator: { kind: 'testId', value: 'customer-id' },
+        source: { kind: 'text' },
+        outputName: 'customerId',
+        retention: 'ephemeral',
+      },
+      {
+        id: 'fill',
+        type: 'fill',
+        name: 'Fill customer ID',
+        locator: { kind: 'label', value: 'Customer ID' },
+        value: { kind: 'output', outputName: 'customerId' },
+      },
+    ],
+  };
+}
+
 describe('workflow run dispatch integration', () => {
   let app: INestApplication;
   let prisma: PrismaClient;
@@ -134,6 +170,7 @@ describe('workflow run dispatch integration', () => {
   let draftVersionId: string;
   let secureVersionId: string;
   let verificationVersionId: string;
+  let extractionVersionId: string;
   let runnerDeviceId: string;
   let runnerCredential: string;
   const userIds: string[] = [];
@@ -255,6 +292,25 @@ describe('workflow run dispatch integration', () => {
       select: { versions: { select: { id: true } } },
     });
     verificationVersionId = verificationWorkflow.versions[0]!.id;
+    const extractionWorkflow = await prisma.workflow.create({
+      data: {
+        id: extractionWorkflowId,
+        workspaceId: owner.workspace.id,
+        name: 'Session 20 extraction fixture',
+        versions: {
+          create: {
+            version: 1,
+            status: 'published',
+            schemaVersion: 1,
+            definition: extractionDefinition(),
+            publishedAt: new Date(),
+            publishedById: owner.user.id,
+          },
+        },
+      },
+      select: { versions: { select: { id: true } } },
+    });
+    extractionVersionId = extractionWorkflow.versions[0]!.id;
 
     const pairing = await request(app.getHttpServer())
       .post('/runner-pairing/sessions')
@@ -293,7 +349,12 @@ describe('workflow run dispatch integration', () => {
       where: {
         workflowRun: {
           workflowId: {
-            in: [workflowId, secureWorkflowId, verificationWorkflowId],
+            in: [
+              workflowId,
+              secureWorkflowId,
+              verificationWorkflowId,
+              extractionWorkflowId,
+            ],
           },
         },
       },
@@ -302,7 +363,12 @@ describe('workflow run dispatch integration', () => {
       where: {
         workflowRun: {
           workflowId: {
-            in: [workflowId, secureWorkflowId, verificationWorkflowId],
+            in: [
+              workflowId,
+              secureWorkflowId,
+              verificationWorkflowId,
+              extractionWorkflowId,
+            ],
           },
         },
       },
@@ -310,20 +376,37 @@ describe('workflow run dispatch integration', () => {
     await prisma.workflowRun.deleteMany({
       where: {
         workflowId: {
-          in: [workflowId, secureWorkflowId, verificationWorkflowId],
+          in: [
+            workflowId,
+            secureWorkflowId,
+            verificationWorkflowId,
+            extractionWorkflowId,
+          ],
         },
       },
     });
     await prisma.workflowVersion.deleteMany({
       where: {
         workflowId: {
-          in: [workflowId, secureWorkflowId, verificationWorkflowId],
+          in: [
+            workflowId,
+            secureWorkflowId,
+            verificationWorkflowId,
+            extractionWorkflowId,
+          ],
         },
       },
     });
     await prisma.workflow.deleteMany({
       where: {
-        id: { in: [workflowId, secureWorkflowId, verificationWorkflowId] },
+        id: {
+          in: [
+            workflowId,
+            secureWorkflowId,
+            verificationWorkflowId,
+            extractionWorkflowId,
+          ],
+        },
       },
     });
     await prisma.runnerEncryptionKey.deleteMany({ where: { runnerDeviceId } });
@@ -926,6 +1009,15 @@ describe('workflow run dispatch integration', () => {
     expect(claimed.body.job.runId).toBe(prepared.workflowRunId);
     expect(claimed.body.job.runtimeInput.kind).toBe('encrypted_envelope');
     expect(JSON.stringify(claimed.body)).not.toContain(plaintextValue);
+    await prisma.workflowRun.update({
+      where: { id: prepared.workflowRunId },
+      data: {
+        status: 'INTERRUPTED',
+        leaseTokenHash: null,
+        leaseExpiresAt: null,
+        finishedAt: new Date(),
+      },
+    });
   });
 
   it('rejects an incompatible Runner and accepts verification capability', async () => {
@@ -953,7 +1045,7 @@ describe('workflow run dispatch integration', () => {
       })
       .expect(200);
 
-    await request(app.getHttpServer())
+    const created = await request(app.getHttpServer())
       .post(`/workflow-versions/${verificationVersionId}/runs`)
       .set(auth(owner))
       .send({ ...requestBody, clientRunId: randomUUID() })
@@ -961,5 +1053,221 @@ describe('workflow run dispatch integration', () => {
       .expect(({ body }) => {
         expect(body.run.steps).toHaveLength(2);
       });
+    await request(app.getHttpServer())
+      .post(`/workflow-runs/${created.body.run.id as string}/cancel`)
+      .set(auth(owner))
+      .send({ schemaVersion: 1 })
+      .expect(200);
+  });
+
+  it('gates Extract workflows and creates metadata-only output rows', async () => {
+    const requestBody = {
+      schemaVersion: 1,
+      runnerDeviceId,
+      clientRunId: randomUUID(),
+    };
+    await request(app.getHttpServer())
+      .post(`/workflow-versions/${extractionVersionId}/runs`)
+      .set(auth(owner))
+      .send(requestBody)
+      .expect(409);
+
+    await request(app.getHttpServer())
+      .post('/runner/heartbeat')
+      .set(runnerAuth())
+      .send({
+        schemaVersion: 1,
+        runnerVersion: '0.1.0',
+        capabilities: [
+          'secure_input_envelope_v1',
+          'workflow_verification_v1',
+          'workflow_extraction_v1',
+        ],
+      })
+      .expect(200);
+
+    const created = await request(app.getHttpServer())
+      .post(`/workflow-versions/${extractionVersionId}/runs`)
+      .set(auth(owner))
+      .send({ ...requestBody, clientRunId: randomUUID() })
+      .expect(200);
+    expect(created.body.run.outputs).toEqual([
+      expect.objectContaining({
+        outputName: 'customerId',
+        outputType: 'string',
+        producerStepId: 'extract',
+        status: 'not_produced',
+      }),
+    ]);
+    const rows = await prisma.workflowRunOutput.findMany({
+      where: { workflowRunId: created.body.run.id as string },
+    });
+    expect(rows).toHaveLength(1);
+    expect(Object.keys(rows[0] ?? {})).not.toEqual(
+      expect.arrayContaining(['value', 'hash', 'length', 'preview', 'locator']),
+    );
+
+    const runId = created.body.run.id as string;
+    const claimed = await request(app.getHttpServer())
+      .post('/runner/jobs/claim')
+      .set(runnerAuth())
+      .send({
+        schemaVersion: 1,
+        runProtocolVersion: 2,
+        workflowEngineSchemaVersion: 1,
+        runnerVersion: '0.1.0',
+        claimAttemptId: randomUUID(),
+      })
+      .expect(200);
+    expect(claimed.body.job.runId).toBe(runId);
+    const leaseHeaders = {
+      ...runnerAuth(),
+      'X-TaskTwin-Run-Lease': claimed.body.job.leaseToken as string,
+    };
+    const timestamp = '2026-08-02T12:00:00.000Z';
+    const events = [
+      ['run_status_changed', { status: 'pending' }],
+      ['run_status_changed', { status: 'validating' }],
+      [
+        'step_status_changed',
+        { stepId: 'navigate', stepType: 'navigate', status: 'pending' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'extract', stepType: 'extract', status: 'pending' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'fill', stepType: 'fill', status: 'pending' },
+      ],
+      ['run_status_changed', { status: 'starting' }],
+      ['run_status_changed', { status: 'running' }],
+      [
+        'step_status_changed',
+        { stepId: 'navigate', stepType: 'navigate', status: 'running' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'navigate', stepType: 'navigate', status: 'succeeded' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'extract', stepType: 'extract', status: 'running' },
+      ],
+      [
+        'output_produced',
+        {
+          producerStepId: 'extract',
+          outputName: 'customerId',
+          outputType: 'string',
+        },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'extract', stepType: 'extract', status: 'succeeded' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'fill', stepType: 'fill', status: 'running' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'fill', stepType: 'fill', status: 'succeeded' },
+      ],
+      ['run_status_changed', { status: 'succeeded' }],
+    ].map(([kind, data], index) => ({
+      sequence: index + 1,
+      event: { executionId: runId, timestamp, kind, ...data },
+    }));
+    const progressBatch = {
+      schemaVersion: 1,
+      clientBatchId: randomUUID(),
+      firstSequence: 1,
+      lastSequence: events.length,
+      events,
+    };
+    await request(app.getHttpServer())
+      .post(`/runner/jobs/${runId}/progress`)
+      .set(leaseHeaders)
+      .send(progressBatch)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post(`/runner/jobs/${runId}/progress`)
+      .set(leaseHeaders)
+      .send(progressBatch)
+      .expect(200)
+      .expect(({ body }) => expect(body.idempotent).toBe(true));
+
+    const result = {
+      schemaVersion: 1,
+      executionId: runId,
+      workflowId: extractionWorkflowId,
+      workflowVersion: 1,
+      status: 'succeeded',
+      startedAt: timestamp,
+      finishedAt: '2026-08-02T12:00:00.020Z',
+      durationMs: 20,
+      terminationCause: 'completed',
+      counts: {
+        total: 3,
+        attempted: 3,
+        succeeded: 3,
+        failed: 0,
+        cancelled: 0,
+        timedOut: 0,
+        skipped: 0,
+      },
+      warnings: [],
+      steps: ['navigate', 'extract', 'fill'].map((stepId, index) => ({
+        stepId,
+        stepType: stepId,
+        status: 'succeeded',
+        startedAt: timestamp,
+        finishedAt: timestamp,
+        durationMs: index,
+        ...(stepId === 'extract' || stepId === 'fill'
+          ? { locatorKind: stepId === 'extract' ? 'testId' : 'label' }
+          : {}),
+      })),
+      outputs: [
+        {
+          outputName: 'customerId',
+          outputType: 'string',
+          producerStepId: 'extract',
+          status: 'produced',
+        },
+      ],
+    };
+    await request(app.getHttpServer())
+      .post(`/runner/jobs/${runId}/complete`)
+      .set(leaseHeaders)
+      .send({
+        schemaVersion: 1,
+        clientCompletionId: randomUUID(),
+        result: { ...result, outputs: [] },
+      })
+      .expect(409);
+    await request(app.getHttpServer())
+      .post(`/runner/jobs/${runId}/complete`)
+      .set(leaseHeaders)
+      .send({
+        schemaVersion: 1,
+        clientCompletionId: randomUUID(),
+        result,
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.run.outputs).toEqual([
+          expect.objectContaining({
+            outputName: 'customerId',
+            status: 'produced',
+          }),
+        ]);
+      });
+    expect(
+      await prisma.workflowRunOutput.findFirstOrThrow({
+        where: { workflowRunId: runId, outputName: 'customerId' },
+      }),
+    ).toMatchObject({ status: 'PRODUCED' });
   });
 });

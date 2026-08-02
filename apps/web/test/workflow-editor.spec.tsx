@@ -412,6 +412,49 @@ describe('WorkflowEditor', () => {
     expect(screen.getByLabelText('Type')).toHaveValue('string');
   });
 
+  it('adds an Extract step, binds its output, renames references, and protects deletion', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkflowEditor detail={detail()} workspaceId={detail().workspaceId} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add Text Extract' }));
+    expect(screen.getByText('Outputs')).toBeInTheDocument();
+    const outputsPanel = screen.getByRole('region', { name: 'Outputs' });
+    const outputName = within(outputsPanel).getByLabelText('Output name', {
+      exact: true,
+    });
+    await user.clear(outputName);
+    await user.type(outputName, 'customerId');
+    await user.click(screen.getByRole('button', { name: 'Rename output' }));
+
+    await user.click(screen.getByRole('button', { name: 'Move up' }));
+    await user.click(screen.getByRole('button', { name: 'Move up' }));
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Step 4: fill, Use secret reference',
+      }),
+    );
+    await user.selectOptions(screen.getByLabelText('Value source'), 'output');
+    expect(screen.getByLabelText('Compatible earlier output')).toHaveValue(
+      'customerId',
+    );
+
+    const renamed = within(outputsPanel).getByLabelText('Output name', {
+      exact: true,
+    });
+    await user.clear(renamed);
+    await user.type(renamed, 'crmCustomerId');
+    await user.click(screen.getByRole('button', { name: 'Rename output' }));
+    expect(screen.getByLabelText('Compatible earlier output')).toHaveValue(
+      'crmCustomerId',
+    );
+    expect(
+      screen.getByRole('button', { name: 'Delete unused Extract' }),
+    ).toBeDisabled();
+    expect(document.body.textContent).not.toContain('output value preview');
+  });
+
   it('removes an unused variable only after confirmation', async () => {
     const user = userEvent.setup();
     render(

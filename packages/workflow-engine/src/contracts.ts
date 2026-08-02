@@ -1,6 +1,7 @@
 import { WorkflowRunInputSubmissionSchema } from '@tasktwin/workflow-inputs';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
 import { SafeVerificationResultSchema } from '@tasktwin/workflow-verification';
+import { SafeWorkflowOutputSummarySchema } from '@tasktwin/workflow-extraction';
 import { z } from 'zod';
 
 import {
@@ -113,6 +114,11 @@ export const ExecutionErrorCodeSchema = z.enum([
   'VERIFICATION_EXPECTATION_INVALID',
   'VERIFICATION_NOT_MATCHED',
   'VERIFICATION_TARGET_UNSUPPORTED',
+  'OUTPUT_NOT_AVAILABLE',
+  'OUTPUT_TYPE_MISMATCH',
+  'DUPLICATE_OUTPUT_PRODUCTION',
+  'EXTRACTION_TARGET_UNSUPPORTED',
+  'EXTRACTION_VALUE_UNAVAILABLE',
 ]);
 
 export const SafeExecutionErrorSchema = z.strictObject({
@@ -242,6 +248,7 @@ export const WorkflowExecutionResultSchema = z
     error: SafeExecutionErrorSchema.optional(),
     warnings: z.array(WorkflowEngineWarningSchema),
     steps: z.array(StepExecutionResultSchema),
+    outputs: z.array(SafeWorkflowOutputSummarySchema).default([]),
   })
   .superRefine((result, context) => {
     if (result.steps.length !== result.counts.total) {
@@ -297,9 +304,19 @@ export const WarningProgressEventSchema = ProgressEventBaseSchema.extend({
   warningCode: WorkflowEngineWarningCodeSchema,
 });
 
+export const OutputProducedProgressEventSchema = ProgressEventBaseSchema.extend(
+  {
+    kind: z.literal('output_produced'),
+    producerStepId: z.string().trim().min(1).max(256),
+    outputName: z.string().trim().min(1),
+    outputType: z.enum(['string', 'boolean']),
+  },
+);
+
 export const WorkflowProgressEventSchema = z.discriminatedUnion('kind', [
   RunStatusProgressEventSchema,
   StepStatusProgressEventSchema,
+  OutputProducedProgressEventSchema,
   WarningProgressEventSchema,
 ]);
 

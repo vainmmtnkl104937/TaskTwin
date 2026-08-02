@@ -37,6 +37,12 @@ const SAFE_MESSAGES = {
   VERIFICATION_EXPECTATION_INVALID: 'The verification expectation is invalid.',
   VERIFICATION_NOT_MATCHED: 'The verification outcome did not match.',
   VERIFICATION_TARGET_UNSUPPORTED: 'The verification target is not supported.',
+  OUTPUT_NOT_AVAILABLE: 'The workflow output is not available.',
+  OUTPUT_TYPE_MISMATCH: 'The workflow output type is incompatible.',
+  DUPLICATE_OUTPUT_PRODUCTION:
+    'The workflow output was produced more than once.',
+  EXTRACTION_TARGET_UNSUPPORTED: 'The extraction target is not supported.',
+  EXTRACTION_VALUE_UNAVAILABLE: 'The workflow output could not be extracted.',
 } as const satisfies Record<ExecutionErrorCode, string>;
 
 export function safeError(code: ExecutionErrorCode): SafeExecutionError {

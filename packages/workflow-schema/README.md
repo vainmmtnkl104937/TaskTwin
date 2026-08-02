@@ -11,58 +11,35 @@ database, Chrome, DOM, Playwright, or AI behavior.
 ## Workflow steps
 
 Every workflow step contains a non-empty `id`, a discriminating `type`, and a
-non-empty `name`. Version 1 supports:
+non-empty `name`. Version 1 supports `navigate`, `click`, `fill`, `select`,
+`setChecked`, `wait`, `extract`, `verify`, and `approval`.
 
-- `navigate`
-- `click`
-- `fill`
-- `select`
-- `setChecked`
-- `wait`
-- `extract`
-- `verify`
-- `approval`
+`extract` supports normalized text, field/select value, checked state, and
+safe URL origin or origin-and-path sources. Element sources require a locator;
+URL sources forbid one. Output references use
+`{ "kind": "output", "outputName": "..." }`. Producer ordering, uniqueness,
+type compatibility, and Navigate restrictions are enforced by
+`@tasktwin/workflow-extraction`.
 
-`verify` retains the existing `assertion` discriminated union and now supports
-URL origin/origin-and-path, normalized text, visible/hidden, exact field value,
-and checked-state rules. A Verify step may define a bounded `timeoutMs` from
-100 through 60,000 milliseconds. Secret and file expectation semantics are
-validated by `@tasktwin/workflow-verification`.
+`verify` supports URL origin/origin-and-path, normalized text, visible/hidden,
+exact field value, and checked-state rules. A Verify step may define a bounded
+`timeoutMs` from 100 through 60,000 milliseconds. Secret and file expectation
+semantics are validated by `@tasktwin/workflow-verification`.
 
-Legacy text `equals`/`contains` operators remain readable. Legacy URL `equals`
-normalizes to origin-and-path. URL or field-value `contains` has no safe
-Session 19 equivalent and is blocked from save, publish and execution until
-the rule is edited.
+Legacy verification and extraction shapes remain structurally readable where
+documented, but unsafe or unsupported semantics are blocked from save,
+publish, and execution until edited.
 
-`setChecked` represents a deterministic resulting checkbox or radio state:
-
-```json
-{
-  "id": "enableWelcomeEmail",
-  "type": "setChecked",
-  "name": "Enable Send welcome email",
-  "locator": {
-    "kind": "label",
-    "value": "Send welcome email",
-    "exact": true
-  },
-  "checked": true
-}
-```
-
-It is not modeled as a blind click. A future runner must resolve the locator
-and set the control to the requested boolean state.
-
-Adding `setChecked` is an additive version 1 change. Existing version 1
-workflows remain valid. The original Session 02 fixture is retained at
-`fixtures/valid-workflow.v1.json`, while
-`fixtures/valid-set-checked-workflow.v1.json` covers both boolean states.
+`setChecked` represents a deterministic resulting checkbox or radio state and
+is not modeled as a blind click.
 
 ## Values and secrets
 
 Value sources are discriminated as literal values, workflow-variable
-references, or secret references. A secret source stores only a valid
-`secretName`; plaintext secret values are rejected as unexpected properties.
+references, secret references, or ephemeral output references. A secret source
+stores only a valid `secretName`; plaintext secret values are rejected as
+unexpected properties. Output values are never declarations or persisted
+workflow data.
 
 The schema validates structure only. It does not resolve locators, retrieve
 secrets, execute workflows, or prove that a workflow is safe or publishable.

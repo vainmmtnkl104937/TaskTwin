@@ -22,6 +22,10 @@ export function safeRun(run: WorkflowRunRecord) {
       startedAt: step.startedAt?.toISOString() ?? null,
       finishedAt: step.finishedAt?.toISOString() ?? null,
     })),
+    outputs: run.outputs.map((output) => ({
+      ...output,
+      producedAt: output.producedAt?.toISOString() ?? null,
+    })),
   };
 }
 

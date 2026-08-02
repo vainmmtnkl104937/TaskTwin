@@ -8,10 +8,10 @@ machines, sequential fail-fast orchestration, total timeout, cancellation,
 typed skipped results, safe progress events, deterministic termination races,
 cleanup reporting, and complete final results.
 
-The engine depends only on `workflow-schema`, `workflow-inputs`, and Zod. It
-does not import Playwright or application frameworks. Browser behavior is
-provided through `WorkflowExecutionAdapter`; the Local Runner implements that
-contract with Playwright.
+The engine depends only on framework-independent packages and Zod. It does not
+import Playwright or application frameworks. Browser behavior is provided
+through `WorkflowExecutionAdapter`; the Local Runner implements that contract
+with Playwright.
 
 ## Lifecycle
 
@@ -26,13 +26,15 @@ the run with `step_timeout`; expiration of the total deadline produces
 timestamp and tie-priority rule.
 
 Progress and results contain identifiers, statuses, timestamps, fixed error
-codes, counts, and safe warnings only. Runtime values, secrets, full URLs,
-locators, framework objects, and raw errors are excluded.
+codes, counts, safe warnings, and output metadata only. Runtime values,
+secrets, full URLs, locators, framework objects, and raw errors are excluded.
 
 Verify steps return only value-free verification metadata through the generic
-adapter result. A mismatch fails the step and run, later steps are skipped,
-and cancellation or total timeout still wins through the existing termination
-arbiter. The engine does not read DOM state and does not import Playwright.
+adapter result. Extract steps may return a value only across the private
+adapter boundary. The engine stores it in a per-run `RuntimeOutputStore`,
+allows one production per declared output, resolves it only for compatible
+later steps, emits metadata-only progress, and clears the store on every
+terminal path.
 
 ## Verification
 

@@ -43,6 +43,13 @@ export {
   updateStepValueSource,
   updateVariable,
 } from './variable-operations.js';
+export {
+  addElementExtractStep,
+  addUrlExtractStep,
+  removeExtractStep,
+  renameWorkflowOutput,
+} from './output-operations.js';
+export type { WorkflowOutputOperationResult } from './output-operations.js';
 export type {
   WorkflowVariableOperationError,
   WorkflowVariableOperationErrorCode,

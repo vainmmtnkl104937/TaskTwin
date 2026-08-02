@@ -7,6 +7,7 @@ import {
 import {
   StoredRunnerCredentialSchema,
   WORKFLOW_VERIFICATION_CAPABILITY,
+  WORKFLOW_EXTRACTION_CAPABILITY,
   type RunnerCapability,
   type RunnerDeviceMetadata,
   type StoredRunnerCredential,
@@ -229,7 +230,10 @@ export class LocalRunnerService {
   private capabilities(): RunnerCapability[] {
     const capabilities: RunnerCapability[] = [];
     if (this.browserSessions !== undefined) {
-      capabilities.push(WORKFLOW_VERIFICATION_CAPABILITY);
+      capabilities.push(
+        WORKFLOW_VERIFICATION_CAPABILITY,
+        WORKFLOW_EXTRACTION_CAPABILITY,
+      );
     }
     if (this.keyManager !== undefined) {
       capabilities.push(SECURE_INPUT_CAPABILITIES[0]);

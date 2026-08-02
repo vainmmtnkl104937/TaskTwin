@@ -73,6 +73,20 @@ enum WorkflowRunStepStatus {
   @@map("workflow_run_step_status")
 }
 
+enum WorkflowRunOutputType {
+  STRING
+  BOOLEAN
+
+  @@map("workflow_run_output_type")
+}
+
+enum WorkflowRunOutputStatus {
+  NOT_PRODUCED
+  PRODUCED
+
+  @@map("workflow_run_output_status")
+}
+
 enum RunnerEncryptionKeyStatus {
   ACTIVE
   REVOKED
@@ -320,6 +334,7 @@ model WorkflowRun {
   createdBy               User              @relation("WorkflowRunCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   cancelRequestedBy       User?             @relation("WorkflowRunCanceller", fields: [cancelRequestedByUserId], references: [id], onDelete: Restrict)
   steps                   WorkflowRunStep[]
+  outputs                 WorkflowRunOutput[]
   progressBatches         WorkflowRunProgressBatch[]
   inputEnvelope           WorkflowRunInputEnvelope?
 
@@ -439,6 +454,26 @@ model WorkflowRunStep {
   @@unique([workflowRunId, sourceStepIndex], map: "workflow_run_steps_run_id_source_step_index_key")
   @@index([workflowRunId, status], map: "workflow_run_steps_run_id_status_idx")
   @@map("workflow_run_steps")
+}
+
+model WorkflowRunOutput {
+  id                String                  @id @default(uuid()) @db.Uuid
+  workflowRunId     String                  @map("workflow_run_id") @db.Uuid
+  outputName        String                  @map("output_name") @db.VarChar(128)
+  outputType        WorkflowRunOutputType   @map("output_type")
+  producerStepId    String                  @map("producer_step_id") @db.VarChar(256)
+  producerStepIndex Int                     @map("producer_step_index")
+  status            WorkflowRunOutputStatus @default(NOT_PRODUCED)
+  producedAt        DateTime?               @map("produced_at") @db.Timestamptz(3)
+  createdAt         DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workflowRun       WorkflowRun             @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowRunId, outputName], map: "workflow_run_outputs_run_id_output_name_key")
+  @@unique([workflowRunId, producerStepId], map: "workflow_run_outputs_run_id_producer_step_id_key")
+  @@unique([workflowRunId, producerStepIndex], map: "workflow_run_outputs_run_id_producer_step_index_key")
+  @@index([workflowRunId, status], map: "workflow_run_outputs_run_id_status_idx")
+  @@map("workflow_run_outputs")
 }
 
 model WorkflowRunProgressBatch {

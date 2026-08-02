@@ -1,6 +1,7 @@
 import { analyzeWorkflowInputs } from '@tasktwin/workflow-inputs';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
 import { analyzeWorkflowVerifications } from '@tasktwin/workflow-verification';
+import { analyzeWorkflowExtraction } from '@tasktwin/workflow-extraction';
 
 import {
   MAX_LIFECYCLE_ISSUES,
@@ -63,6 +64,46 @@ const ISSUE_DETAILS = {
   OUTCOME_VERIFICATION_MISSING: {
     severity: 'warning',
     message: 'The workflow has no valid explicit outcome verification.',
+  },
+  INVALID_EXTRACT_STEP: {
+    severity: 'blocking',
+    message: 'An Extract step is invalid.',
+  },
+  UNSUPPORTED_EXTRACTION_SOURCE: {
+    severity: 'blocking',
+    message: 'An extraction source is unsupported.',
+  },
+  DUPLICATE_OUTPUT_NAME: {
+    severity: 'blocking',
+    message: 'Workflow output names must be unique.',
+  },
+  UNKNOWN_OUTPUT_REFERENCE: {
+    severity: 'blocking',
+    message: 'A referenced workflow output does not exist.',
+  },
+  OUTPUT_REFERENCE_BEFORE_PRODUCER: {
+    severity: 'blocking',
+    message: 'An output must be produced before use.',
+  },
+  OUTPUT_SELF_REFERENCE: {
+    severity: 'blocking',
+    message: 'An Extract step cannot consume its own output.',
+  },
+  OUTPUT_TYPE_INCOMPATIBLE: {
+    severity: 'blocking',
+    message: 'An output type is incompatible with its consumer.',
+  },
+  OUTPUT_NAVIGATE_FORBIDDEN: {
+    severity: 'blocking',
+    message: 'Navigate cannot use an output source.',
+  },
+  PASSWORD_EXTRACTION_FORBIDDEN: {
+    severity: 'blocking',
+    message: 'Password values cannot be extracted.',
+  },
+  UNUSED_OUTPUT: {
+    severity: 'warning',
+    message: 'A workflow output is not used.',
   },
 } as const satisfies Record<
   PublishReadinessIssueCode,
@@ -208,6 +249,17 @@ export function analyzePublishReadiness(
       path: ['steps'],
     });
   }
+  const extraction = analyzeWorkflowExtraction(parsed.data);
+  issues.push(
+    ...extraction.issues.map((issue) => ({
+      code: issue.code,
+      severity: issue.severity,
+      message: ISSUE_DETAILS[issue.code].message,
+      path: issue.path,
+      ...(issue.stepId === undefined ? {} : { stepId: issue.stepId }),
+      ...(issue.stepIndex === undefined ? {} : { stepIndex: issue.stepIndex }),
+    })),
+  );
   const blockingCount = issues.filter(
     (issue) => issue.severity === 'blocking',
   ).length;

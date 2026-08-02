@@ -20,14 +20,19 @@ import {
   type RunnerPublicKeyMetadata,
   type SecureRunInputEnvelope,
 } from '@tasktwin/secure-run-inputs';
-import { WORKFLOW_VERIFICATION_CAPABILITY } from '@tasktwin/runner-protocol';
+import {
+  WORKFLOW_EXTRACTION_CAPABILITY,
+  WORKFLOW_VERIFICATION_CAPABILITY,
+} from '@tasktwin/runner-protocol';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import { defineWorkflowOutputs } from '@tasktwin/workflow-extraction';
 
 import {
   OrganizationRole,
   Prisma,
   RunnerEncryptionKeyStatus,
   WorkflowRunInputPreparationStatus,
+  WorkflowRunOutputType,
   type PrismaClient,
 } from '../generated/prisma/client.js';
 import { createCanonicalJsonDigest } from '../recording/canonical-json.js';
@@ -258,6 +263,12 @@ export class SecureRunInputRepository {
         throw new SecureRunInputRepositoryError('CAPABILITY_UNAVAILABLE');
       }
       if (
+        parsed.data.steps.some((step) => step.type === 'extract') &&
+        !runner.capabilities.includes(WORKFLOW_EXTRACTION_CAPABILITY)
+      ) {
+        throw new SecureRunInputRepositoryError('CAPABILITY_UNAVAILABLE');
+      }
+      if (
         manifest.secrets.length > 0 &&
         !runner.capabilities.includes(SECURE_INPUT_CAPABILITIES[1])
       ) {
@@ -400,6 +411,7 @@ export class SecureRunInputRepository {
       const workflow = WorkflowDefinitionSchema.parse(
         preparation.workflowVersion.definition,
       );
+      const outputDefinitions = defineWorkflowOutputs(workflow);
       await transaction.workflowRun.create({
         data: {
           id: preparation.reservedRunId,
@@ -420,6 +432,17 @@ export class SecureRunInputRepository {
               sourceStepId: step.id,
               sourceStepIndex: index,
               stepType: step.type,
+            })),
+          },
+          outputs: {
+            create: outputDefinitions.map((output) => ({
+              outputName: output.name,
+              outputType:
+                output.valueType === 'string'
+                  ? WorkflowRunOutputType.STRING
+                  : WorkflowRunOutputType.BOOLEAN,
+              producerStepId: output.producerStepId,
+              producerStepIndex: output.producerStepIndex,
             })),
           },
         },

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ElementLocatorSchema,
+  ExtractStepSchema,
   MAX_WAIT_DURATION_MS,
   RunStatusSchema,
   RunStepStatusSchema,
@@ -202,6 +203,74 @@ describe('WorkflowDefinitionSchema', () => {
         },
         checked: true,
         toggle: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('supports deterministic ephemeral Extract sources', () => {
+    const elementBase = {
+      id: 'extractValue',
+      type: 'extract',
+      name: 'Extract value',
+      locator: { kind: 'label', value: 'Customer ID' },
+      outputName: 'customerId',
+    } as const;
+    for (const source of [
+      { kind: 'text' },
+      { kind: 'value' },
+      { kind: 'checked' },
+    ] as const) {
+      const result = ExtractStepSchema.safeParse({ ...elementBase, source });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.retention).toBe('ephemeral');
+    }
+    expect(
+      ExtractStepSchema.safeParse({
+        id: 'extractUrl',
+        type: 'extract',
+        name: 'Extract current origin and path',
+        source: { kind: 'url', mode: 'origin_and_path' },
+        outputName: 'currentLocation',
+        outputLabel: 'Current location',
+        timeoutMs: 5_000,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects invalid Extract source and locator combinations', () => {
+    expect(
+      ExtractStepSchema.safeParse({
+        id: 'missingLocator',
+        type: 'extract',
+        name: 'Missing locator',
+        source: { kind: 'text' },
+        outputName: 'text',
+      }).success,
+    ).toBe(false);
+    expect(
+      ExtractStepSchema.safeParse({
+        id: 'urlWithLocator',
+        type: 'extract',
+        name: 'URL with locator',
+        locator: { kind: 'testId', value: 'location' },
+        source: { kind: 'url', mode: 'origin' },
+        outputName: 'origin',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts a strict output ValueSource', () => {
+    expect(
+      ValueSourceSchema.safeParse({
+        kind: 'output',
+        outputName: 'customerId',
+      }).success,
+    ).toBe(true);
+    expect(
+      ValueSourceSchema.safeParse({
+        kind: 'output',
+        outputName: 'customerId',
+        value: 'forbidden',
       }).success,
     ).toBe(false);
   });

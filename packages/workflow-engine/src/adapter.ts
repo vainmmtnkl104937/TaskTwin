@@ -1,5 +1,6 @@
 import type { WorkflowStep } from '@tasktwin/workflow-schema';
 import type { SafeVerificationResult } from '@tasktwin/workflow-verification';
+import type { WorkflowOutputType } from '@tasktwin/workflow-extraction';
 
 import type {
   SafeExecutionError,
@@ -29,6 +30,11 @@ export interface AdapterStopContext {
 
 export interface AdapterStepOutput {
   verification?: SafeVerificationResult;
+  producedOutput?: {
+    outputName: string;
+    outputType: WorkflowOutputType;
+    value: string | boolean;
+  };
 }
 
 export interface WorkflowExecutionAdapter {

@@ -25,6 +25,8 @@ explicit lifecycle, timeout, cancellation, progress, skipped-step, and cleanup
 semantics behind a Playwright adapter.
 Session 17 adds persisted run dispatch and Session 18 adds end-to-end encrypted
 runtime variables plus local-only secret resolution for an assigned Runner.
+Session 19 adds deterministic verification, and Session 20 adds ephemeral
+Runner-only extraction outputs with metadata-only Control Plane tracking.
 It still does not transfer files, rotate Runner keys, reuse browser profiles,
 persist secrets, or capture screenshots.
 
@@ -53,6 +55,7 @@ general-purpose operating-system control are not part of the browser-first MVP.
 | `packages/workflow-editor-core` | Pure immutable draft editing and linear graph model     |
 | `packages/workflow-inputs`      | Variable, secret-reference, and run-input analysis      |
 | `packages/workflow-engine`      | Deterministic execution lifecycle and orchestration     |
+| `packages/workflow-extraction`  | Pure output data-flow and compatibility analysis        |
 | `packages/database`             | Prisma identity, workflow, and recording persistence    |
 | `packages/config`               | Shared strict TypeScript and ESLint configuration       |
 | `packages/runner-protocol`      | Local Runner pairing and heartbeat contracts            |
@@ -385,3 +388,14 @@ gating, and the existing fail-fast workflow lifecycle.
 
 It does not add visual comparison, regular expressions, custom JavaScript,
 XPath, automatic verification generation, locator repair, screenshots, or AI.
+
+## Session 20 scope
+
+Session 20 adds deterministic text, field-value, checked-state, and safe URL
+extraction. Runtime outputs are produced once, consumed only by later steps,
+kept in Runner memory, and cleared on every terminal path. The Control Plane
+stores output metadata and status only; extracted values are never transmitted
+or persisted.
+
+It does not add arrays, transformations, loops, branching, network extraction,
+custom JavaScript, output previews, screenshots, or AI.

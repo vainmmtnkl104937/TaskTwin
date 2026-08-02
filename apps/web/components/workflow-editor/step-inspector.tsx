@@ -10,6 +10,7 @@ import type {
   WorkflowStep,
   WorkflowVariable,
 } from '@tasktwin/workflow-schema';
+import type { WorkflowOutputDefinition } from '@tasktwin/workflow-extraction';
 
 import type { WorkflowVersionDetailResponse } from '@/lib/control-plane-contracts';
 
@@ -18,6 +19,7 @@ import { ValueSourceField } from './value-source-field';
 interface StepInspectorProps {
   step: WorkflowStep;
   variables: WorkflowVariable[];
+  outputs: WorkflowOutputDefinition[];
   readOnly: boolean;
   locatorMetadata: WorkflowVersionDetailResponse['locatorMetadata'];
   onChange(step: WorkflowStep): void;
@@ -31,7 +33,7 @@ function locatorForStep(step: WorkflowStep): ElementLocator | null {
     case 'select':
     case 'setChecked':
     case 'extract':
-      return step.locator;
+      return step.locator ?? null;
     case 'verify':
       return 'locator' in step.assertion ? step.assertion.locator : null;
     default:
@@ -42,12 +44,14 @@ function locatorForStep(step: WorkflowStep): ElementLocator | null {
 function VerifyFields({
   step,
   variables,
+  outputs,
   readOnly,
   onChange,
   onValueSourceChange,
 }: {
   step: VerifyStep;
   variables: WorkflowVariable[];
+  outputs: WorkflowOutputDefinition[];
   readOnly: boolean;
   onChange(step: VerifyStep): void;
   onValueSourceChange(target: ValueSourceTarget, source: ValueSource): void;
@@ -136,6 +140,7 @@ function VerifyFields({
             source={assertion.expected}
             target="verify.url.expected"
             variables={variables}
+            outputs={outputs}
             readOnly={readOnly}
             summarizeStringLiteral={summarizeNavigateUrl}
             onChange={(expected) =>
@@ -177,6 +182,7 @@ function VerifyFields({
             source={assertion.expected}
             target="verify.text.expected"
             variables={variables}
+            outputs={outputs}
             readOnly={readOnly}
             onChange={(expected) =>
               onValueSourceChange('verify.text.expected', expected)
@@ -191,6 +197,7 @@ function VerifyFields({
           source={assertion.expected}
           target="verify.value.expected"
           variables={variables}
+          outputs={outputs}
           readOnly={readOnly}
           onChange={(expected) =>
             onValueSourceChange('verify.value.expected', expected)
@@ -238,6 +245,7 @@ function VerifyFields({
 export function StepInspector({
   step,
   variables,
+  outputs,
   readOnly,
   locatorMetadata,
   onChange,
@@ -284,6 +292,7 @@ export function StepInspector({
           source={step.url}
           target="navigate.url"
           variables={variables}
+          outputs={outputs}
           readOnly={readOnly}
           summarizeStringLiteral={summarizeNavigateUrl}
           onChange={(source) => onValueSourceChange('navigate.url', source)}
@@ -296,6 +305,7 @@ export function StepInspector({
           source={step.value}
           target={step.type === 'fill' ? 'fill.value' : 'select.value'}
           variables={variables}
+          outputs={outputs}
           readOnly={readOnly}
           onChange={(source) =>
             onValueSourceChange(
@@ -357,19 +367,95 @@ export function StepInspector({
         <>
           <label>
             Output name
+            <input value={step.outputName} disabled maxLength={128} />
+            <small>Rename outputs atomically from the Outputs panel.</small>
+          </label>
+          <label>
+            Output label
             <input
-              value={step.outputName}
+              value={step.outputLabel ?? ''}
               disabled={readOnly}
-              maxLength={128}
+              maxLength={120}
               onChange={(event) =>
-                onChange({ ...step, outputName: event.currentTarget.value })
+                onChange({
+                  ...step,
+                  outputLabel: event.currentTarget.value || undefined,
+                })
               }
             />
           </label>
-          <p className="reference-summary">
-            Extract source: {step.source.kind}
-            {step.source.kind === 'attribute' ? ` (${step.source.name})` : ''}
-          </p>
+          <label>
+            Extraction source
+            <select
+              value={step.source.kind}
+              disabled={readOnly}
+              onChange={(event) => {
+                const kind = event.currentTarget.value as
+                  'text' | 'value' | 'checked' | 'url';
+                if (kind === 'url') {
+                  const next = {
+                    ...step,
+                    source: {
+                      kind: 'url' as const,
+                      mode: 'origin_and_path' as const,
+                    },
+                  };
+                  delete next.locator;
+                  onChange(next);
+                } else if (step.locator !== undefined) {
+                  onChange({ ...step, source: { kind } });
+                }
+              }}
+            >
+              {step.locator === undefined ? null : (
+                <>
+                  <option value="text">element text</option>
+                  <option value="value">field/select value</option>
+                  <option value="checked">checked state</option>
+                </>
+              )}
+              <option value="url">current URL</option>
+            </select>
+          </label>
+          {step.source.kind === 'url' ? (
+            <label>
+              URL extraction mode
+              <select
+                value={step.source.mode}
+                disabled={readOnly}
+                onChange={(event) =>
+                  onChange({
+                    ...step,
+                    source: {
+                      kind: 'url',
+                      mode: event.currentTarget.value as
+                        'origin' | 'origin_and_path',
+                    },
+                  })
+                }
+              >
+                <option value="origin">origin</option>
+                <option value="origin_and_path">origin and path</option>
+              </select>
+            </label>
+          ) : null}
+          <label>
+            Extraction timeout (milliseconds)
+            <input
+              type="number"
+              min={100}
+              max={60_000}
+              value={step.timeoutMs ?? 5_000}
+              disabled={readOnly}
+              onChange={(event) =>
+                onChange({
+                  ...step,
+                  timeoutMs: Number(event.currentTarget.value),
+                })
+              }
+            />
+          </label>
+          <p className="reference-summary">Retention: ephemeral</p>
         </>
       ) : null}
 
@@ -377,6 +463,7 @@ export function StepInspector({
         <VerifyFields
           step={step}
           variables={variables}
+          outputs={outputs}
           readOnly={readOnly}
           onChange={onChange}
           onValueSourceChange={onValueSourceChange}

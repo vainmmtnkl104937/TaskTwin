@@ -1,5 +1,11 @@
 # TaskTwin web
 
+## Workflow outputs
+
+Draft editors can add Extract steps, reuse an existing read-only locator, and
+bind compatible later steps to ephemeral outputs. The Outputs panel shows only
+declarations and usages. Run Detail displays metadata and never an output value
+or preview.
 The Next.js application provides the Session 11 login, workspace workflow list,
 and draft editor.
 

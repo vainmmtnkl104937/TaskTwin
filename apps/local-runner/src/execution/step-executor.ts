@@ -1,10 +1,10 @@
 import {
   resolveSelectWithResolver,
   resolveTextWithResolver,
+  type AdapterStepOutput,
   type WorkflowRuntimeValueResolver,
 } from '@tasktwin/workflow-engine';
 import type { ElementLocator, WorkflowStep } from '@tasktwin/workflow-schema';
-import type { SafeVerificationResult } from '@tasktwin/workflow-verification';
 import type { Page } from 'playwright';
 
 import type { BrowserExecutionOptions } from './contracts.js';
@@ -15,6 +15,7 @@ import {
   validateNavigationUrl,
 } from './origin-policy.js';
 import { executeVerification } from './verification-executor.js';
+import { executeExtraction } from './extraction-executor.js';
 
 export type SupportedWorkflowStep = Extract<
   WorkflowStep,
@@ -26,6 +27,7 @@ export type SupportedWorkflowStep = Extract<
       | 'select'
       | 'setChecked'
       | 'wait'
+      | 'extract'
       | 'verify';
   }
 >;
@@ -42,7 +44,7 @@ export interface StepExecutionContext {
 export function stepLocatorKind(
   step: SupportedWorkflowStep,
 ): ElementLocator['kind'] | undefined {
-  if ('locator' in step) return step.locator.kind;
+  if ('locator' in step && step.locator !== undefined) return step.locator.kind;
   return step.type === 'verify' && 'locator' in step.assertion
     ? step.assertion.locator.kind
     : undefined;
@@ -78,7 +80,7 @@ async function cancellableWait(
 export async function executeStep(
   step: SupportedWorkflowStep,
   context: StepExecutionContext,
-): Promise<{ verification?: SafeVerificationResult } | void> {
+): Promise<AdapterStepOutput | void> {
   if (context.signal?.aborted === true) {
     throw new SafeExecutionException('EXECUTION_CANCELLED');
   }
@@ -119,6 +121,18 @@ export async function executeStep(
       verification: await executeVerification(step, {
         page: context.page,
         valueResolver: context.valueResolver,
+        effectiveTimeoutMs: context.effectiveTimeoutMs,
+        actionTimeoutMs: context.options.actionTimeoutMs,
+        ...(context.signal === undefined ? {} : { signal: context.signal }),
+      }),
+    };
+  }
+
+  if (step.type === 'extract') {
+    return {
+      producedOutput: await executeExtraction(step, {
+        page: context.page,
+        allowedOrigins: context.allowedOrigins,
         effectiveTimeoutMs: context.effectiveTimeoutMs,
         actionTimeoutMs: context.options.actionTimeoutMs,
         ...(context.signal === undefined ? {} : { signal: context.signal }),

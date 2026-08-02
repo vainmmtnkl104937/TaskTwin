@@ -72,6 +72,30 @@ export default async function WorkflowRunDetailPage({
           </article>
         ))}
       </section>
+      <section className="workflow-list" aria-label="Workflow run outputs">
+        <div className="section-heading">
+          <p className="eyebrow">Safe metadata only</p>
+          <h2>Runtime outputs</h2>
+        </div>
+        {result.run.outputs.length === 0 ? (
+          <p>No runtime outputs were declared.</p>
+        ) : (
+          result.run.outputs.map((output) => (
+            <article
+              className="panel workflow-list-item"
+              key={`${output.producerStepId}:${output.outputName}`}
+            >
+              <div>
+                <h3>{output.outputName}</h3>
+                <p className="metadata">
+                  {output.outputType} Â· {output.status} Â· producer{' '}
+                  {output.producerStepId}
+                </p>
+              </div>
+            </article>
+          ))
+        )}
+      </section>
     </main>
   );
 }

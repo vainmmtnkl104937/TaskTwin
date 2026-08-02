@@ -24,6 +24,7 @@ const SUPPORTED_STEP_TYPES = [
   'select',
   'setChecked',
   'wait',
+  'extract',
   'verify',
 ] as const satisfies readonly WorkflowStepType[];
 
@@ -48,7 +49,7 @@ export class PlaywrightWorkflowExecutionAdapter implements WorkflowExecutionAdap
     if (!isSupportedStep(step)) {
       throw new SafeExecutionException('UNSUPPORTED_STEP_TYPE');
     }
-    if ('locator' in step) {
+    if ('locator' in step && step.locator !== undefined) {
       validateExecutableLocator(step.locator);
     } else if (step.type === 'verify' && 'locator' in step.assertion) {
       validateExecutableLocator(step.assertion.locator);
