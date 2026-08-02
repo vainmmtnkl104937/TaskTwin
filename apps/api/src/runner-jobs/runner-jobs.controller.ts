@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
+  Param,
   UseGuards,
 } from '@nestjs/common';
 
@@ -57,5 +59,26 @@ export class RunnerJobsController {
     @Body() body: unknown,
   ) {
     return this.service.complete(runner, lease, body);
+  }
+
+  @Post('runner/jobs/:workflowRunId/approval-requests')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  createApproval(
+    @CurrentRunner() runner: AuthenticatedRunner,
+    @CurrentRunLease() lease: AuthenticatedRunLease,
+    @Body() body: unknown,
+  ) {
+    return this.service.createApproval(runner, lease, body);
+  }
+
+  @Get('runner/jobs/:workflowRunId/approval-requests/:approvalRequestId')
+  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  approvalStatus(
+    @CurrentRunner() runner: AuthenticatedRunner,
+    @CurrentRunLease() lease: AuthenticatedRunLease,
+    @Param('approvalRequestId') approvalRequestId: string,
+  ) {
+    return this.service.approvalStatus(runner, lease, approvalRequestId);
   }
 }

@@ -14,6 +14,7 @@ import {
   USER_CODE_PATTERN,
   WORKFLOW_VERIFICATION_CAPABILITY,
   WORKFLOW_EXTRACTION_CAPABILITY,
+  WORKFLOW_APPROVAL_CAPABILITY,
 } from './constants.js';
 
 const UuidSchema = z.string().uuid();
@@ -25,10 +26,11 @@ export const RunnerCapabilitySchema = z.union([
   SecureInputRunnerCapabilitySchema,
   z.literal(WORKFLOW_VERIFICATION_CAPABILITY),
   z.literal(WORKFLOW_EXTRACTION_CAPABILITY),
+  z.literal(WORKFLOW_APPROVAL_CAPABILITY),
 ]);
 export const RunnerCapabilitiesSchema = z
   .array(RunnerCapabilitySchema)
-  .max(4)
+  .max(5)
   .superRefine((values, context) => {
     if (new Set(values).size !== values.length) {
       context.addIssue({

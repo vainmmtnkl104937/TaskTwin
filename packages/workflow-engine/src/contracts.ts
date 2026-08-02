@@ -2,6 +2,11 @@ import { WorkflowRunInputSubmissionSchema } from '@tasktwin/workflow-inputs';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
 import { SafeVerificationResultSchema } from '@tasktwin/workflow-verification';
 import { SafeWorkflowOutputSummarySchema } from '@tasktwin/workflow-extraction';
+import {
+  ApprovalDecisionSchema,
+  ApprovalRequestStatusSchema,
+} from '@tasktwin/workflow-approval';
+import { ApprovalRiskLevelSchema } from '@tasktwin/workflow-schema';
 import { z } from 'zod';
 
 import {
@@ -31,11 +36,13 @@ export const WorkflowEngineRunStatusSchema = z.enum([
   'validating',
   'starting',
   'running',
+  'waiting_for_approval',
   'cancelling',
   'succeeded',
   'failed',
   'cancelled',
   'timed_out',
+  'interrupted',
 ]);
 
 export const TerminalRunStatusSchema = z.enum([
@@ -43,16 +50,19 @@ export const TerminalRunStatusSchema = z.enum([
   'failed',
   'cancelled',
   'timed_out',
+  'interrupted',
 ]);
 
 export const WorkflowEngineStepStatusSchema = z.enum([
   'pending',
   'running',
+  'waiting_for_approval',
   'succeeded',
   'failed',
   'cancelled',
   'timed_out',
   'skipped',
+  'interrupted',
 ]);
 
 export const TerminalStepStatusSchema = z.enum([
@@ -61,6 +71,7 @@ export const TerminalStepStatusSchema = z.enum([
   'cancelled',
   'timed_out',
   'skipped',
+  'interrupted',
 ]);
 
 export const SkippedStepReasonSchema = z.enum([
@@ -70,6 +81,10 @@ export const SkippedStepReasonSchema = z.enum([
   'previous_step_failed',
   'run_cancelled',
   'run_timed_out',
+  'approval_rejected',
+  'approval_expired',
+  'approval_invalidated',
+  'run_interrupted',
 ]);
 
 export const TerminationCauseSchema = z.enum([
@@ -81,6 +96,9 @@ export const TerminationCauseSchema = z.enum([
   'run_cancelled',
   'total_timeout',
   'cleanup_failed',
+  'approval_rejected',
+  'approval_expired',
+  'approval_invalidated',
 ]);
 
 export const ExecutionErrorCodeSchema = z.enum([
@@ -119,6 +137,12 @@ export const ExecutionErrorCodeSchema = z.enum([
   'DUPLICATE_OUTPUT_PRODUCTION',
   'EXTRACTION_TARGET_UNSUPPORTED',
   'EXTRACTION_VALUE_UNAVAILABLE',
+  'APPROVAL_COORDINATOR_UNAVAILABLE',
+  'APPROVAL_BINDING_INVALID',
+  'APPROVAL_REQUEST_FAILED',
+  'APPROVAL_REJECTED',
+  'APPROVAL_EXPIRED',
+  'APPROVAL_INVALIDATED',
 ]);
 
 export const SafeExecutionErrorSchema = z.strictObject({
@@ -206,6 +230,7 @@ export const StepCountSummarySchema = z
     failed: z.number().int().nonnegative(),
     cancelled: z.number().int().nonnegative(),
     timedOut: z.number().int().nonnegative(),
+    interrupted: z.number().int().nonnegative().default(0),
     skipped: z.number().int().nonnegative(),
   })
   .superRefine((counts, context) => {
@@ -214,6 +239,7 @@ export const StepCountSummarySchema = z
         counts.failed +
         counts.cancelled +
         counts.timedOut +
+        counts.interrupted +
         counts.skipped !==
       counts.total
     ) {
@@ -266,6 +292,8 @@ export const WorkflowExecutionResultSchema = z
         .length,
       timedOut: result.steps.filter((step) => step.status === 'timed_out')
         .length,
+      interrupted: result.steps.filter((step) => step.status === 'interrupted')
+        .length,
       skipped: result.steps.filter((step) => step.status === 'skipped').length,
     };
     for (const [name, count] of Object.entries(actual)) {
@@ -313,10 +341,22 @@ export const OutputProducedProgressEventSchema = ProgressEventBaseSchema.extend(
   },
 );
 
+export const ApprovalStatusProgressEventSchema = ProgressEventBaseSchema.extend(
+  {
+    kind: z.literal('approval_status_changed'),
+    approvalStepId: z.string().trim().min(1).max(256),
+    gatedStepId: z.string().trim().min(1).max(256),
+    riskLevel: ApprovalRiskLevelSchema,
+    status: ApprovalRequestStatusSchema,
+    decision: ApprovalDecisionSchema.optional(),
+  },
+);
+
 export const WorkflowProgressEventSchema = z.discriminatedUnion('kind', [
   RunStatusProgressEventSchema,
   StepStatusProgressEventSchema,
   OutputProducedProgressEventSchema,
+  ApprovalStatusProgressEventSchema,
   WarningProgressEventSchema,
 ]);
 

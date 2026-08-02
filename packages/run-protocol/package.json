@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@tasktwin/workflow-extraction": "workspace:*",
+    "@tasktwin/workflow-approval": "workspace:*",
     "@tasktwin/secure-run-inputs": "workspace:*",
     "@tasktwin/workflow-engine": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",

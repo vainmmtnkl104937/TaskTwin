@@ -93,6 +93,7 @@ export function buildWorkflowExecutionResult(
     failed: steps.filter((step) => step.status === 'failed').length,
     cancelled: steps.filter((step) => step.status === 'cancelled').length,
     timedOut: steps.filter((step) => step.status === 'timed_out').length,
+    interrupted: steps.filter((step) => step.status === 'interrupted').length,
     skipped: steps.filter((step) => step.status === 'skipped').length,
   };
   return WorkflowExecutionResultSchema.parse({

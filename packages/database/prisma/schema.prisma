@@ -50,6 +50,7 @@ enum WorkflowRunStatus {
   QUEUED
   CLAIMED
   RUNNING
+  WAITING_FOR_APPROVAL
   CANCEL_REQUESTED
   SUCCEEDED
   FAILED
@@ -63,6 +64,7 @@ enum WorkflowRunStatus {
 enum WorkflowRunStepStatus {
   PENDING
   RUNNING
+  WAITING_FOR_APPROVAL
   SUCCEEDED
   FAILED
   CANCELLED
@@ -101,6 +103,25 @@ enum WorkflowRunInputPreparationStatus {
   @@map("workflow_run_input_preparation_status")
 }
 
+enum WorkflowApprovalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELLED
+  INVALIDATED
+
+  @@map("workflow_approval_request_status")
+}
+
+enum WorkflowApprovalRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+
+  @@map("workflow_approval_risk_level")
+}
+
 model User {
   id                         String                        @id @default(uuid()) @db.Uuid
   email                      String                        @unique(map: "users_email_key") @db.VarChar(254)
@@ -120,6 +141,7 @@ model User {
   createdWorkflowRuns        WorkflowRun[]                   @relation("WorkflowRunCreator")
   cancelledWorkflowRuns      WorkflowRun[]                   @relation("WorkflowRunCanceller")
   createdRunInputPreparations WorkflowRunInputPreparation[]  @relation("WorkflowRunInputPreparationCreator")
+  decidedWorkflowApprovals    WorkflowApprovalRequest[]       @relation("WorkflowApprovalDecider")
 
   @@map("users")
 }
@@ -226,6 +248,7 @@ model RunnerDevice {
   capabilitiesUpdatedAt DateTime?       @map("capabilities_updated_at") @db.Timestamptz(3)
   encryptionKeys  RunnerEncryptionKey[]
   runInputPreparations WorkflowRunInputPreparation[]
+  approvalRequests WorkflowApprovalRequest[]
 
   @@index([workspaceId, revokedAt, lastSeenAt], map: "runner_devices_workspace_id_revoked_at_last_seen_at_idx")
   @@index([revokedById], map: "runner_devices_revoked_by_id_idx")
@@ -337,6 +360,7 @@ model WorkflowRun {
   outputs                 WorkflowRunOutput[]
   progressBatches         WorkflowRunProgressBatch[]
   inputEnvelope           WorkflowRunInputEnvelope?
+  approvalRequests        WorkflowApprovalRequest[]
 
   @@unique([workspaceId, clientRunId], map: "workflow_runs_workspace_id_client_run_id_key")
   @@unique([runnerDeviceId, claimAttemptId], map: "workflow_runs_runner_device_id_claim_attempt_id_key")
@@ -454,6 +478,35 @@ model WorkflowRunStep {
   @@unique([workflowRunId, sourceStepIndex], map: "workflow_run_steps_run_id_source_step_index_key")
   @@index([workflowRunId, status], map: "workflow_run_steps_run_id_status_idx")
   @@map("workflow_run_steps")
+}
+
+model WorkflowApprovalRequest {
+  id                 String                        @id @default(uuid()) @db.Uuid
+  workflowRunId      String                        @map("workflow_run_id") @db.Uuid
+  runnerDeviceId     String                        @map("runner_device_id") @db.Uuid
+  approvalStepId     String                        @map("approval_step_id") @db.VarChar(256)
+  gatedStepId        String                        @map("gated_step_id") @db.VarChar(256)
+  clientRequestId    String                        @map("client_request_id") @db.Uuid
+  requestDigest      String                        @map("request_digest") @db.Char(64)
+  status             WorkflowApprovalRequestStatus @default(PENDING)
+  riskLevel          WorkflowApprovalRiskLevel     @map("risk_level")
+  requestedAt        DateTime                      @default(now()) @map("requested_at") @db.Timestamptz(3)
+  expiresAt          DateTime                      @map("expires_at") @db.Timestamptz(3)
+  resolvedAt         DateTime?                     @map("resolved_at") @db.Timestamptz(3)
+  decidedByUserId    String?                       @map("decided_by_user_id") @db.Uuid
+  clientDecisionId   String?                       @unique(map: "workflow_approval_requests_client_decision_id_key") @map("client_decision_id") @db.Uuid
+  createdAt          DateTime                      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workflowRun        WorkflowRun                   @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  runnerDevice       RunnerDevice                  @relation(fields: [runnerDeviceId], references: [id], onDelete: Restrict)
+  decidedBy          User?                         @relation("WorkflowApprovalDecider", fields: [decidedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workflowRunId, approvalStepId], map: "workflow_approval_requests_run_step_key")
+  @@unique([workflowRunId, clientRequestId], map: "workflow_approval_requests_run_client_request_key")
+  @@index([status, expiresAt], map: "workflow_approval_requests_status_expires_at_idx")
+  @@index([runnerDeviceId, status], map: "workflow_approval_requests_runner_status_idx")
+  @@index([decidedByUserId], map: "workflow_approval_requests_decided_by_idx")
+  @@map("workflow_approval_requests")
 }
 
 model WorkflowRunOutput {

@@ -43,6 +43,13 @@ const SAFE_MESSAGES = {
     'The workflow output was produced more than once.',
   EXTRACTION_TARGET_UNSUPPORTED: 'The extraction target is not supported.',
   EXTRACTION_VALUE_UNAVAILABLE: 'The workflow output could not be extracted.',
+  APPROVAL_COORDINATOR_UNAVAILABLE:
+    'Human approval coordination is unavailable.',
+  APPROVAL_BINDING_INVALID: 'The Approval step binding is invalid.',
+  APPROVAL_REQUEST_FAILED: 'The approval request could not be completed.',
+  APPROVAL_REJECTED: 'The workflow approval request was rejected.',
+  APPROVAL_EXPIRED: 'The workflow approval request expired.',
+  APPROVAL_INVALIDATED: 'The workflow approval request was invalidated.',
 } as const satisfies Record<ExecutionErrorCode, string>;
 
 export function safeError(code: ExecutionErrorCode): SafeExecutionError {

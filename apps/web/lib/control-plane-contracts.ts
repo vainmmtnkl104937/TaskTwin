@@ -1,4 +1,10 @@
 import { PublishReadinessReportSchema } from '@tasktwin/workflow-lifecycle';
+export {
+  ApprovalDecisionResponseSchema,
+  ApprovalRequestDetailResponseSchema,
+  ApprovalRequestListResponseSchema,
+} from '@tasktwin/workflow-approval';
+export type { SafeApprovalRequest } from '@tasktwin/workflow-approval';
 import {
   PairingActionResponseSchema,
   PairingInspectionResponseSchema,

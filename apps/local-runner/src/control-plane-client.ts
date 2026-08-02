@@ -26,6 +26,13 @@ import {
   type WorkflowRunCompletionRequest,
   type WorkflowRunCompletionResponse,
 } from '@tasktwin/run-protocol';
+import {
+  RunnerApprovalRequestCreatedSchema,
+  RunnerApprovalStatusSchema,
+  type RunnerApprovalRequestCreate,
+  type RunnerApprovalRequestCreated,
+  type RunnerApprovalStatus,
+} from '@tasktwin/workflow-approval';
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
@@ -78,6 +85,18 @@ export interface RunnerJobTransport {
     leaseToken: string,
     completion: WorkflowRunCompletionRequest,
   ): Promise<WorkflowRunCompletionResponse>;
+  createApprovalRequest(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    request: RunnerApprovalRequestCreate,
+  ): Promise<RunnerApprovalRequestCreated>;
+  getApprovalStatus(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    approvalRequestId: string,
+  ): Promise<RunnerApprovalStatus>;
 }
 
 export class HttpRunnerControlPlaneTransport
@@ -197,6 +216,39 @@ export class HttpRunnerControlPlaneTransport
       acceptedThroughSequence: response.acceptedThroughSequence,
       cancelRequested: response.cancelRequested,
     };
+  }
+
+  createApprovalRequest(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    request: RunnerApprovalRequestCreate,
+  ): Promise<RunnerApprovalRequestCreated> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/jobs/${encodeURIComponent(runId)}/approval-requests`,
+      RunnerApprovalRequestCreatedSchema,
+      {
+        method: 'POST',
+        headers: this.runnerHeaders(credential, leaseToken),
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  getApprovalStatus(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    approvalRequestId: string,
+  ): Promise<RunnerApprovalStatus> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/jobs/${encodeURIComponent(runId)}/approval-requests/${encodeURIComponent(approvalRequestId)}`,
+      RunnerApprovalStatusSchema,
+      {
+        method: 'GET',
+        headers: this.runnerHeaders(credential, leaseToken),
+      },
+    );
   }
 
   completeJob(

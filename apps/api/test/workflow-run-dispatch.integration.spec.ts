@@ -43,6 +43,7 @@ const workflowId = `session17-${suffix}`;
 const secureWorkflowId = `session18-${suffix}`;
 const verificationWorkflowId = `session19-${suffix}`;
 const extractionWorkflowId = `session20-${suffix}`;
+const approvalWorkflowId = `session21-${suffix}`;
 const credentialPepper = 'session17-credential-pepper-value-safe';
 const leasePepper = 'session17-run-lease-pepper-value-safe';
 const pairingPepper = 'session17-pairing-pepper-value-safe-123';
@@ -160,6 +161,35 @@ function extractionDefinition(): WorkflowDefinition {
   };
 }
 
+function approvalDefinition(): WorkflowDefinition {
+  return {
+    schemaVersion: 1,
+    workflowId: approvalWorkflowId,
+    version: 1,
+    name: 'Session 21 approval fixture',
+    status: 'published',
+    variables: [],
+    steps: [
+      {
+        id: 'navigate',
+        type: 'navigate',
+        name: 'Navigate',
+        url: { kind: 'literal', value: 'http://127.0.0.1:4177/' },
+      },
+      {
+        id: 'approve-wait',
+        type: 'approval',
+        name: 'Approve wait',
+        message: 'Approve the immediate next wait step.',
+        riskLevel: 'medium',
+        scope: 'next_step',
+        timeoutMs: 120_000,
+      },
+      { id: 'gated-wait', type: 'wait', name: 'Gated wait', durationMs: 10 },
+    ],
+  };
+}
+
 describe('workflow run dispatch integration', () => {
   let app: INestApplication;
   let prisma: PrismaClient;
@@ -171,6 +201,7 @@ describe('workflow run dispatch integration', () => {
   let secureVersionId: string;
   let verificationVersionId: string;
   let extractionVersionId: string;
+  let approvalVersionId: string;
   let runnerDeviceId: string;
   let runnerCredential: string;
   const userIds: string[] = [];
@@ -311,6 +342,25 @@ describe('workflow run dispatch integration', () => {
       select: { versions: { select: { id: true } } },
     });
     extractionVersionId = extractionWorkflow.versions[0]!.id;
+    const approvalWorkflow = await prisma.workflow.create({
+      data: {
+        id: approvalWorkflowId,
+        workspaceId: owner.workspace.id,
+        name: 'Session 21 approval fixture',
+        versions: {
+          create: {
+            version: 1,
+            status: 'published',
+            schemaVersion: 1,
+            definition: approvalDefinition(),
+            publishedAt: new Date(),
+            publishedById: owner.user.id,
+          },
+        },
+      },
+      select: { versions: { select: { id: true } } },
+    });
+    approvalVersionId = approvalWorkflow.versions[0]!.id;
 
     const pairing = await request(app.getHttpServer())
       .post('/runner-pairing/sessions')
@@ -354,6 +404,7 @@ describe('workflow run dispatch integration', () => {
               secureWorkflowId,
               verificationWorkflowId,
               extractionWorkflowId,
+              approvalWorkflowId,
             ],
           },
         },
@@ -368,6 +419,7 @@ describe('workflow run dispatch integration', () => {
               secureWorkflowId,
               verificationWorkflowId,
               extractionWorkflowId,
+              approvalWorkflowId,
             ],
           },
         },
@@ -381,6 +433,7 @@ describe('workflow run dispatch integration', () => {
             secureWorkflowId,
             verificationWorkflowId,
             extractionWorkflowId,
+            approvalWorkflowId,
           ],
         },
       },
@@ -393,6 +446,7 @@ describe('workflow run dispatch integration', () => {
             secureWorkflowId,
             verificationWorkflowId,
             extractionWorkflowId,
+            approvalWorkflowId,
           ],
         },
       },
@@ -405,6 +459,7 @@ describe('workflow run dispatch integration', () => {
             secureWorkflowId,
             verificationWorkflowId,
             extractionWorkflowId,
+            approvalWorkflowId,
           ],
         },
       },
@@ -1269,5 +1324,231 @@ describe('workflow run dispatch integration', () => {
         where: { workflowRunId: runId, outputName: 'customerId' },
       }),
     ).toMatchObject({ status: 'PRODUCED' });
+  });
+
+  it('creates, authorizes and resolves a safe approval gate idempotently', async () => {
+    await request(app.getHttpServer())
+      .post('/runner/heartbeat')
+      .set(runnerAuth())
+      .send({
+        schemaVersion: 1,
+        runnerVersion: '0.1.0',
+        capabilities: [
+          'secure_input_envelope_v1',
+          'workflow_verification_v1',
+          'workflow_extraction_v1',
+          'workflow_approval_v1',
+        ],
+      })
+      .expect(200);
+
+    const created = await request(app.getHttpServer())
+      .post(`/workflow-versions/${approvalVersionId}/runs`)
+      .set(auth(owner))
+      .send({ schemaVersion: 1, runnerDeviceId, clientRunId: randomUUID() })
+      .expect(200);
+    const runId = created.body.run.id as string;
+    const claimed = await request(app.getHttpServer())
+      .post('/runner/jobs/claim')
+      .set(runnerAuth())
+      .send({
+        schemaVersion: 1,
+        runProtocolVersion: 2,
+        workflowEngineSchemaVersion: 1,
+        runnerVersion: '0.1.0',
+        claimAttemptId: randomUUID(),
+      })
+      .expect(200);
+    expect(claimed.body.job.runId).toBe(runId);
+    const leaseHeaders = {
+      ...runnerAuth(),
+      'X-TaskTwin-Run-Lease': claimed.body.job.leaseToken as string,
+    };
+    const progressTimestamp = new Date().toISOString();
+    const progressEvents = [
+      ['run_status_changed', { status: 'pending' }],
+      ['run_status_changed', { status: 'validating' }],
+      [
+        'step_status_changed',
+        { stepId: 'navigate', stepType: 'navigate', status: 'pending' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'approve-wait', stepType: 'approval', status: 'pending' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'gated-wait', stepType: 'wait', status: 'pending' },
+      ],
+      ['run_status_changed', { status: 'starting' }],
+      ['run_status_changed', { status: 'running' }],
+      [
+        'step_status_changed',
+        { stepId: 'navigate', stepType: 'navigate', status: 'running' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'navigate', stepType: 'navigate', status: 'succeeded' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'approve-wait', stepType: 'approval', status: 'running' },
+      ],
+    ].map(([kind, data], index) => ({
+      sequence: index + 1,
+      event: {
+        executionId: runId,
+        timestamp: progressTimestamp,
+        kind,
+        ...data,
+      },
+    }));
+    await request(app.getHttpServer())
+      .post(`/runner/jobs/${runId}/progress`)
+      .set(leaseHeaders)
+      .send({
+        schemaVersion: 1,
+        clientBatchId: randomUUID(),
+        firstSequence: 1,
+        lastSequence: progressEvents.length,
+        events: progressEvents,
+      })
+      .expect(200);
+    const clientRequestId = randomUUID();
+    const requestBody = {
+      clientRequestId,
+      approvalStepId: 'approve-wait',
+      gatedStepId: 'gated-wait',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const firstRequest = await request(app.getHttpServer())
+      .post(`/runner/jobs/${runId}/approval-requests`)
+      .set(leaseHeaders)
+      .send(requestBody)
+      .expect(({ body, status }) => {
+        expect(status, JSON.stringify(body)).toBe(200);
+      });
+    const approvalRequestId = firstRequest.body.approvalRequestId as string;
+    expect(firstRequest.body).toMatchObject({
+      status: 'PENDING',
+      idempotent: false,
+    });
+    await request(app.getHttpServer())
+      .post(`/runner/jobs/${runId}/approval-requests`)
+      .set(leaseHeaders)
+      .send(requestBody)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.approvalRequestId).toBe(approvalRequestId);
+        expect(body.idempotent).toBe(true);
+      });
+
+    await request(app.getHttpServer())
+      .get(`/workspaces/${owner.workspace.id}/approval-requests`)
+      .set(auth(viewer))
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.access.canDecide).toBe(false);
+        expect(body.requests).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              id: approvalRequestId,
+              workflowRunId: runId,
+              status: 'PENDING',
+              approvalStep: expect.objectContaining({
+                id: 'approve-wait',
+              }),
+              gatedStep: expect.objectContaining({ id: 'gated-wait' }),
+            }),
+          ]),
+        );
+      });
+    await request(app.getHttpServer())
+      .post(`/approval-requests/${approvalRequestId}/approve`)
+      .set(auth(viewer))
+      .send({ clientDecisionId: randomUUID() })
+      .expect(403);
+    await request(app.getHttpServer())
+      .get(`/approval-requests/${approvalRequestId}`)
+      .set(auth(outsider))
+      .expect(404);
+
+    const clientDecisionId = randomUUID();
+    const decisionBody = { clientDecisionId };
+    await request(app.getHttpServer())
+      .post(`/approval-requests/${approvalRequestId}/approve`)
+      .set(auth(owner))
+      .send(decisionBody)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.idempotent).toBe(false);
+        expect(body.request.status).toBe('APPROVED');
+      });
+    await request(app.getHttpServer())
+      .post(`/approval-requests/${approvalRequestId}/approve`)
+      .set(auth(owner))
+      .send(decisionBody)
+      .expect(200)
+      .expect(({ body }) => expect(body.idempotent).toBe(true));
+    await request(app.getHttpServer())
+      .get(`/runner/jobs/${runId}/approval-requests/${approvalRequestId}`)
+      .set(leaseHeaders)
+      .expect(200)
+      .expect(({ body }) => expect(body.status).toBe('APPROVED'));
+
+    const stored = await prisma.workflowApprovalRequest.findUniqueOrThrow({
+      where: { id: approvalRequestId },
+    });
+    expect(stored).toMatchObject({
+      workflowRunId: runId,
+      runnerDeviceId,
+      approvalStepId: 'approve-wait',
+      gatedStepId: 'gated-wait',
+      status: 'APPROVED',
+    });
+    expect(Object.keys(stored)).not.toEqual(
+      expect.arrayContaining(['message', 'runtimeInputs', 'secrets', 'url']),
+    );
+
+    const timestamp = new Date().toISOString();
+    const result = {
+      schemaVersion: 1,
+      executionId: runId,
+      workflowId: approvalWorkflowId,
+      workflowVersion: 1,
+      status: 'succeeded',
+      startedAt: timestamp,
+      finishedAt: timestamp,
+      durationMs: 0,
+      terminationCause: 'completed',
+      counts: {
+        total: 3,
+        attempted: 3,
+        succeeded: 3,
+        failed: 0,
+        cancelled: 0,
+        timedOut: 0,
+        skipped: 0,
+      },
+      warnings: [],
+      steps: [
+        { stepId: 'navigate', stepType: 'navigate' },
+        { stepId: 'approve-wait', stepType: 'approval' },
+        { stepId: 'gated-wait', stepType: 'wait' },
+      ].map((step) => ({
+        ...step,
+        status: 'succeeded',
+        startedAt: timestamp,
+        finishedAt: timestamp,
+        durationMs: 0,
+      })),
+      outputs: [],
+    };
+    await request(app.getHttpServer())
+      .post(`/runner/jobs/${runId}/complete`)
+      .set(leaseHeaders)
+      .send({ schemaVersion: 1, clientCompletionId: randomUUID(), result })
+      .expect(200)
+      .expect(({ body }) => expect(body.run.status).toBe('SUCCEEDED'));
   });
 });

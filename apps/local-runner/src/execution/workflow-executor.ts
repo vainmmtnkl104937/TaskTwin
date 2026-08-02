@@ -6,6 +6,7 @@ import {
   type WorkflowExecutionResult,
   type WorkflowProgressSink,
   type WorkflowRuntimeValueResolver,
+  type WorkflowApprovalCoordinator,
 } from '@tasktwin/workflow-engine';
 
 import type { BrowserSessionFactory } from './browser-session.js';
@@ -16,6 +17,7 @@ export class LocalWorkflowExecutor {
   constructor(
     private readonly sessions: BrowserSessionFactory,
     private readonly progressSink?: WorkflowProgressSink,
+    private readonly approvalCoordinator?: WorkflowApprovalCoordinator,
   ) {}
 
   execute(
@@ -40,6 +42,9 @@ export class LocalWorkflowExecutor {
         ? {}
         : { progressSink: this.progressSink }),
       ...(valueResolver === undefined ? {} : { valueResolver }),
+      ...(this.approvalCoordinator === undefined
+        ? {}
+        : { approvalCoordinator: this.approvalCoordinator }),
     });
     return engine.execute(
       {

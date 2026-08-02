@@ -78,10 +78,18 @@ describe('run protocol', () => {
         ...published,
         steps: [
           published.steps[0],
-          { id: 'approval', type: 'approval', name: 'Approve', message: 'Ok' },
+          {
+            id: 'approval',
+            type: 'approval',
+            name: 'Approve',
+            message: 'Ok',
+            riskLevel: 'medium',
+            scope: 'next_step',
+            timeoutMs: 30_000,
+          },
         ],
       }).issues.map((item) => item.code),
-    ).toContain('UNSUPPORTED_STEP_TYPE');
+    ).toContain('INVALID_WORKFLOW_DEFINITION');
     expect(
       analyzeWorkflowRunReadiness({
         ...published,

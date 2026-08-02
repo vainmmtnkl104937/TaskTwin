@@ -662,3 +662,22 @@ the produced value only through the internal adapter boundary. The store is
 cleared after success, failure, cancellation, or timeout. Public progress and
 completion contracts carry metadata only. PostgreSQL mirrors that metadata in
 WorkflowRunOutput and never stores output values.
+
+## Human approval boundary
+
+`@tasktwin/workflow-approval` owns deterministic next-step binding, lifecycle
+contracts, transition rules, and safe summaries. It has no HTTP, Prisma,
+Playwright, UI, filesystem, or browser dependency. An Approval Step gates only
+the following entry in `WorkflowDefinition.steps` and is invalid at the end.
+
+The workflow engine enters `waiting_for_approval` and delegates coordination
+through an injected interface without invoking the browser adapter. The Local
+Runner creates and polls the persisted request while heartbeat and lease
+renewal remain active. The isolated BrowserContext is retained but inactive.
+Rejection cancels, expiry times out, and lease loss or Runner revocation
+interrupts the run.
+
+The API derives message, risk, and gated-step metadata from the immutable
+Published WorkflowVersion. OWNER and ADMIN may decide; MEMBER and VIEWER have
+read-only access. Unique request and decision identifiers plus atomic updates
+make exact retries idempotent and concurrent decisions single-winner.

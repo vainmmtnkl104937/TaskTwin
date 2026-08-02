@@ -18,6 +18,7 @@ import {
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
 import {
   WORKFLOW_EXTRACTION_CAPABILITY,
+  WORKFLOW_APPROVAL_CAPABILITY,
   WORKFLOW_VERIFICATION_CAPABILITY,
 } from '@tasktwin/runner-protocol';
 import { defineWorkflowOutputs } from '@tasktwin/workflow-extraction';
@@ -34,6 +35,7 @@ import {
   WorkflowRunStepStatus,
   WorkflowRunOutputStatus,
   WorkflowRunOutputType,
+  WorkflowApprovalRequestStatus,
   type PrismaClient,
 } from '../generated/prisma/client.js';
 import { createCanonicalJsonDigest } from '../recording/canonical-json.js';
@@ -52,6 +54,7 @@ import type {
 const ACTIVE_STATUSES = [
   WorkflowRunStatus.CLAIMED,
   WorkflowRunStatus.RUNNING,
+  WorkflowRunStatus.WAITING_FOR_APPROVAL,
   WorkflowRunStatus.CANCEL_REQUESTED,
 ] as const;
 const TERMINAL_STATUSES = [
@@ -72,6 +75,7 @@ const runInclude = {
   workflowVersion: { select: { version: true } },
   steps: { orderBy: { sourceStepIndex: 'asc' as const } },
   outputs: { orderBy: { producerStepIndex: 'asc' as const } },
+  approvalRequests: { orderBy: { requestedAt: 'asc' as const } },
 } as const satisfies Prisma.WorkflowRunInclude;
 
 type RunRow = Prisma.WorkflowRunGetPayload<{ include: typeof runInclude }>;
@@ -83,16 +87,46 @@ function isSerializationError(error: unknown): boolean {
   ) {
     return true;
   }
-  if (typeof error !== 'object' || error === null || !('cause' in error)) {
+  if (typeof error !== 'object' || error === null) {
     return false;
   }
-  const cause = error.cause;
-  if (typeof cause !== 'object' || cause === null) {
+  if ('cause' in error) {
+    const cause = error.cause;
+    if (typeof cause === 'object' && cause !== null) {
+      const kind = 'kind' in cause ? cause.kind : undefined;
+      const originalCode =
+        'originalCode' in cause ? cause.originalCode : undefined;
+      if (kind === 'TransactionWriteConflict' || originalCode === '40001') {
+        return true;
+      }
+    }
+  }
+  if (!('code' in error) || error.code !== 'P2010' || !('meta' in error)) {
     return false;
   }
-  const kind = 'kind' in cause ? cause.kind : undefined;
-  const originalCode = 'originalCode' in cause ? cause.originalCode : undefined;
-  return kind === 'TransactionWriteConflict' || originalCode === '40001';
+  const meta = error.meta;
+  if (
+    typeof meta !== 'object' ||
+    meta === null ||
+    !('driverAdapterError' in meta)
+  ) {
+    return false;
+  }
+  const driverError = meta.driverAdapterError;
+  if (
+    typeof driverError !== 'object' ||
+    driverError === null ||
+    !('cause' in driverError)
+  ) {
+    return false;
+  }
+  const cause = driverError.cause;
+  return (
+    typeof cause === 'object' &&
+    cause !== null &&
+    'originalCode' in cause &&
+    cause.originalCode === '40001'
+  );
 }
 
 function toRecord(row: RunRow): WorkflowRunRecord {
@@ -170,6 +204,8 @@ function persistedStepStatus(
       return WorkflowRunStepStatus.PENDING;
     case 'running':
       return WorkflowRunStepStatus.RUNNING;
+    case 'waiting_for_approval':
+      return WorkflowRunStepStatus.WAITING_FOR_APPROVAL;
     case 'succeeded':
       return WorkflowRunStepStatus.SUCCEEDED;
     case 'failed':
@@ -180,17 +216,20 @@ function persistedStepStatus(
       return WorkflowRunStepStatus.TIMED_OUT;
     case 'skipped':
       return WorkflowRunStepStatus.SKIPPED;
+    case 'interrupted':
+      return WorkflowRunStepStatus.INTERRUPTED;
   }
 }
 
 function persistedRunStatus(
-  status: 'succeeded' | 'failed' | 'cancelled' | 'timed_out',
+  status: 'succeeded' | 'failed' | 'cancelled' | 'timed_out' | 'interrupted',
 ): WorkflowRunStatus {
   return {
     succeeded: WorkflowRunStatus.SUCCEEDED,
     failed: WorkflowRunStatus.FAILED,
     cancelled: WorkflowRunStatus.CANCELLED,
     timed_out: WorkflowRunStatus.TIMED_OUT,
+    interrupted: WorkflowRunStatus.INTERRUPTED,
   }[status];
 }
 
@@ -381,6 +420,22 @@ export class WorkflowRunRepository {
             {
               code: 'RUNNER_CAPABILITY_UNAVAILABLE',
               message: 'The selected Runner cannot execute Extract steps.',
+            },
+          ],
+        });
+      }
+      if (
+        parsed.data.steps.some((step) => step.type === 'approval') &&
+        !runner.capabilities.includes(WORKFLOW_APPROVAL_CAPABILITY)
+      ) {
+        throw new WorkflowRunRepositoryError('RUN_NOT_READY', {
+          ...readiness,
+          ready: false,
+          issues: [
+            ...readiness.issues,
+            {
+              code: 'RUNNER_CAPABILITY_UNAVAILABLE',
+              message: 'The selected Runner cannot coordinate Approval steps.',
             },
           ],
         });
@@ -659,10 +714,17 @@ export class WorkflowRunRepository {
           lastEngineStatus = event.status;
           if (
             event.status === 'running' &&
-            run.status === WorkflowRunStatus.CLAIMED
+            (run.status === WorkflowRunStatus.CLAIMED ||
+              run.status === WorkflowRunStatus.WAITING_FOR_APPROVAL)
           ) {
             run.status = WorkflowRunStatus.RUNNING;
             run.startedAt ??= new Date(event.timestamp);
+          }
+          if (
+            event.status === 'waiting_for_approval' &&
+            run.status === WorkflowRunStatus.RUNNING
+          ) {
+            run.status = WorkflowRunStatus.WAITING_FOR_APPROVAL;
           }
           continue;
         }
@@ -687,6 +749,20 @@ export class WorkflowRunRepository {
           }
           output.status = WorkflowRunOutputStatus.PRODUCED;
           output.producedAt = new Date(event.timestamp);
+          continue;
+        }
+        if (event.kind === 'approval_status_changed') {
+          const request = run.approvalRequests.find(
+            (candidate) => candidate.approvalStepId === event.approvalStepId,
+          );
+          if (
+            event.status !== 'PENDING' &&
+            (request === undefined ||
+              request.gatedStepId !== event.gatedStepId ||
+              request.status !== event.status)
+          ) {
+            throw new WorkflowRunRepositoryError('PROGRESS_TRANSITION_INVALID');
+          }
           continue;
         }
         const step = stepById.get(event.stepId);
@@ -723,9 +799,14 @@ export class WorkflowRunRepository {
           step.startedAt = new Date(event.timestamp);
         }
         if (
-          ['succeeded', 'failed', 'cancelled', 'timed_out', 'skipped'].includes(
-            event.status,
-          )
+          [
+            'succeeded',
+            'failed',
+            'cancelled',
+            'timed_out',
+            'skipped',
+            'interrupted',
+          ].includes(event.status)
         ) {
           step.finishedAt = new Date(event.timestamp);
         }
@@ -803,6 +884,39 @@ export class WorkflowRunRepository {
         ) {
           return { run: toRecord(run), idempotent: true };
         }
+        if (
+          run.status === WorkflowRunStatus.TIMED_OUT &&
+          run.terminationCause === 'approval_expired' &&
+          run.clientCompletionId === null
+        ) {
+          const expiredResult = WorkflowExecutionResultSchema.safeParse(
+            input.completion.result,
+          );
+          const stepsMatch =
+            expiredResult.success &&
+            expiredResult.data.executionId === run.id &&
+            expiredResult.data.status === 'timed_out' &&
+            expiredResult.data.terminationCause === 'approval_expired' &&
+            expiredResult.data.steps.length === run.steps.length &&
+            expiredResult.data.steps.every(
+              (step, index) =>
+                step.stepId === run.steps[index]?.sourceStepId &&
+                step.stepType === run.steps[index]?.stepType,
+            );
+          if (!stepsMatch) {
+            throw new WorkflowRunRepositoryError('COMPLETION_INVALID');
+          }
+          const updated = await transaction.workflowRun.update({
+            where: { id: run.id },
+            data: {
+              clientCompletionId: input.completion.clientCompletionId,
+              completionDigest: input.completion.digest,
+              finalResult: input.completion.result as Prisma.InputJsonValue,
+            },
+            include: runInclude,
+          });
+          return { run: toRecord(updated), idempotent: false };
+        }
         throw new WorkflowRunRepositoryError('COMPLETION_CONFLICT');
       }
       this.requireLease(run, input, input.now);
@@ -825,6 +939,38 @@ export class WorkflowRunRepository {
           throw new WorkflowRunRepositoryError('COMPLETION_INVALID');
         }
       });
+      for (const approval of run.approvalRequests) {
+        const approvalStep = result.steps.find(
+          (step) => step.stepId === approval.approvalStepId,
+        );
+        const gatedStep = result.steps.find(
+          (step) => step.stepId === approval.gatedStepId,
+        );
+        const valid =
+          approvalStep !== undefined &&
+          gatedStep !== undefined &&
+          (approval.status === WorkflowApprovalRequestStatus.APPROVED
+            ? approvalStep.status === 'succeeded'
+            : approval.status === WorkflowApprovalRequestStatus.REJECTED
+              ? result.terminationCause === 'approval_rejected' &&
+                approvalStep.status === 'cancelled' &&
+                gatedStep.status === 'skipped'
+              : approval.status === WorkflowApprovalRequestStatus.EXPIRED
+                ? result.terminationCause === 'approval_expired' &&
+                  approvalStep.status === 'timed_out' &&
+                  gatedStep.status === 'skipped'
+                : approval.status === WorkflowApprovalRequestStatus.CANCELLED
+                  ? result.status === 'cancelled' &&
+                    gatedStep.status === 'skipped'
+                  : approval.status ===
+                      WorkflowApprovalRequestStatus.INVALIDATED
+                    ? result.status === 'interrupted' &&
+                      gatedStep.status === 'skipped'
+                    : false);
+        if (!valid) {
+          throw new WorkflowRunRepositoryError('COMPLETION_INVALID');
+        }
+      }
       if (result.outputs.length !== run.outputs.length) {
         throw new WorkflowRunRepositoryError('COMPLETION_INVALID');
       }
@@ -940,6 +1086,16 @@ export class WorkflowRunRepository {
       if (terminal(run.status)) {
         return { run: toRecord(run), idempotent: true };
       }
+      await transaction.workflowApprovalRequest.updateMany({
+        where: {
+          workflowRunId,
+          status: WorkflowApprovalRequestStatus.PENDING,
+        },
+        data: {
+          status: WorkflowApprovalRequestStatus.CANCELLED,
+          resolvedAt: now,
+        },
+      });
       if (run.status === WorkflowRunStatus.QUEUED) {
         await transaction.workflowRunStep.updateMany({
           where: { workflowRunId, status: WorkflowRunStepStatus.PENDING },
@@ -1203,11 +1359,29 @@ export class WorkflowRunRepository {
     now: Date,
   ): Promise<void> {
     await transaction.workflowRunStep.updateMany({
-      where: { workflowRunId: runId, status: WorkflowRunStepStatus.RUNNING },
+      where: {
+        workflowRunId: runId,
+        status: {
+          in: [
+            WorkflowRunStepStatus.RUNNING,
+            WorkflowRunStepStatus.WAITING_FOR_APPROVAL,
+          ],
+        },
+      },
       data: {
         status: WorkflowRunStepStatus.INTERRUPTED,
         errorCode: 'LEASE_EXPIRED',
         finishedAt: now,
+      },
+    });
+    await transaction.workflowApprovalRequest.updateMany({
+      where: {
+        workflowRunId: runId,
+        status: WorkflowApprovalRequestStatus.PENDING,
+      },
+      data: {
+        status: WorkflowApprovalRequestStatus.INVALIDATED,
+        resolvedAt: now,
       },
     });
     await transaction.workflowRunStep.updateMany({

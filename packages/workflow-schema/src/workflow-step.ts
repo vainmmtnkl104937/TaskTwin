@@ -2,9 +2,13 @@ import { z } from 'zod';
 
 import { ElementLocatorSchema } from './element-locator.js';
 import {
+  DEFAULT_APPROVAL_TIMEOUT_MS,
   IdentifierSchema,
+  MAX_APPROVAL_MESSAGE_LENGTH,
+  MAX_APPROVAL_TIMEOUT_MS,
   MAX_VERIFICATION_TIMEOUT_MS,
   MAX_WAIT_DURATION_MS,
+  MIN_APPROVAL_TIMEOUT_MS,
   MIN_VERIFICATION_TIMEOUT_MS,
   NonEmptyStringSchema,
 } from './primitives.js';
@@ -130,10 +134,28 @@ export const VerifyStepSchema = z.strictObject({
     .optional(),
 });
 
+export const ApprovalRiskLevelSchema = z.enum(['low', 'medium', 'high']);
+
 export const ApprovalStepSchema = z.strictObject({
   ...baseStepShape,
   type: z.literal('approval'),
-  message: NonEmptyStringSchema,
+  message: z
+    .string()
+    .trim()
+    .min(1)
+    .max(MAX_APPROVAL_MESSAGE_LENGTH)
+    .refine(
+      (message) => !/\$\{|\{\{|<%/.test(message),
+      'Approval messages must be static and cannot contain interpolation.',
+    ),
+  riskLevel: ApprovalRiskLevelSchema.default('medium'),
+  scope: z.literal('next_step').default('next_step'),
+  timeoutMs: z
+    .number()
+    .int()
+    .min(MIN_APPROVAL_TIMEOUT_MS)
+    .max(MAX_APPROVAL_TIMEOUT_MS)
+    .default(DEFAULT_APPROVAL_TIMEOUT_MS),
 });
 
 export const WorkflowStepSchema = z.discriminatedUnion('type', [
@@ -164,5 +186,6 @@ export type UrlExtractSource = z.infer<typeof UrlExtractSourceSchema>;
 export type ExtractSource = z.infer<typeof ExtractSourceSchema>;
 export type ExtractStep = z.infer<typeof ExtractStepSchema>;
 export type VerifyStep = z.infer<typeof VerifyStepSchema>;
+export type ApprovalRiskLevel = z.infer<typeof ApprovalRiskLevelSchema>;
 export type ApprovalStep = z.infer<typeof ApprovalStepSchema>;
 export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;

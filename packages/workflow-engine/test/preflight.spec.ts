@@ -82,7 +82,7 @@ describe('workflow engine preflight', () => {
     expect(context.adapter.startCount).toBe(0);
   });
 
-  it('rejects unsupported steps before adapter startup', async () => {
+  it('rejects an orphaned Approval Step before adapter startup', async () => {
     const request = executionRequest(['approval']);
     request.workflow.steps = [
       {
@@ -90,11 +90,14 @@ describe('workflow engine preflight', () => {
         type: 'approval',
         name: 'Approval',
         message: 'Approval is not executable.',
+        riskLevel: 'medium',
+        scope: 'next_step',
+        timeoutMs: 30_000,
       },
     ];
     const context = run(request);
     const result = await context.result;
-    expect(result.error?.code).toBe('UNSUPPORTED_STEP_TYPE');
+    expect(result.error?.code).toBe('APPROVAL_BINDING_INVALID');
     expect(context.adapter.startCount).toBe(0);
   });
 });

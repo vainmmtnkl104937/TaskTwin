@@ -5,6 +5,7 @@ import {
 import { analyzeWorkflowInputs } from '@tasktwin/workflow-inputs';
 import { analyzeWorkflowVerifications } from '@tasktwin/workflow-verification';
 import { analyzeWorkflowExtraction } from '@tasktwin/workflow-extraction';
+import { analyzeWorkflowApprovals } from '@tasktwin/workflow-approval';
 
 import { validateNavigateUrl } from './navigate-url-policy.js';
 
@@ -132,6 +133,16 @@ export function validateEditorWorkflow(input: unknown): WorkflowEditorIssue[] {
       path: issue.path,
       ...(issue.stepId === undefined ? {} : { stepId: issue.stepId }),
       ...(issue.stepIndex === undefined ? {} : { stepIndex: issue.stepIndex }),
+    });
+  }
+
+  for (const issue of analyzeWorkflowApprovals(result.data).issues) {
+    issues.push({
+      code: issue.code,
+      message: issue.message,
+      path: issue.path,
+      stepId: issue.stepId,
+      stepIndex: issue.stepIndex,
     });
   }
 

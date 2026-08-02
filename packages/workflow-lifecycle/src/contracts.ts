@@ -62,6 +62,8 @@ export const PublishReadinessIssueCodeSchema = z.enum([
   'OUTPUT_NAVIGATE_FORBIDDEN',
   'PASSWORD_EXTRACTION_FORBIDDEN',
   'UNUSED_OUTPUT',
+  'APPROVAL_STEP_ORPHANED',
+  'APPROVAL_GATED_STEP_INVALID',
 ]);
 
 export const PublishReadinessIssueSchema = z.strictObject({

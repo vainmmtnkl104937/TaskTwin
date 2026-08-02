@@ -11,6 +11,8 @@ import { RunnerJobsController } from '../runner-jobs/runner-jobs.controller.js';
 import { RunnerJobsService } from '../runner-jobs/runner-jobs.service.js';
 import { WorkflowRunsController } from './workflow-runs.controller.js';
 import { WorkflowRunsService } from './workflow-runs.service.js';
+import { WorkflowApprovalsController } from '../workflow-approvals/workflow-approvals.controller.js';
+import { WorkflowApprovalsService } from '../workflow-approvals/workflow-approvals.service.js';
 
 @Module({
   imports: [
@@ -20,12 +22,17 @@ import { WorkflowRunsService } from './workflow-runs.service.js';
     RunnerAuthModule,
     RunnerPairingModule,
   ],
-  controllers: [WorkflowRunsController, RunnerJobsController],
+  controllers: [
+    WorkflowRunsController,
+    RunnerJobsController,
+    WorkflowApprovalsController,
+  ],
   providers: [
     WorkflowRunsService,
     RunnerJobsService,
     RunnerJobLeaseCryptoService,
     RunnerJobLeaseGuard,
+    WorkflowApprovalsService,
   ],
 })
 export class WorkflowRunsModule {}

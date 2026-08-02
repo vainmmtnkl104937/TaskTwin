@@ -9,6 +9,8 @@ import {
 } from '@nestjs/common';
 import {
   WorkflowRunRepository,
+  WorkflowApprovalRepository,
+  WorkflowApprovalRepositoryError,
   WorkflowRunRepositoryError,
   createCanonicalJsonDigest,
 } from '@tasktwin/database';
@@ -25,6 +27,12 @@ import {
   WorkflowRunCompletionRequestSchema,
   WorkflowRunCompletionResponseSchema,
 } from '@tasktwin/run-protocol';
+import {
+  APPROVAL_POLL_INTERVAL_SECONDS,
+  RunnerApprovalRequestCreateSchema,
+  RunnerApprovalRequestCreatedSchema,
+  RunnerApprovalStatusSchema,
+} from '@tasktwin/workflow-approval';
 
 import type { AuthenticatedRunner } from '../runner-auth/runner-authenticated-request.js';
 import type { AuthenticatedRunLease } from './runner-job-lease-context.js';
@@ -58,7 +66,81 @@ export class RunnerJobsService {
   constructor(
     private readonly repository: WorkflowRunRepository,
     private readonly crypto: RunnerJobLeaseCryptoService,
+    private readonly approvalRepository: WorkflowApprovalRepository,
   ) {}
+
+  private rethrowApproval(error: unknown): never {
+    if (!(error instanceof WorkflowApprovalRepositoryError)) throw error;
+    switch (error.code) {
+      case 'RUN_NOT_FOUND':
+      case 'APPROVAL_NOT_FOUND':
+        throw new NotFoundException();
+      case 'RUNNER_MISMATCH':
+        throw new ForbiddenException();
+      case 'LEASE_INVALID':
+        throw new UnauthorizedException();
+      default:
+        throw new ConflictException({
+          code: error.code,
+          message: 'The approval operation conflicts with current state.',
+        });
+    }
+  }
+
+  async createApproval(
+    runner: AuthenticatedRunner,
+    lease: AuthenticatedRunLease,
+    input: unknown,
+  ) {
+    const request = RunnerApprovalRequestCreateSchema.safeParse(input);
+    if (!request.success) {
+      throw new BadRequestException('Invalid runner approval request.');
+    }
+    try {
+      const result = await this.approvalRepository.createForRunner({
+        workflowRunId: lease.workflowRunId,
+        runnerDeviceId: runner.runnerDeviceId,
+        leaseTokenHash: lease.leaseTokenHash,
+        request: request.data,
+        now: new Date(),
+      });
+      return RunnerApprovalRequestCreatedSchema.parse({
+        approvalRequestId: result.record.id,
+        status: result.record.status,
+        requestedAt: result.record.requestedAt.toISOString(),
+        expiresAt: result.record.expiresAt.toISOString(),
+        pollAfterSeconds: APPROVAL_POLL_INTERVAL_SECONDS,
+        idempotent: result.idempotent,
+      });
+    } catch (error: unknown) {
+      this.rethrowApproval(error);
+    }
+  }
+
+  async approvalStatus(
+    runner: AuthenticatedRunner,
+    lease: AuthenticatedRunLease,
+    approvalRequestId: string,
+  ) {
+    try {
+      const record = await this.approvalRepository.getForRunner({
+        workflowRunId: lease.workflowRunId,
+        approvalRequestId,
+        runnerDeviceId: runner.runnerDeviceId,
+        leaseTokenHash: lease.leaseTokenHash,
+        now: new Date(),
+      });
+      return RunnerApprovalStatusSchema.parse({
+        status: record.status,
+        requestedAt: record.requestedAt.toISOString(),
+        expiresAt: record.expiresAt.toISOString(),
+        resolvedAt: record.resolvedAt?.toISOString() ?? null,
+        pollAfterSeconds: APPROVAL_POLL_INTERVAL_SECONDS,
+      });
+    } catch (error: unknown) {
+      this.rethrowApproval(error);
+    }
+  }
 
   async claim(runner: AuthenticatedRunner, input: unknown) {
     const request = RunnerJobClaimRequestSchema.safeParse(input);

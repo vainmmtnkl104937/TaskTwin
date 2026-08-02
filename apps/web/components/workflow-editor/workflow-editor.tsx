@@ -191,13 +191,21 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
   }
 
   function addApproval(): void {
+    if (selectedIndex < 0) return;
     const id = `step-${crypto.randomUUID()}`;
     apply(
-      addApprovalStep(definition, {
-        id,
-        name: 'Approval',
-        message: 'Review and approve before continuing.',
-      }),
+      addApprovalStep(
+        definition,
+        {
+          id,
+          name: 'Approval',
+          message: 'Review and approve before continuing.',
+          riskLevel: 'medium',
+          scope: 'next_step',
+          timeoutMs: 120_000,
+        },
+        selectedIndex,
+      ),
     );
     setSelectedStepId(id);
   }
@@ -416,7 +424,11 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
               <button type="button" onClick={addWait} disabled={readOnly}>
                 Add Wait
               </button>
-              <button type="button" onClick={addApproval} disabled={readOnly}>
+              <button
+                type="button"
+                onClick={addApproval}
+                disabled={readOnly || selectedIndex < 0}
+              >
                 Add Approval
               </button>
               <button type="button" onClick={addUrlVerify} disabled={readOnly}>
@@ -477,6 +489,10 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
             <>
               <StepInspector
                 step={selectedStep}
+                {...(selectedStep.type === 'approval' &&
+                definition.steps[selectedIndex + 1] !== undefined
+                  ? { gatedStep: definition.steps[selectedIndex + 1] }
+                  : {})}
                 variables={definition.variables}
                 outputs={availableOutputs}
                 readOnly={readOnly}

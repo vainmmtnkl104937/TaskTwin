@@ -8,7 +8,8 @@ export type OrganizationResourceKind =
   | 'workflow'
   | 'workflowVersion'
   | 'workflowRun'
-  | 'runnerDevice';
+  | 'runnerDevice'
+  | 'approvalRequest';
 
 export interface OrganizationResourceMetadata {
   kind: OrganizationResourceKind;

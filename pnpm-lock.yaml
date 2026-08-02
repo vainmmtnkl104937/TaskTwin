@@ -53,6 +53,9 @@ importers:
       '@tasktwin/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      '@tasktwin/workflow-approval':
+        specifier: workspace:*
+        version: link:../../packages/workflow-approval
       '@tasktwin/workflow-editor-core':
         specifier: workspace:*
         version: link:../../packages/workflow-editor-core
@@ -166,6 +169,9 @@ importers:
       '@tasktwin/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      '@tasktwin/workflow-approval':
+        specifier: workspace:*
+        version: link:../../packages/workflow-approval
       '@tasktwin/workflow-engine':
         specifier: workspace:*
         version: link:../../packages/workflow-engine
@@ -215,6 +221,9 @@ importers:
       '@tasktwin/secure-run-inputs':
         specifier: workspace:*
         version: link:../../packages/secure-run-inputs
+      '@tasktwin/workflow-approval':
+        specifier: workspace:*
+        version: link:../../packages/workflow-approval
       '@tasktwin/workflow-editor-core':
         specifier: workspace:*
         version: link:../../packages/workflow-editor-core
@@ -337,6 +346,9 @@ importers:
       '@tasktwin/secure-run-inputs':
         specifier: workspace:*
         version: link:../secure-run-inputs
+      '@tasktwin/workflow-approval':
+        specifier: workspace:*
+        version: link:../workflow-approval
       '@tasktwin/workflow-editor-core':
         specifier: workspace:*
         version: link:../workflow-editor-core
@@ -492,6 +504,9 @@ importers:
       '@tasktwin/secure-run-inputs':
         specifier: workspace:*
         version: link:../secure-run-inputs
+      '@tasktwin/workflow-approval':
+        specifier: workspace:*
+        version: link:../workflow-approval
       '@tasktwin/workflow-engine':
         specifier: workspace:*
         version: link:../workflow-engine
@@ -595,8 +610,36 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  packages/workflow-approval:
+    dependencies:
+      '@tasktwin/workflow-schema':
+        specifier: workspace:*
+        version: link:../workflow-schema
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@tasktwin/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 22.19.1
+        version: 22.19.1
+      eslint:
+        specifier: 9.39.5
+        version: 9.39.5(jiti@2.7.0)
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@22.19.1)(happy-dom@20.11.1)(vite@8.1.5(@types/node@22.19.1)(jiti@2.7.0)(terser@5.49.0))
+
   packages/workflow-editor-core:
     dependencies:
+      '@tasktwin/workflow-approval':
+        specifier: workspace:*
+        version: link:../workflow-approval
       '@tasktwin/workflow-extraction':
         specifier: workspace:*
         version: link:../workflow-extraction
@@ -628,6 +671,9 @@ importers:
 
   packages/workflow-engine:
     dependencies:
+      '@tasktwin/workflow-approval':
+        specifier: workspace:*
+        version: link:../workflow-approval
       '@tasktwin/workflow-extraction':
         specifier: workspace:*
         version: link:../workflow-extraction
@@ -715,6 +761,9 @@ importers:
 
   packages/workflow-lifecycle:
     dependencies:
+      '@tasktwin/workflow-approval':
+        specifier: workspace:*
+        version: link:../workflow-approval
       '@tasktwin/workflow-extraction':
         specifier: workspace:*
         version: link:../workflow-extraction

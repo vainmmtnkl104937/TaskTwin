@@ -15,6 +15,7 @@ import type { RunnerClock, RunnerOutput } from '../runner-service.js';
 import { RunProgressSink } from './run-progress-sink.js';
 import type { RunnerKeyManager } from '../secure-inputs/runner-key-manager.js';
 import { acquireSecureRuntime } from '../secure-inputs/secure-runtime.js';
+import { HttpApprovalCoordinator } from './http-approval-coordinator.js';
 
 export class RunJobWorker {
   constructor(
@@ -118,6 +119,12 @@ export class RunJobWorker {
       const result = await new LocalWorkflowExecutor(
         this.sessions,
         sink,
+        new HttpApprovalCoordinator(
+          this.transport,
+          credential,
+          job.runId,
+          job.leaseToken,
+        ),
       ).execute(
         {
           schemaVersion: 1,

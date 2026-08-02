@@ -6,12 +6,27 @@ import { SafeExecutionException } from './errors.js';
 
 const TRANSITIONS = {
   pending: ['running', 'skipped'],
-  running: ['succeeded', 'failed', 'cancelled', 'timed_out'],
+  running: [
+    'waiting_for_approval',
+    'succeeded',
+    'failed',
+    'cancelled',
+    'timed_out',
+    'interrupted',
+  ],
+  waiting_for_approval: [
+    'succeeded',
+    'failed',
+    'cancelled',
+    'timed_out',
+    'interrupted',
+  ],
   succeeded: [],
   failed: [],
   cancelled: [],
   timed_out: [],
   skipped: [],
+  interrupted: [],
 } as const satisfies Record<
   WorkflowEngineStepStatus,
   readonly WorkflowEngineStepStatus[]

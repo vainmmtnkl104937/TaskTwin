@@ -20,6 +20,10 @@ export default async function WorkflowRunsPage({
     <main className="dashboard-page">
       <nav aria-label="Breadcrumb">
         <Link href={`/workspaces/${workspaceId}/workflows`}>Workflows</Link>
+        {' · '}
+        <Link href={`/workspaces/${workspaceId}/approvals`}>
+          Approval Center
+        </Link>
       </nav>
       <section className="page-heading">
         <p className="eyebrow">Local execution</p>
