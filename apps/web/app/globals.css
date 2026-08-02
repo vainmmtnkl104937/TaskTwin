@@ -567,6 +567,7 @@ p {
 .run-status-claimed,
 .run-status-running,
 .run-status-waiting_for_approval,
+.run-status-waiting_for_repair,
 .run-status-cancel_requested {
   background: #e9f1f8;
   color: #274f70;

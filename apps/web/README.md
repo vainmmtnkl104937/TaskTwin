@@ -59,3 +59,9 @@ commit Server Action. Plaintext values stay in component memory, are cleared
 after success, and are never written to localStorage or sessionStorage.
 Secret aliases are displayed only as local Runner requirements; Web never asks
 for a secret value.
+
+Session 22 adds a recovery-mode selector, safe per-step attempt history and a
+Workspace Repair Center. Retry appears only for an eligible request and an
+OWNER/ADMIN; MEMBER may Abort. The UI never renders runtime inputs, secrets,
+outputs, raw errors, locators, full URLs or screenshots, and warns that manual
+browser changes are not fully audited.

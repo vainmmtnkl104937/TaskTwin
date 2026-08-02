@@ -2,6 +2,7 @@
 
 import { z } from 'zod';
 import { SecureRunInputEnvelopeSchema } from '@tasktwin/secure-run-inputs';
+import { RecoveryModeSchema } from '@tasktwin/workflow-recovery';
 
 import { getAccessToken } from '@/lib/server/auth-session';
 import {
@@ -17,6 +18,7 @@ const CreateInputSchema = z.strictObject({
   workflowVersionId: z.string().uuid(),
   runnerDeviceId: z.string().uuid(),
   clientRunId: z.string().uuid(),
+  recoveryMode: RecoveryModeSchema.default('automatic_safe_only'),
 });
 
 const PrepareInputSchema = CreateInputSchema.extend({
@@ -41,6 +43,7 @@ export async function createWorkflowRunAction(input: unknown) {
       parsed.data.workflowVersionId,
       parsed.data.runnerDeviceId,
       parsed.data.clientRunId,
+      parsed.data.recoveryMode,
     );
     return { ok: true as const, runId: response.run.id };
   } catch (error: unknown) {
@@ -68,7 +71,11 @@ export async function prepareWorkflowRunInputsAction(input: unknown) {
         clientPreparationId: parsed.data.clientPreparationId,
         clientRunId: parsed.data.clientRunId,
         runnerDeviceId: parsed.data.runnerDeviceId,
-        options: { totalTimeoutMs: 120_000, stepTimeoutMs: 30_000 },
+        options: {
+          totalTimeoutMs: 120_000,
+          stepTimeoutMs: 30_000,
+          recoveryMode: parsed.data.recoveryMode,
+        },
       },
     );
     return { ok: true as const, preparation: response.preparation };

@@ -51,6 +51,7 @@ enum WorkflowRunStatus {
   CLAIMED
   RUNNING
   WAITING_FOR_APPROVAL
+  WAITING_FOR_REPAIR
   CANCEL_REQUESTED
   SUCCEEDED
   FAILED
@@ -65,6 +66,7 @@ enum WorkflowRunStepStatus {
   PENDING
   RUNNING
   WAITING_FOR_APPROVAL
+  WAITING_FOR_REPAIR
   SUCCEEDED
   FAILED
   CANCELLED
@@ -122,6 +124,46 @@ enum WorkflowApprovalRiskLevel {
   @@map("workflow_approval_risk_level")
 }
 
+enum WorkflowRunStepAttemptTrigger {
+  INITIAL
+  AUTOMATIC_RETRY
+  MANUAL_RETRY
+
+  @@map("workflow_run_step_attempt_trigger")
+}
+
+enum WorkflowRunStepAttemptStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  TIMED_OUT
+  INTERRUPTED
+
+  @@map("workflow_run_step_attempt_status")
+}
+
+enum WorkflowExecutionEffectCertainty {
+  NOT_STARTED
+  READ_ONLY
+  SIDE_EFFECT_POSSIBLE
+  COMPLETED
+  UNKNOWN
+
+  @@map("workflow_execution_effect_certainty")
+}
+
+enum WorkflowRepairRequestStatus {
+  PENDING
+  RETRY_APPROVED
+  ABORTED
+  EXPIRED
+  CANCELLED
+  INVALIDATED
+
+  @@map("workflow_repair_request_status")
+}
+
 model User {
   id                         String                        @id @default(uuid()) @db.Uuid
   email                      String                        @unique(map: "users_email_key") @db.VarChar(254)
@@ -142,6 +184,7 @@ model User {
   cancelledWorkflowRuns      WorkflowRun[]                   @relation("WorkflowRunCanceller")
   createdRunInputPreparations WorkflowRunInputPreparation[]  @relation("WorkflowRunInputPreparationCreator")
   decidedWorkflowApprovals    WorkflowApprovalRequest[]       @relation("WorkflowApprovalDecider")
+  decidedWorkflowRepairs      WorkflowRepairRequest[]          @relation("WorkflowRepairDecider")
 
   @@map("users")
 }
@@ -186,6 +229,7 @@ model Workspace {
   runnerDevices         RunnerDevice[]
   workflowRuns          WorkflowRun[]
   runInputPreparations  WorkflowRunInputPreparation[]
+  workflowRepairRequests WorkflowRepairRequest[]
 
   @@unique([organizationId, slug], map: "workspaces_organization_id_slug_key")
   @@map("workspaces")
@@ -249,6 +293,7 @@ model RunnerDevice {
   encryptionKeys  RunnerEncryptionKey[]
   runInputPreparations WorkflowRunInputPreparation[]
   approvalRequests WorkflowApprovalRequest[]
+  repairRequests   WorkflowRepairRequest[]
 
   @@index([workspaceId, revokedAt, lastSeenAt], map: "runner_devices_workspace_id_revoked_at_last_seen_at_idx")
   @@index([revokedById], map: "runner_devices_revoked_by_id_idx")
@@ -361,6 +406,8 @@ model WorkflowRun {
   progressBatches         WorkflowRunProgressBatch[]
   inputEnvelope           WorkflowRunInputEnvelope?
   approvalRequests        WorkflowApprovalRequest[]
+  repairRequests          WorkflowRepairRequest[]
+  stepAttempts            WorkflowRunStepAttempt[]
 
   @@unique([workspaceId, clientRunId], map: "workflow_runs_workspace_id_client_run_id_key")
   @@unique([runnerDeviceId, claimAttemptId], map: "workflow_runs_runner_device_id_claim_attempt_id_key")
@@ -473,11 +520,72 @@ model WorkflowRunStep {
   createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
   workflowRun      WorkflowRun           @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  attempts         WorkflowRunStepAttempt[]
 
   @@unique([workflowRunId, sourceStepId], map: "workflow_run_steps_run_id_source_step_id_key")
   @@unique([workflowRunId, sourceStepIndex], map: "workflow_run_steps_run_id_source_step_index_key")
   @@index([workflowRunId, status], map: "workflow_run_steps_run_id_status_idx")
   @@map("workflow_run_steps")
+}
+
+model WorkflowRunStepAttempt {
+  id                          String                             @id @default(uuid()) @db.Uuid
+  workflowRunId               String                             @map("workflow_run_id") @db.Uuid
+  workflowRunStepId           String                             @map("workflow_run_step_id") @db.Uuid
+  attemptNumber               Int                                @map("attempt_number")
+  trigger                     WorkflowRunStepAttemptTrigger
+  status                      WorkflowRunStepAttemptStatus
+  startedAt                   DateTime                            @map("started_at") @db.Timestamptz(3)
+  finishedAt                  DateTime?                           @map("finished_at") @db.Timestamptz(3)
+  durationMs                  Int?                                @map("duration_ms")
+  safeErrorCode               String?                             @map("safe_error_code") @db.VarChar(80)
+  effectCertainty             WorkflowExecutionEffectCertainty   @map("effect_certainty")
+  authorizedByRepairRequestId String?                             @unique(map: "workflow_run_step_attempts_repair_request_id_key") @map("authorized_by_repair_request_id") @db.Uuid
+  createdAt                   DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workflowRun                 WorkflowRun                        @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  workflowRunStep             WorkflowRunStep                    @relation(fields: [workflowRunStepId], references: [id], onDelete: Cascade)
+  authorizedByRepairRequest   WorkflowRepairRequest?             @relation("RepairAuthorizedAttempt", fields: [authorizedByRepairRequestId], references: [id], onDelete: Restrict)
+
+  @@unique([workflowRunStepId, attemptNumber], map: "workflow_run_step_attempts_step_attempt_key")
+  @@index([workflowRunId, status], map: "workflow_run_step_attempts_run_status_idx")
+  @@map("workflow_run_step_attempts")
+}
+
+model WorkflowRepairRequest {
+  id                 String                           @id @default(uuid()) @db.Uuid
+  workflowRunId      String                           @map("workflow_run_id") @db.Uuid
+  runnerDeviceId     String                           @map("runner_device_id") @db.Uuid
+  stepId             String                           @map("step_id") @db.VarChar(256)
+  stepIndex          Int                              @map("step_index")
+  attemptNumber      Int                              @map("attempt_number")
+  clientRequestId    String                           @map("client_request_id") @db.Uuid
+  requestDigest      String                           @map("request_digest") @db.Char(64)
+  safeErrorCode      String                           @map("safe_error_code") @db.VarChar(80)
+  effectCertainty    WorkflowExecutionEffectCertainty @map("effect_certainty")
+  retryAllowed       Boolean                          @map("retry_allowed")
+  status             WorkflowRepairRequestStatus      @default(PENDING)
+  requestedAt        DateTime                         @default(now()) @map("requested_at") @db.Timestamptz(3)
+  expiresAt          DateTime                         @map("expires_at") @db.Timestamptz(3)
+  resolvedAt         DateTime?                        @map("resolved_at") @db.Timestamptz(3)
+  decidedByUserId    String?                          @map("decided_by_user_id") @db.Uuid
+  clientDecisionId   String?                          @unique(map: "workflow_repair_requests_client_decision_id_key") @map("client_decision_id") @db.Uuid
+  createdAt          DateTime                         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workflowRun        WorkflowRun                      @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  workspace          Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  workspaceId        String                           @map("workspace_id") @db.Uuid
+  runnerDevice       RunnerDevice                     @relation(fields: [runnerDeviceId], references: [id], onDelete: Restrict)
+  decidedBy          User?                            @relation("WorkflowRepairDecider", fields: [decidedByUserId], references: [id], onDelete: Restrict)
+  authorizedAttempt  WorkflowRunStepAttempt?          @relation("RepairAuthorizedAttempt")
+
+  @@unique([workflowRunId, stepId, attemptNumber], map: "workflow_repair_requests_run_step_attempt_key")
+  @@unique([workflowRunId, clientRequestId], map: "workflow_repair_requests_run_client_request_key")
+  @@index([workspaceId, status, requestedAt], map: "workflow_repair_requests_workspace_status_idx")
+  @@index([status, expiresAt], map: "workflow_repair_requests_status_expires_at_idx")
+  @@index([runnerDeviceId, status], map: "workflow_repair_requests_runner_status_idx")
+  @@index([decidedByUserId], map: "workflow_repair_requests_decided_by_idx")
+  @@map("workflow_repair_requests")
 }
 
 model WorkflowApprovalRequest {

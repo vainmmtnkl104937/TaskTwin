@@ -8,6 +8,7 @@ const TRANSITIONS = {
   pending: ['running', 'skipped'],
   running: [
     'waiting_for_approval',
+    'waiting_for_repair',
     'succeeded',
     'failed',
     'cancelled',
@@ -16,6 +17,13 @@ const TRANSITIONS = {
   ],
   waiting_for_approval: [
     'succeeded',
+    'failed',
+    'cancelled',
+    'timed_out',
+    'interrupted',
+  ],
+  waiting_for_repair: [
+    'running',
     'failed',
     'cancelled',
     'timed_out',

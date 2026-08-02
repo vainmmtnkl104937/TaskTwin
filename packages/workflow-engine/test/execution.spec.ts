@@ -248,6 +248,8 @@ describe('workflow execution orchestration', () => {
       'run_status_changed:starting',
       'run_status_changed:running',
       'step_status_changed:running',
+      'step_attempt_status_changed:running',
+      'step_attempt_status_changed:succeeded',
       'step_status_changed:succeeded',
       'run_status_changed:succeeded',
     ]);

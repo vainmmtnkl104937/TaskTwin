@@ -681,3 +681,24 @@ The API derives message, risk, and gated-step metadata from the immutable
 Published WorkflowVersion. OWNER and ADMIN may decide; MEMBER and VIEWER have
 read-only access. Unique request and decision identifiers plus atomic updates
 make exact retries idempotent and concurrent decisions single-winner.
+
+## Conservative recovery boundary
+
+`@tasktwin/workflow-recovery` owns framework-independent effect certainty,
+retry classification, attempt limits, repair state transitions and safe JSON
+contracts. Unknown or possibly side-effecting failures fail closed. Only
+explicitly transient Verify and Extract failures may retry automatically, at
+most once; action and navigation steps never retry automatically.
+
+Manual repair is opt-in per run and requires an attended headed Runner that
+advertises `workflow_manual_repair_v1`. The engine pauses only the current
+failed step and retains in-memory runtime state. The Runner keeps the isolated
+BrowserContext and run lease alive without performing browser actions until a
+Retry or Abort decision arrives. Every manual retry is bound to an approved,
+persisted repair request; approval-gated steps and uncertain side effects
+require a new run.
+
+PostgreSQL stores bounded safe attempt and repair metadata only. It excludes
+raw errors, runtime values, secrets, outputs, locators, complete URLs, DOM and
+screenshots. Idempotency keys and serializable row-locked decisions provide a
+single winner for concurrent Retry and Abort.

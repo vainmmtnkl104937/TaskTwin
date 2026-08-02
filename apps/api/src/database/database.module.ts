@@ -11,6 +11,7 @@ import {
   WorkflowLifecycleRepository,
   WorkflowRunRepository,
   WorkflowApprovalRepository,
+  WorkflowRepairRepository,
   type PrismaClient,
 } from '@tasktwin/database';
 
@@ -77,6 +78,12 @@ import { PrismaService } from './prisma.service.js';
       useFactory: (client: PrismaClient) =>
         new WorkflowApprovalRepository(client),
     },
+    {
+      provide: WorkflowRepairRepository,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: PrismaClient) =>
+        new WorkflowRepairRepository(client),
+    },
   ],
   exports: [
     IdentityRepository,
@@ -88,6 +95,7 @@ import { PrismaService } from './prisma.service.js';
     WorkflowRunRepository,
     SecureRunInputRepository,
     WorkflowApprovalRepository,
+    WorkflowRepairRepository,
   ],
 })
 export class DatabaseModule {}

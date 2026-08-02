@@ -5,6 +5,12 @@ export {
   ApprovalRequestListResponseSchema,
 } from '@tasktwin/workflow-approval';
 export type { SafeApprovalRequest } from '@tasktwin/workflow-approval';
+export {
+  RepairDecisionResponseSchema,
+  RepairRequestDetailResponseSchema,
+  RepairRequestListResponseSchema,
+} from '@tasktwin/workflow-recovery';
+export type { SafeRepairRequest } from '@tasktwin/workflow-recovery';
 import {
   PairingActionResponseSchema,
   PairingInspectionResponseSchema,

@@ -12,6 +12,7 @@ import {
   type WorkflowLifecycleRepository,
   type WorkflowRunRepository,
   type WorkflowApprovalRepository,
+  type WorkflowRepairRepository,
 } from '@tasktwin/database';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -93,6 +94,9 @@ describe('OrganizationResourceContextGuard', () => {
   const workflowApprovalRepository = {
     resolveApprovalAccess: vi.fn(),
   } as unknown as WorkflowApprovalRepository;
+  const workflowRepairRepository = {
+    resolveRepairAccess: vi.fn(),
+  } as unknown as WorkflowRepairRepository;
 
   it('resolves membership and attaches trusted organization context', async () => {
     const request = createRequest();
@@ -111,6 +115,7 @@ describe('OrganizationResourceContextGuard', () => {
       runnerRepository,
       workflowRunRepository,
       workflowApprovalRepository,
+      workflowRepairRepository,
     );
 
     await expect(
@@ -134,6 +139,7 @@ describe('OrganizationResourceContextGuard', () => {
       runnerRepository,
       workflowRunRepository,
       workflowApprovalRepository,
+      workflowRepairRepository,
     );
 
     await expect(
@@ -153,6 +159,7 @@ describe('OrganizationResourceContextGuard', () => {
       runnerRepository,
       workflowRunRepository,
       workflowApprovalRepository,
+      workflowRepairRepository,
     );
 
     await expect(
@@ -178,6 +185,7 @@ describe('OrganizationResourceContextGuard', () => {
       runnerRepository,
       workflowRunRepository,
       workflowApprovalRepository,
+      workflowRepairRepository,
     );
 
     await expect(
@@ -210,6 +218,7 @@ describe('OrganizationResourceContextGuard', () => {
       runnerRepository,
       workflowRunRepository,
       workflowApprovalRepository,
+      workflowRepairRepository,
     );
 
     await expect(

@@ -113,6 +113,16 @@ export type {
 } from './workflow-approval/workflow-approval-records.js';
 export { WorkflowApprovalRepository } from './workflow-approval/workflow-approval.repository.js';
 export {
+  WorkflowRepairRepositoryError,
+  type WorkflowRepairRepositoryErrorCode,
+} from './workflow-repair/workflow-repair-errors.js';
+export type {
+  WorkflowRepairAccess,
+  WorkflowRepairDecisionResult,
+  WorkflowRepairRecord,
+} from './workflow-repair/workflow-repair-records.js';
+export { WorkflowRepairRepository } from './workflow-repair/workflow-repair.repository.js';
+export {
   SecureRunInputRepositoryError,
   type SecureRunInputRepositoryErrorCode,
 } from './secure-run-input/secure-run-input-errors.js';

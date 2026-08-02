@@ -44,6 +44,7 @@ export function executionRequest(
     options: {
       totalTimeoutMs: 10_000,
       stepTimeoutMs: 1_000,
+      recoveryMode: 'automatic_safe_only',
     },
   };
 }
@@ -54,7 +55,11 @@ export type StepBehavior =
   | 'timeout'
   | 'wait-for-abort'
   | 'verify-succeed'
-  | 'verify-fail';
+  | 'verify-fail'
+  | 'verify-transient-once'
+  | 'extract-transient-always'
+  | 'fill-preaction-once'
+  | 'click-side-effect';
 
 export class FakeAdapter implements WorkflowExecutionAdapter {
   readonly supportedStepTypes = [
@@ -77,6 +82,7 @@ export class FakeAdapter implements WorkflowExecutionAdapter {
   startBehavior: 'succeed' | 'fail' | 'wait-for-abort' = 'succeed';
   readonly behavior = new Map<string, StepBehavior>();
   readonly resolvedValues = new Map<string, string | number | boolean>();
+  readonly invocationCounts = new Map<string, number>();
 
   validateStep(): void {}
 
@@ -94,10 +100,42 @@ export class FakeAdapter implements WorkflowExecutionAdapter {
     context: AdapterStepContext,
   ): Promise<AdapterStepOutput | void> {
     this.executed.push(context.step.id);
+    const invocationCount =
+      (this.invocationCounts.get(context.step.id) ?? 0) + 1;
+    this.invocationCounts.set(context.step.id, invocationCount);
     this.effectiveTimeouts.push(context.effectiveTimeoutMs);
     this.activeSteps += 1;
     this.maxActiveSteps = Math.max(this.maxActiveSteps, this.activeSteps);
     try {
+      const behavior = this.behavior.get(context.step.id) ?? 'succeed';
+      if (behavior === 'verify-transient-once' && invocationCount === 1) {
+        throw new SafeExecutionException(
+          'VERIFICATION_NOT_MATCHED',
+          undefined,
+          'read_only',
+        );
+      }
+      if (behavior === 'extract-transient-always') {
+        throw new SafeExecutionException(
+          'EXTRACTION_VALUE_UNAVAILABLE',
+          undefined,
+          'read_only',
+        );
+      }
+      if (behavior === 'fill-preaction-once' && invocationCount === 1) {
+        throw new SafeExecutionException(
+          'LOCATOR_NOT_FOUND',
+          undefined,
+          'not_started',
+        );
+      }
+      if (behavior === 'click-side-effect') {
+        throw new SafeExecutionException(
+          'ACTION_TIMEOUT',
+          undefined,
+          'side_effect_possible',
+        );
+      }
       if (context.step.type === 'extract') {
         return {
           producedOutput: {
@@ -123,7 +161,7 @@ export class FakeAdapter implements WorkflowExecutionAdapter {
           ),
         );
       }
-      switch (this.behavior.get(context.step.id) ?? 'succeed') {
+      switch (behavior) {
         case 'succeed':
           return;
         case 'fail':
@@ -151,6 +189,9 @@ export class FakeAdapter implements WorkflowExecutionAdapter {
             attemptCount: 2,
             durationMs: 100,
           });
+        case 'verify-transient-once':
+        case 'fill-preaction-once':
+          return;
       }
     } finally {
       this.activeSteps -= 1;

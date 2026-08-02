@@ -18,6 +18,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@tasktwin/workflow-recovery": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "zod": "4.4.3"

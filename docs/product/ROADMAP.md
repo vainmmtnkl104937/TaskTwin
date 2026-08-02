@@ -274,6 +274,19 @@ Workspace OWNER or ADMIN decides a persisted, run-bound request while the
 Runner keeps the lease and isolated browser session alive. Rejection,
 expiration, cancellation, lease loss, and Runner revocation fail closed.
 
+## Session 22: conservative retry and attended repair
+
+- Deterministic effect-certainty and retry classification
+- One bounded automatic retry for explicitly transient read-only failures
+- Optional attended manual repair of the exact failed step
+- Safe attempt history and Workspace Repair Center
+- Browser-session retention with heartbeat and lease renewal
+- Fail-closed abort, expiry, cancellation and invalidation
+
+Session 22 excludes locator editing, step skipping, workflow restart,
+uncertain-side-effect retry, crash resume, background retry scheduling and AI
+repair.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

@@ -410,3 +410,13 @@ values, secrets, outputs, locators, or full URLs.
 
 It does not add email approval, comments, quorum policies, approver groups,
 workflow-wide approval, crash resume, automatic requeue, or AI decisions.
+
+## Session 22 scope
+
+Session 22 adds deterministic, bounded retry for explicitly safe read-only
+failures and attended manual repair of the exact failed step. Attempts and
+repair decisions persist only safe metadata while the Runner retains its
+isolated browser session, in-memory inputs and outputs, heartbeat, and lease.
+
+It does not add locator editing, step skipping, workflow or browser restart,
+uncertain-side-effect retry, automatic requeue, crash resume, or AI repair.

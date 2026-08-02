@@ -6,6 +6,7 @@ import {
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
 import { SafeVerificationResultSchema } from '@tasktwin/workflow-verification';
 import { SafeWorkflowOutputSummarySchema } from '@tasktwin/workflow-extraction';
+import { SafeStepAttemptSchema } from '@tasktwin/workflow-recovery';
 import {
   RunInputPreparationResponseSchema,
   RunInputAdditionalAuthenticatedDataSchema,
@@ -37,6 +38,7 @@ export const WorkflowRunStatusSchema = z.enum([
   'CLAIMED',
   'RUNNING',
   'WAITING_FOR_APPROVAL',
+  'WAITING_FOR_REPAIR',
   'CANCEL_REQUESTED',
   'SUCCEEDED',
   'FAILED',
@@ -49,6 +51,7 @@ export const PersistedRunStepStatusSchema = z.enum([
   'PENDING',
   'RUNNING',
   'WAITING_FOR_APPROVAL',
+  'WAITING_FOR_REPAIR',
   'SUCCEEDED',
   'FAILED',
   'CANCELLED',
@@ -97,6 +100,11 @@ export const CreateWorkflowRunRequestSchema = z.strictObject({
   schemaVersion: z.literal(RUN_PROTOCOL_SCHEMA_VERSION),
   clientRunId: UuidSchema,
   runnerDeviceId: UuidSchema,
+  options: WorkflowEngineExecutionOptionsSchema.default({
+    totalTimeoutMs: 300_000,
+    stepTimeoutMs: 30_000,
+    recoveryMode: 'automatic_safe_only',
+  }),
 });
 
 export const CreateRunInputPreparationRequestSchema = z.strictObject({
@@ -125,6 +133,7 @@ export const SafeRunStepMetadataSchema = z.strictObject({
   errorCode: z.string().trim().min(1).max(80).nullable(),
   skippedReason: z.string().trim().min(1).max(80).nullable(),
   verification: SafeVerificationResultSchema.optional(),
+  attempts: z.array(SafeStepAttemptSchema).max(3).default([]),
 });
 
 export const SafeRunOutputMetadataSchema =

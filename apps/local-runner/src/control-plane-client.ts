@@ -33,6 +33,13 @@ import {
   type RunnerApprovalRequestCreated,
   type RunnerApprovalStatus,
 } from '@tasktwin/workflow-approval';
+import {
+  RunnerRepairRequestCreatedSchema,
+  RunnerRepairStatusSchema,
+  type RunnerRepairRequestCreate,
+  type RunnerRepairRequestCreated,
+  type RunnerRepairStatus,
+} from '@tasktwin/workflow-recovery';
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
@@ -97,6 +104,18 @@ export interface RunnerJobTransport {
     leaseToken: string,
     approvalRequestId: string,
   ): Promise<RunnerApprovalStatus>;
+  createRepairRequest?(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    request: RunnerRepairRequestCreate,
+  ): Promise<RunnerRepairRequestCreated>;
+  getRepairStatus?(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    repairRequestId: string,
+  ): Promise<RunnerRepairStatus>;
 }
 
 export class HttpRunnerControlPlaneTransport
@@ -244,6 +263,39 @@ export class HttpRunnerControlPlaneTransport
     return this.request(
       `${credential.controlPlaneOrigin}/runner/jobs/${encodeURIComponent(runId)}/approval-requests/${encodeURIComponent(approvalRequestId)}`,
       RunnerApprovalStatusSchema,
+      {
+        method: 'GET',
+        headers: this.runnerHeaders(credential, leaseToken),
+      },
+    );
+  }
+
+  createRepairRequest(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    request: RunnerRepairRequestCreate,
+  ): Promise<RunnerRepairRequestCreated> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/jobs/${encodeURIComponent(runId)}/repair-requests`,
+      RunnerRepairRequestCreatedSchema,
+      {
+        method: 'POST',
+        headers: this.runnerHeaders(credential, leaseToken),
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  getRepairStatus(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    repairRequestId: string,
+  ): Promise<RunnerRepairStatus> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/jobs/${encodeURIComponent(runId)}/repair-requests/${encodeURIComponent(repairRequestId)}`,
+      RunnerRepairStatusSchema,
       {
         method: 'GET',
         headers: this.runnerHeaders(credential, leaseToken),

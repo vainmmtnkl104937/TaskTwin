@@ -4,6 +4,7 @@ import {
   type SafeExecutionError,
 } from './contracts.js';
 import type { SafeVerificationResult } from '@tasktwin/workflow-verification';
+import type { ExecutionEffectCertainty } from '@tasktwin/workflow-recovery';
 
 const SAFE_MESSAGES = {
   INVALID_EXECUTION_REQUEST: 'The workflow execution request is invalid.',
@@ -50,6 +51,16 @@ const SAFE_MESSAGES = {
   APPROVAL_REJECTED: 'The workflow approval request was rejected.',
   APPROVAL_EXPIRED: 'The workflow approval request expired.',
   APPROVAL_INVALIDATED: 'The workflow approval request was invalidated.',
+  RECOVERY_NOT_ALLOWED: 'The workflow step cannot be retried safely.',
+  RECOVERY_ATTEMPT_LIMIT_REACHED: 'The workflow step retry limit was reached.',
+  RECOVERY_COORDINATOR_UNAVAILABLE: 'Attended workflow repair is unavailable.',
+  RECOVERY_REQUEST_FAILED:
+    'The workflow repair request could not be completed.',
+  RECOVERY_ABORTED: 'The workflow repair request was aborted.',
+  RECOVERY_EXPIRED: 'The workflow repair request expired.',
+  RECOVERY_INVALIDATED: 'The workflow repair request was invalidated.',
+  APPROVAL_GATED_RETRY_REQUIRES_NEW_RUN:
+    'An approval-gated action requires a new workflow run.',
 } as const satisfies Record<ExecutionErrorCode, string>;
 
 export function safeError(code: ExecutionErrorCode): SafeExecutionError {
@@ -62,13 +73,19 @@ export function safeError(code: ExecutionErrorCode): SafeExecutionError {
 export class SafeExecutionException extends Error {
   readonly safe: SafeExecutionError;
   readonly verification: SafeVerificationResult | undefined;
+  readonly effectCertainty: ExecutionEffectCertainty | undefined;
 
-  constructor(code: ExecutionErrorCode, verification?: SafeVerificationResult) {
+  constructor(
+    code: ExecutionErrorCode,
+    verification?: SafeVerificationResult,
+    effectCertainty?: ExecutionEffectCertainty,
+  ) {
     const details = safeError(code);
     super(details.message);
     this.name = 'SafeExecutionException';
     this.safe = details;
     this.verification = verification;
+    this.effectCertainty = effectCertainty;
   }
 }
 

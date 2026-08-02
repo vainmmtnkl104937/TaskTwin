@@ -7,6 +7,13 @@ import {
   ApprovalRequestStatusSchema,
 } from '@tasktwin/workflow-approval';
 import { ApprovalRiskLevelSchema } from '@tasktwin/workflow-schema';
+import {
+  ExecutionEffectCertaintySchema,
+  RecoveryModeSchema,
+  RepairRequestStatusSchema,
+  RetryTriggerSchema,
+  SafeStepAttemptListSchema,
+} from '@tasktwin/workflow-recovery';
 import { z } from 'zod';
 
 import {
@@ -37,6 +44,7 @@ export const WorkflowEngineRunStatusSchema = z.enum([
   'starting',
   'running',
   'waiting_for_approval',
+  'waiting_for_repair',
   'cancelling',
   'succeeded',
   'failed',
@@ -57,6 +65,7 @@ export const WorkflowEngineStepStatusSchema = z.enum([
   'pending',
   'running',
   'waiting_for_approval',
+  'waiting_for_repair',
   'succeeded',
   'failed',
   'cancelled',
@@ -84,6 +93,9 @@ export const SkippedStepReasonSchema = z.enum([
   'approval_rejected',
   'approval_expired',
   'approval_invalidated',
+  'repair_aborted',
+  'repair_expired',
+  'repair_invalidated',
   'run_interrupted',
 ]);
 
@@ -99,6 +111,9 @@ export const TerminationCauseSchema = z.enum([
   'approval_rejected',
   'approval_expired',
   'approval_invalidated',
+  'repair_aborted',
+  'repair_expired',
+  'repair_invalidated',
 ]);
 
 export const ExecutionErrorCodeSchema = z.enum([
@@ -143,6 +158,14 @@ export const ExecutionErrorCodeSchema = z.enum([
   'APPROVAL_REJECTED',
   'APPROVAL_EXPIRED',
   'APPROVAL_INVALIDATED',
+  'RECOVERY_NOT_ALLOWED',
+  'RECOVERY_ATTEMPT_LIMIT_REACHED',
+  'RECOVERY_COORDINATOR_UNAVAILABLE',
+  'RECOVERY_REQUEST_FAILED',
+  'RECOVERY_ABORTED',
+  'RECOVERY_EXPIRED',
+  'RECOVERY_INVALIDATED',
+  'APPROVAL_GATED_RETRY_REQUIRES_NEW_RUN',
 ]);
 
 export const SafeExecutionErrorSchema = z.strictObject({
@@ -171,6 +194,7 @@ export const WorkflowEngineExecutionOptionsSchema = z.strictObject({
     .int()
     .min(MIN_STEP_TIMEOUT_MS)
     .max(MAX_STEP_TIMEOUT_MS),
+  recoveryMode: RecoveryModeSchema.default('automatic_safe_only'),
 });
 
 export const AllowedOriginSchema = z.string().trim().min(1).max(512);
@@ -197,6 +221,7 @@ export const StepExecutionResultSchema = z
     skippedReason: SkippedStepReasonSchema.optional(),
     error: SafeExecutionErrorSchema.optional(),
     verification: SafeVerificationResultSchema.optional(),
+    attempts: SafeStepAttemptListSchema.optional(),
   })
   .superRefine((result, context) => {
     if (result.status === 'skipped' && result.skippedReason === undefined) {
@@ -219,6 +244,36 @@ export const StepExecutionResultSchema = z
         path: ['startedAt'],
         message: 'A skipped step must not have a start timestamp.',
       });
+    }
+    if (result.status === 'skipped' && result.attempts !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['attempts'],
+        message: 'A skipped step must not contain attempts.',
+      });
+    }
+    const finalAttempt = result.attempts?.at(-1);
+    if (finalAttempt !== undefined) {
+      const compatibleStatuses: Record<
+        Exclude<typeof result.status, 'skipped'>,
+        readonly (typeof finalAttempt.status)[]
+      > = {
+        succeeded: ['succeeded'],
+        failed: ['failed'],
+        cancelled: ['cancelled', 'failed'],
+        timed_out: ['timed_out', 'cancelled', 'failed'],
+        interrupted: ['interrupted', 'cancelled', 'failed'],
+      };
+      if (
+        result.status !== 'skipped' &&
+        !compatibleStatuses[result.status].includes(finalAttempt.status)
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['attempts'],
+          message: 'The final attempt is inconsistent with the step result.',
+        });
+      }
     }
   });
 
@@ -352,11 +407,41 @@ export const ApprovalStatusProgressEventSchema = ProgressEventBaseSchema.extend(
   },
 );
 
+export const StepAttemptProgressEventSchema = ProgressEventBaseSchema.extend({
+  kind: z.literal('step_attempt_status_changed'),
+  stepId: z.string().trim().min(1).max(256),
+  attemptNumber: z.number().int().positive().max(3),
+  trigger: RetryTriggerSchema,
+  status: z.enum([
+    'running',
+    'succeeded',
+    'failed',
+    'cancelled',
+    'timed_out',
+    'interrupted',
+  ]),
+  errorCode: ExecutionErrorCodeSchema.optional(),
+  effectCertainty: ExecutionEffectCertaintySchema,
+  retryAllowed: z.boolean(),
+});
+
+export const RepairStatusProgressEventSchema = ProgressEventBaseSchema.extend({
+  kind: z.literal('repair_status_changed'),
+  stepId: z.string().trim().min(1).max(256),
+  attemptNumber: z.number().int().positive().max(3),
+  status: RepairRequestStatusSchema,
+  errorCode: ExecutionErrorCodeSchema,
+  effectCertainty: ExecutionEffectCertaintySchema,
+  retryAllowed: z.boolean(),
+});
+
 export const WorkflowProgressEventSchema = z.discriminatedUnion('kind', [
   RunStatusProgressEventSchema,
   StepStatusProgressEventSchema,
   OutputProducedProgressEventSchema,
   ApprovalStatusProgressEventSchema,
+  StepAttemptProgressEventSchema,
+  RepairStatusProgressEventSchema,
   WarningProgressEventSchema,
 ]);
 

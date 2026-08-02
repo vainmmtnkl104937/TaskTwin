@@ -10,8 +10,11 @@ import {
   OrganizationRole,
   Prisma,
   WorkflowApprovalRequestStatus,
+  WorkflowRepairRequestStatus,
   WorkflowRunStatus,
   WorkflowRunStepStatus,
+  WorkflowRunStepAttemptStatus,
+  WorkflowExecutionEffectCertainty,
   type PrismaClient,
 } from '../generated/prisma/client.js';
 import { RunnerRepositoryError } from './runner-errors.js';
@@ -577,6 +580,28 @@ export class RunnerRepository {
           resolvedAt: now,
         },
       });
+      await transaction.workflowRepairRequest.updateMany({
+        where: {
+          runnerDeviceId,
+          status: WorkflowRepairRequestStatus.PENDING,
+        },
+        data: {
+          status: WorkflowRepairRequestStatus.INVALIDATED,
+          resolvedAt: now,
+        },
+      });
+      await transaction.workflowRunStepAttempt.updateMany({
+        where: {
+          workflowRun: { runnerDeviceId },
+          status: WorkflowRunStepAttemptStatus.RUNNING,
+        },
+        data: {
+          status: WorkflowRunStepAttemptStatus.INTERRUPTED,
+          safeErrorCode: 'RUNNER_REVOKED',
+          effectCertainty: WorkflowExecutionEffectCertainty.UNKNOWN,
+          finishedAt: now,
+        },
+      });
       const activeRuns = await transaction.workflowRun.findMany({
         where: {
           runnerDeviceId,
@@ -585,6 +610,7 @@ export class RunnerRepository {
               WorkflowRunStatus.CLAIMED,
               WorkflowRunStatus.RUNNING,
               WorkflowRunStatus.WAITING_FOR_APPROVAL,
+              WorkflowRunStatus.WAITING_FOR_REPAIR,
               WorkflowRunStatus.CANCEL_REQUESTED,
             ],
           },
@@ -600,6 +626,7 @@ export class RunnerRepository {
               in: [
                 WorkflowRunStepStatus.RUNNING,
                 WorkflowRunStepStatus.WAITING_FOR_APPROVAL,
+                WorkflowRunStepStatus.WAITING_FOR_REPAIR,
               ],
             },
           },

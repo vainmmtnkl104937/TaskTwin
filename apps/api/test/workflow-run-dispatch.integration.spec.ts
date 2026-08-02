@@ -1551,4 +1551,220 @@ describe('workflow run dispatch integration', () => {
       .expect(200)
       .expect(({ body }) => expect(body.run.status).toBe('SUCCEEDED'));
   });
+
+  it('persists safe attempts and resolves manual repair idempotently', async () => {
+    await request(app.getHttpServer())
+      .post('/runner/heartbeat')
+      .set(runnerAuth())
+      .send({
+        schemaVersion: 1,
+        runnerVersion: '0.1.0',
+        capabilities: [
+          'secure_input_envelope_v1',
+          'workflow_verification_v1',
+          'workflow_extraction_v1',
+          'workflow_approval_v1',
+          'workflow_manual_repair_v1',
+        ],
+      })
+      .expect(200);
+
+    const created = await request(app.getHttpServer())
+      .post(`/workflow-versions/${verificationVersionId}/runs`)
+      .set(auth(owner))
+      .send({
+        schemaVersion: 1,
+        runnerDeviceId,
+        clientRunId: randomUUID(),
+        options: {
+          totalTimeoutMs: 120_000,
+          stepTimeoutMs: 30_000,
+          recoveryMode: 'automatic_safe_and_manual',
+        },
+      })
+      .expect(200);
+    const runId = created.body.run.id as string;
+    const claimed = await request(app.getHttpServer())
+      .post('/runner/jobs/claim')
+      .set(runnerAuth())
+      .send({
+        schemaVersion: 1,
+        runProtocolVersion: 2,
+        workflowEngineSchemaVersion: 1,
+        runnerVersion: '0.1.0',
+        claimAttemptId: randomUUID(),
+      })
+      .expect(200);
+    const leaseHeaders = {
+      ...runnerAuth(),
+      'X-TaskTwin-Run-Lease': claimed.body.job.leaseToken as string,
+    };
+    const timestamp = new Date().toISOString();
+    const eventData = [
+      ['run_status_changed', { status: 'pending' }],
+      ['run_status_changed', { status: 'validating' }],
+      [
+        'step_status_changed',
+        { stepId: 'navigate', stepType: 'navigate', status: 'pending' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'verify-url', stepType: 'verify', status: 'pending' },
+      ],
+      ['run_status_changed', { status: 'starting' }],
+      ['run_status_changed', { status: 'running' }],
+      [
+        'step_status_changed',
+        { stepId: 'navigate', stepType: 'navigate', status: 'running' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'navigate', stepType: 'navigate', status: 'succeeded' },
+      ],
+      [
+        'step_status_changed',
+        { stepId: 'verify-url', stepType: 'verify', status: 'running' },
+      ],
+      [
+        'step_attempt_status_changed',
+        {
+          stepId: 'verify-url',
+          attemptNumber: 1,
+          trigger: 'initial',
+          status: 'running',
+          effectCertainty: 'unknown',
+          retryAllowed: false,
+        },
+      ],
+      [
+        'step_attempt_status_changed',
+        {
+          stepId: 'verify-url',
+          attemptNumber: 1,
+          trigger: 'initial',
+          status: 'failed',
+          errorCode: 'LOCATOR_NOT_FOUND',
+          effectCertainty: 'read_only',
+          retryAllowed: true,
+        },
+      ],
+      [
+        'step_attempt_status_changed',
+        {
+          stepId: 'verify-url',
+          attemptNumber: 2,
+          trigger: 'automatic_retry',
+          status: 'running',
+          effectCertainty: 'unknown',
+          retryAllowed: false,
+        },
+      ],
+      [
+        'step_attempt_status_changed',
+        {
+          stepId: 'verify-url',
+          attemptNumber: 2,
+          trigger: 'automatic_retry',
+          status: 'failed',
+          errorCode: 'LOCATOR_NOT_FOUND',
+          effectCertainty: 'read_only',
+          retryAllowed: true,
+        },
+      ],
+      [
+        'step_status_changed',
+        {
+          stepId: 'verify-url',
+          stepType: 'verify',
+          status: 'waiting_for_repair',
+        },
+      ],
+      ['run_status_changed', { status: 'waiting_for_repair' }],
+    ];
+    const events = eventData.map(([kind, data], index) => ({
+      sequence: index + 1,
+      event: { executionId: runId, timestamp, kind, ...data },
+    }));
+    await request(app.getHttpServer())
+      .post(`/runner/jobs/${runId}/progress`)
+      .set(leaseHeaders)
+      .send({
+        schemaVersion: 1,
+        clientBatchId: randomUUID(),
+        firstSequence: 1,
+        lastSequence: events.length,
+        events,
+      })
+      .expect(200);
+
+    const requestBody = {
+      clientRequestId: randomUUID(),
+      stepId: 'verify-url',
+      attemptNumber: 2,
+      safeErrorCode: 'LOCATOR_NOT_FOUND',
+      effectCertainty: 'read_only',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const first = await request(app.getHttpServer())
+      .post(`/runner/jobs/${runId}/repair-requests`)
+      .set(leaseHeaders)
+      .send(requestBody)
+      .expect(200);
+    const repairRequestId = first.body.repairRequestId as string;
+    expect(first.body).toMatchObject({
+      status: 'PENDING',
+      retryAllowed: true,
+      idempotent: false,
+    });
+    await request(app.getHttpServer())
+      .post(`/runner/jobs/${runId}/repair-requests`)
+      .set(leaseHeaders)
+      .send(requestBody)
+      .expect(200)
+      .expect(({ body }) => expect(body.idempotent).toBe(true));
+
+    await request(app.getHttpServer())
+      .post(`/repair-requests/${repairRequestId}/retry`)
+      .set(auth(viewer))
+      .send({ clientDecisionId: randomUUID() })
+      .expect(403);
+    await request(app.getHttpServer())
+      .get(`/repair-requests/${repairRequestId}`)
+      .set(auth(outsider))
+      .expect(404);
+
+    const decision = { clientDecisionId: randomUUID() };
+    await request(app.getHttpServer())
+      .post(`/repair-requests/${repairRequestId}/retry`)
+      .set(auth(owner))
+      .send(decision)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.idempotent).toBe(false);
+        expect(body.request.status).toBe('RETRY_APPROVED');
+      });
+    await request(app.getHttpServer())
+      .post(`/repair-requests/${repairRequestId}/retry`)
+      .set(auth(owner))
+      .send(decision)
+      .expect(200)
+      .expect(({ body }) => expect(body.idempotent).toBe(true));
+    await request(app.getHttpServer())
+      .get(`/runner/jobs/${runId}/repair-requests/${repairRequestId}`)
+      .set(leaseHeaders)
+      .expect(200)
+      .expect(({ body }) => expect(body.status).toBe('RETRY_APPROVED'));
+
+    const attempt = await prisma.workflowRunStepAttempt.findFirstOrThrow({
+      where: { workflowRunId: runId, attemptNumber: 2 },
+    });
+    expect(attempt).toMatchObject({
+      safeErrorCode: 'LOCATOR_NOT_FOUND',
+      effectCertainty: 'READ_ONLY',
+      status: 'FAILED',
+    });
+    expect(JSON.stringify(attempt)).not.toMatch(
+      /rawError|runtimeValue|selector|password/i,
+    );
+  });
 });

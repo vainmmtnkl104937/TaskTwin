@@ -81,4 +81,25 @@ export class RunnerJobsController {
   ) {
     return this.service.approvalStatus(runner, lease, approvalRequestId);
   }
+
+  @Post('runner/jobs/:workflowRunId/repair-requests')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  createRepair(
+    @CurrentRunner() runner: AuthenticatedRunner,
+    @CurrentRunLease() lease: AuthenticatedRunLease,
+    @Body() body: unknown,
+  ) {
+    return this.service.createRepair(runner, lease, body);
+  }
+
+  @Get('runner/jobs/:workflowRunId/repair-requests/:repairRequestId')
+  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  repairStatus(
+    @CurrentRunner() runner: AuthenticatedRunner,
+    @CurrentRunLease() lease: AuthenticatedRunLease,
+    @Param('repairRequestId') repairRequestId: string,
+  ) {
+    return this.service.repairStatus(runner, lease, repairRequestId);
+  }
 }
