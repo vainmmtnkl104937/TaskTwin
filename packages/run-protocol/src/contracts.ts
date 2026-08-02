@@ -5,6 +5,7 @@ import {
 } from '@tasktwin/workflow-engine';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
 import { SafeVerificationResultSchema } from '@tasktwin/workflow-verification';
+import { SafeWorkflowOutputSummarySchema } from '@tasktwin/workflow-extraction';
 import {
   RunInputPreparationResponseSchema,
   RunInputAdditionalAuthenticatedDataSchema,
@@ -124,6 +125,12 @@ export const SafeRunStepMetadataSchema = z.strictObject({
   verification: SafeVerificationResultSchema.optional(),
 });
 
+export const SafeRunOutputMetadataSchema =
+  SafeWorkflowOutputSummarySchema.extend({
+    producerStepIndex: z.number().int().nonnegative(),
+    producedAt: IsoDateSchema.nullable(),
+  });
+
 export const SafeWorkflowRunMetadataSchema = z.strictObject({
   id: UuidSchema,
   workspaceId: UuidSchema,
@@ -148,6 +155,7 @@ export const SafeWorkflowRunMetadataSchema = z.strictObject({
 
 export const WorkflowRunDetailSchema = SafeWorkflowRunMetadataSchema.extend({
   steps: z.array(SafeRunStepMetadataSchema),
+  outputs: z.array(SafeRunOutputMetadataSchema),
 });
 
 export const CreateWorkflowRunResponseSchema = z.strictObject({

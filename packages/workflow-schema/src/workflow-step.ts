@@ -68,19 +68,55 @@ export const AttributeExtractSourceSchema = z.strictObject({
   name: NonEmptyStringSchema,
 });
 
+export const CheckedExtractSourceSchema = z.strictObject({
+  kind: z.literal('checked'),
+});
+
+export const UrlExtractSourceSchema = z.strictObject({
+  kind: z.literal('url'),
+  mode: z.enum(['origin', 'origin_and_path']),
+});
+
 export const ExtractSourceSchema = z.discriminatedUnion('kind', [
   TextExtractSourceSchema,
   ValueExtractSourceSchema,
   AttributeExtractSourceSchema,
+  CheckedExtractSourceSchema,
+  UrlExtractSourceSchema,
 ]);
 
-export const ExtractStepSchema = z.strictObject({
-  ...baseStepShape,
-  type: z.literal('extract'),
-  locator: ElementLocatorSchema,
-  source: ExtractSourceSchema,
-  outputName: IdentifierSchema,
-});
+export const ExtractStepSchema = z
+  .strictObject({
+    ...baseStepShape,
+    type: z.literal('extract'),
+    locator: ElementLocatorSchema.optional(),
+    source: ExtractSourceSchema,
+    outputName: IdentifierSchema,
+    outputLabel: z.string().trim().min(1).max(120).optional(),
+    retention: z.literal('ephemeral').default('ephemeral'),
+    timeoutMs: z
+      .number()
+      .int()
+      .min(MIN_VERIFICATION_TIMEOUT_MS)
+      .max(MAX_VERIFICATION_TIMEOUT_MS)
+      .optional(),
+  })
+  .superRefine((step, context) => {
+    if (step.source.kind === 'url' && step.locator !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['locator'],
+        message: 'URL extraction must not define a locator.',
+      });
+    }
+    if (step.source.kind !== 'url' && step.locator === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['locator'],
+        message: 'Element extraction requires a locator.',
+      });
+    }
+  });
 
 export const VerifyStepSchema = z.strictObject({
   ...baseStepShape,
@@ -123,6 +159,8 @@ export type ValueExtractSource = z.infer<typeof ValueExtractSourceSchema>;
 export type AttributeExtractSource = z.infer<
   typeof AttributeExtractSourceSchema
 >;
+export type CheckedExtractSource = z.infer<typeof CheckedExtractSourceSchema>;
+export type UrlExtractSource = z.infer<typeof UrlExtractSourceSchema>;
 export type ExtractSource = z.infer<typeof ExtractSourceSchema>;
 export type ExtractStep = z.infer<typeof ExtractStepSchema>;
 export type VerifyStep = z.infer<typeof VerifyStepSchema>;

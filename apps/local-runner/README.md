@@ -1,5 +1,11 @@
 # TaskTwin Local Runner
 
+## Ephemeral extraction
+
+The Playwright adapter supports text, field/select value, checked-state, and
+safe URL extraction. Values are held only by the Workflow Engine's in-memory
+output store and are never printed. Element extraction requires one unique
+locator; password fields and unsafe URLs are rejected.
 The Local Runner pairs with the control plane, stores one revocable runner
 credential locally, sends heartbeats, claims at most one assigned workflow
 run, renews its short-lived lease, and adapts the framework-independent

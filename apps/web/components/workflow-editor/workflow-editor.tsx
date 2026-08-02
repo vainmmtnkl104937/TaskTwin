@@ -5,6 +5,9 @@ import {
   addElementVerifyStep,
   addUrlVerifyStep,
   addWaitStep,
+  addElementExtractStep,
+  addUrlExtractStep,
+  removeExtractStep,
   moveWorkflowStepDown,
   moveWorkflowStepUp,
   removeWorkflowStep,
@@ -22,6 +25,7 @@ import {
 } from '@tasktwin/workflow-schema';
 import type { ValueSourceTarget } from '@tasktwin/workflow-inputs';
 import { analyzePublishReadiness } from '@tasktwin/workflow-lifecycle';
+import { analyzeWorkflowExtraction } from '@tasktwin/workflow-extraction';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -39,6 +43,7 @@ import { StepInspector } from './step-inspector';
 import { ValidationPanel } from './validation-panel';
 import { VariablesPanel } from './variables-panel';
 import { WorkflowGraph } from './workflow-graph';
+import { OutputsPanel } from './outputs-panel';
 
 interface WorkflowEditorProps {
   detail: WorkflowVersionDetailResponse;
@@ -79,6 +84,10 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
     () => analyzePublishReadiness(definition),
     [definition],
   );
+  const extractionAnalysis = useMemo(
+    () => analyzeWorkflowExtraction(definition),
+    [definition],
+  );
   const canPublish =
     detail.access.role === 'OWNER' || detail.access.role === 'ADMIN';
   const selectedIndex = definition.steps.findIndex(
@@ -86,6 +95,9 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
   );
   const selectedStep =
     selectedIndex === -1 ? undefined : definition.steps[selectedIndex];
+  const availableOutputs = extractionAnalysis.outputs.filter(
+    (output) => output.producerStepIndex < selectedIndex,
+  );
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -208,11 +220,61 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
     setSelectedStepId(id);
   }
 
+  function addUrlExtract(): void {
+    const id = `step-${crypto.randomUUID()}`;
+    const outputName = `output_${crypto.randomUUID().replaceAll('-', '_')}`;
+    apply(
+      addUrlExtractStep(definition, {
+        id,
+        name: 'Extract current URL',
+        outputName,
+        outputLabel: 'Current URL',
+        timeoutMs: 5_000,
+      }),
+    );
+    setSelectedStepId(id);
+  }
+
+  function addElementExtract(): void {
+    if (locatorSourceStepId === '') return;
+    const id = `step-${crypto.randomUUID()}`;
+    const result = addElementExtractStep(definition, locatorSourceStepId, {
+      id,
+      name: 'Extract element text',
+      outputName: `output_${crypto.randomUUID().replaceAll('-', '_')}`,
+      outputLabel: 'Extracted text',
+      timeoutMs: 5_000,
+    });
+    if (!result.ok) {
+      setSaveState('error');
+      setSaveMessage(result.error.message);
+      return;
+    }
+    apply(result.workflow);
+    setSelectedStepId(id);
+  }
+
   function confirmDelete(): void {
     if (pendingDeleteStepId === null) {
       return;
     }
-    const next = removeWorkflowStep(definition, pendingDeleteStepId);
+    const pending = definition.steps.find(
+      (step) => step.id === pendingDeleteStepId,
+    );
+    const removal =
+      pending?.type === 'extract'
+        ? removeExtractStep(definition, pendingDeleteStepId)
+        : {
+            ok: true as const,
+            workflow: removeWorkflowStep(definition, pendingDeleteStepId),
+          };
+    if (!removal.ok) {
+      setSaveState('error');
+      setSaveMessage(removal.error.message);
+      setPendingDeleteStepId(null);
+      return;
+    }
+    const next = removal.workflow;
     apply(next);
     setPendingDeleteStepId(null);
     setSelectedStepId(next.steps[0]?.id ?? null);
@@ -332,6 +394,16 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
         onChange={apply}
         onSelectStep={setSelectedStepId}
       />
+      <OutputsPanel
+        definition={definition}
+        readOnly={readOnly}
+        onChange={apply}
+        onSelectStep={setSelectedStepId}
+        onError={(message) => {
+          setSaveState('error');
+          setSaveMessage(message);
+        }}
+      />
 
       <div className="editor-grid">
         <section className="panel graph-panel" aria-labelledby="steps-heading">
@@ -349,6 +421,9 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
               </button>
               <button type="button" onClick={addUrlVerify} disabled={readOnly}>
                 Add URL Verify
+              </button>
+              <button type="button" onClick={addUrlExtract} disabled={readOnly}>
+                Add URL Extract
               </button>
               <select
                 aria-label="Locator source step"
@@ -375,6 +450,17 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
               >
                 Add Element Verify
               </button>
+              <button
+                type="button"
+                onClick={addElementExtract}
+                disabled={
+                  readOnly ||
+                  reusableLocators.length === 0 ||
+                  locatorSourceStepId === ''
+                }
+              >
+                Add Text Extract
+              </button>
             </div>
           </div>
           <WorkflowGraph
@@ -392,6 +478,7 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
               <StepInspector
                 step={selectedStep}
                 variables={definition.variables}
+                outputs={availableOutputs}
                 readOnly={readOnly}
                 locatorMetadata={detail.locatorMetadata}
                 onChange={updateStep}

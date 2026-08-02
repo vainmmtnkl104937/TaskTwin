@@ -261,6 +261,12 @@ retry/resume, saved browser authentication and AI.
 Session 19 excludes visual comparison, regex, custom JavaScript, XPath,
 automatic verification generation, locator repair, screenshots and AI.
 
+## Session 20: ephemeral workflow outputs
+
+Deterministic Extract steps produce string or boolean values for compatible
+later steps. Values remain in Local Runner memory; only safe producer and status
+metadata is persisted by the Control Plane.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

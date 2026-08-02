@@ -1,4 +1,10 @@
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
+import {
+  defineWorkflowOutputs,
+  outputTypeForExtractStep,
+  type SafeWorkflowOutputSummary,
+  type WorkflowOutputDefinition,
+} from '@tasktwin/workflow-extraction';
 
 import type { WorkflowExecutionAdapter } from './adapter.js';
 import {
@@ -30,6 +36,8 @@ import { RunStateMachine } from './run-state-machine.js';
 import { StepStateMachine } from './step-state-machine.js';
 import { TerminationArbiter } from './termination-arbiter.js';
 import type { WorkflowRuntimeValueResolver } from './value-source-resolver.js';
+import { withRuntimeOutputs } from './value-source-resolver.js';
+import { RuntimeOutputStore } from './runtime-output-store.js';
 
 const TIMEOUT_ERROR_CODES = new Set<ExecutionErrorCode>([
   'ACTION_TIMEOUT',
@@ -39,6 +47,9 @@ const TIMEOUT_ERROR_CODES = new Set<ExecutionErrorCode>([
 
 export interface WorkflowEngineDependencies {
   createExecutionId(): string;
+  createRuntimeOutputStore?(
+    definitions: readonly WorkflowOutputDefinition[],
+  ): RuntimeOutputStore;
   clock?: WorkflowEngineClock;
   progressSink?: WorkflowProgressSink;
   valueResolver?: WorkflowRuntimeValueResolver;
@@ -325,6 +336,14 @@ export class WorkflowEngine {
       transitionRun,
     } = context;
     const controller = new AbortController();
+    const outputDefinitions = defineWorkflowOutputs(prepared.request.workflow);
+    const outputStore =
+      this.dependencies.createRuntimeOutputStore?.(outputDefinitions) ??
+      new RuntimeOutputStore(outputDefinitions);
+    const executionValueResolver = withRuntimeOutputs(
+      prepared.valueResolver,
+      outputStore,
+    );
     const arbiter = new TerminationArbiter();
     const executionStartedAtMs = this.clock.nowMs();
     const deadlineMs =
@@ -353,6 +372,7 @@ export class WorkflowEngine {
     let primary: PrimaryTermination | null = null;
     let cleanupError: SafeExecutionError | null = null;
     let adapterStartupAttempted = false;
+    let outputSummaries: SafeWorkflowOutputSummary[] = outputStore.summaries();
 
     const recordDeadlineIfElapsed = () => {
       if (this.clock.nowMs() >= deadlineMs) {
@@ -381,7 +401,7 @@ export class WorkflowEngine {
       try {
         await this.adapter.start({
           executionId,
-          valueResolver: prepared.valueResolver,
+          valueResolver: executionValueResolver,
           allowedOrigins: prepared.allowedOrigins,
           totalTimeoutMs: prepared.request.options.totalTimeoutMs,
           remainingTimeMs: Math.max(0, deadlineMs - this.clock.nowMs()),
@@ -424,7 +444,7 @@ export class WorkflowEngine {
           try {
             const output = await this.adapter.executeStep({
               executionId,
-              valueResolver: prepared.valueResolver,
+              valueResolver: executionValueResolver,
               allowedOrigins: prepared.allowedOrigins,
               totalTimeoutMs: prepared.request.options.totalTimeoutMs,
               remainingTimeMs,
@@ -437,6 +457,33 @@ export class WorkflowEngine {
             });
             if (output?.verification !== undefined) {
               record.verification = output.verification;
+            }
+            if (output?.producedOutput !== undefined) {
+              if (record.step.type !== 'extract') {
+                throw new SafeExecutionException('INVALID_WORKFLOW');
+              }
+              const expectedType = outputTypeForExtractStep(record.step);
+              if (
+                output.producedOutput.outputName !== record.step.outputName ||
+                output.producedOutput.outputType !== expectedType
+              ) {
+                throw new SafeExecutionException('OUTPUT_TYPE_MISMATCH');
+              }
+              outputStore.set(
+                output.producedOutput.outputName,
+                output.producedOutput.outputType,
+                output.producedOutput.value,
+              );
+              progress.emit({
+                kind: 'output_produced',
+                executionId,
+                timestamp: timestampFromMs(this.clock.nowMs()),
+                producerStepId: record.step.id,
+                outputName: record.step.outputName,
+                outputType: output.producedOutput.outputType,
+              });
+            } else if (record.step.type === 'extract') {
+              throw new SafeExecutionException('EXTRACTION_VALUE_UNAVAILABLE');
             }
           } catch (error: unknown) {
             stepError = toSafeError(error, 'ACTION_FAILED');
@@ -514,6 +561,8 @@ export class WorkflowEngine {
           cleanupError = safeError('RESOURCE_CLEANUP_FAILED');
         }
       }
+      outputSummaries = outputStore.summaries();
+      outputStore.clear();
     }
 
     if (cleanupError !== null) {
@@ -576,6 +625,7 @@ export class WorkflowEngine {
       ...(primary?.stepId === undefined
         ? {}
         : { failedStepId: primary.stepId }),
+      outputs: outputSummaries,
     });
   }
 }

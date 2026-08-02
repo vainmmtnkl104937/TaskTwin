@@ -1,5 +1,11 @@
 # TaskTwin control-plane API
 
+## Workflow output metadata
+
+Run creation initializes one metadata-only output row per Extract step.
+Sequenced progress can mark an output produced, and completion reconciles the
+safe summary against the stored workflow definition. API contracts never accept
+or return an extracted value, length, hash, locator, or source URL.
 Session 11 adds authenticated workflow reads and draft updates:
 
 - `GET /workspaces/:workspaceId/workflows`

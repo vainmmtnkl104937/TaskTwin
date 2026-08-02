@@ -10,6 +10,12 @@ import type {
   ClaimedRunInput,
 } from '@tasktwin/run-protocol';
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
+import type { SafeWorkflowOutputSummary } from '@tasktwin/workflow-extraction';
+
+export interface WorkflowRunOutputRecord extends SafeWorkflowOutputSummary {
+  producerStepIndex: number;
+  producedAt: Date | null;
+}
 
 export interface WorkflowRunStepRecord {
   stepId: string;
@@ -44,6 +50,7 @@ export interface WorkflowRunRecord {
   finishedAt: Date | null;
   terminationCause: string | null;
   steps: WorkflowRunStepRecord[];
+  outputs: WorkflowRunOutputRecord[];
 }
 
 export interface WorkflowRunAccess {

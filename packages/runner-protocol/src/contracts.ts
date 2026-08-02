@@ -13,6 +13,7 @@ import {
   RUNNER_PROTOCOL_SCHEMA_VERSION,
   USER_CODE_PATTERN,
   WORKFLOW_VERIFICATION_CAPABILITY,
+  WORKFLOW_EXTRACTION_CAPABILITY,
 } from './constants.js';
 
 const UuidSchema = z.string().uuid();
@@ -23,10 +24,11 @@ const UserCodeSchema = z.string().regex(USER_CODE_PATTERN);
 export const RunnerCapabilitySchema = z.union([
   SecureInputRunnerCapabilitySchema,
   z.literal(WORKFLOW_VERIFICATION_CAPABILITY),
+  z.literal(WORKFLOW_EXTRACTION_CAPABILITY),
 ]);
 export const RunnerCapabilitiesSchema = z
   .array(RunnerCapabilitySchema)
-  .max(3)
+  .max(4)
   .superRefine((values, context) => {
     if (new Set(values).size !== values.length) {
       context.addIssue({

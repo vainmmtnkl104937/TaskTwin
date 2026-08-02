@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { WorkflowEngine } from '../src/index.js';
+import { RuntimeOutputStore, WorkflowEngine } from '../src/index.js';
 import {
   EXECUTION_ID,
   FakeAdapter,
@@ -9,14 +9,47 @@ import {
   waitFor,
 } from './helpers.js';
 
-function engine(adapter: FakeAdapter, clock = new ManualClock()) {
+function engine(
+  adapter: FakeAdapter,
+  clock = new ManualClock(),
+  outputStore?: RuntimeOutputStore,
+) {
   return {
     clock,
     engine: new WorkflowEngine(adapter, {
       createExecutionId: () => EXECUTION_ID,
       clock,
+      ...(outputStore === undefined
+        ? {}
+        : { createRuntimeOutputStore: () => outputStore }),
     }),
   };
+}
+
+function extractionThenWaitRequest() {
+  const request = executionRequest([]);
+  request.workflow.steps = [
+    {
+      id: 'extractCustomerId',
+      type: 'extract',
+      name: 'Extract customer ID',
+      locator: { kind: 'testId', value: 'customer-id' },
+      source: { kind: 'text' },
+      outputName: 'customerId',
+      retention: 'ephemeral',
+    },
+    { id: 'waitAfterExtract', type: 'wait', name: 'Wait', durationMs: 1_000 },
+  ];
+  const store = new RuntimeOutputStore([
+    {
+      name: 'customerId',
+      valueType: 'string',
+      retention: 'ephemeral',
+      producerStepId: 'extractCustomerId',
+      producerStepIndex: 0,
+    },
+  ]);
+  return { request, store };
 }
 
 describe('workflow cancellation and timeouts', () => {
@@ -152,5 +185,36 @@ describe('workflow cancellation and timeouts', () => {
     request.options.stepTimeoutMs = 1_000;
     await engine(adapter, clock).engine.execute(request);
     expect(adapter.effectiveTimeouts).toEqual([1_000, 750]);
+  });
+
+  it('clears produced output after cancellation and total timeout', async () => {
+    const cancellationAdapter = new FakeAdapter();
+    cancellationAdapter.behavior.set('waitAfterExtract', 'wait-for-abort');
+    const cancellationFixture = extractionThenWaitRequest();
+    const controller = new AbortController();
+    const cancelling = engine(
+      cancellationAdapter,
+      new ManualClock(),
+      cancellationFixture.store,
+    ).engine.execute(cancellationFixture.request, controller.signal);
+    await waitFor(() => cancellationAdapter.executed.length === 2);
+    controller.abort();
+    expect((await cancelling).status).toBe('cancelled');
+    expect(cancellationFixture.store.size).toBe(0);
+
+    const timeoutAdapter = new FakeAdapter();
+    timeoutAdapter.behavior.set('waitAfterExtract', 'wait-for-abort');
+    const timeoutFixture = extractionThenWaitRequest();
+    timeoutFixture.request.options.totalTimeoutMs = 100;
+    const clock = new ManualClock();
+    const timingOut = engine(
+      timeoutAdapter,
+      clock,
+      timeoutFixture.store,
+    ).engine.execute(timeoutFixture.request);
+    await waitFor(() => timeoutAdapter.executed.length === 2);
+    clock.advance(100);
+    expect((await timingOut).status).toBe('timed_out');
+    expect(timeoutFixture.store.size).toBe(0);
   });
 });

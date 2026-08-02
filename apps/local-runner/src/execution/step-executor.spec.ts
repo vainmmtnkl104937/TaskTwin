@@ -14,6 +14,10 @@ function setup() {
     fill: vi.fn().mockResolvedValue(undefined),
     selectOption: vi.fn().mockResolvedValue(undefined),
     setChecked: vi.fn().mockResolvedValue(undefined),
+    innerText: vi.fn().mockResolvedValue('  customer-42\r\n'),
+    inputValue: vi.fn().mockResolvedValue('selected-value'),
+    isChecked: vi.fn().mockResolvedValue(true),
+    getAttribute: vi.fn().mockResolvedValue('text'),
   };
   const locator = locatorMock as unknown as Locator;
   locatorMock.first.mockReturnValue(locator);
@@ -38,6 +42,184 @@ function setup() {
 }
 
 describe('supported step executors', () => {
+  it('extracts text, field values and checked state without exposing them in safe metadata', async () => {
+    const fixture = setup();
+    const base = {
+      type: 'extract' as const,
+      name: 'Extract',
+      locator: { kind: 'testId' as const, value: 'source' },
+      retention: 'ephemeral' as const,
+    };
+    await expect(
+      executeStep(
+        {
+          ...base,
+          id: 'text',
+          source: { kind: 'text' },
+          outputName: 'textOutput',
+        },
+        fixture.context,
+      ),
+    ).resolves.toMatchObject({
+      producedOutput: {
+        outputName: 'textOutput',
+        outputType: 'string',
+        value: 'customer-42',
+      },
+    });
+    await expect(
+      executeStep(
+        {
+          ...base,
+          id: 'value',
+          source: { kind: 'value' },
+          outputName: 'valueOutput',
+        },
+        fixture.context,
+      ),
+    ).resolves.toMatchObject({
+      producedOutput: {
+        outputName: 'valueOutput',
+        outputType: 'string',
+        value: 'selected-value',
+      },
+    });
+    await expect(
+      executeStep(
+        {
+          ...base,
+          id: 'checked',
+          source: { kind: 'checked' },
+          outputName: 'checkedOutput',
+        },
+        fixture.context,
+      ),
+    ).resolves.toMatchObject({
+      producedOutput: {
+        outputName: 'checkedOutput',
+        outputType: 'boolean',
+        value: true,
+      },
+    });
+    expect(fixture.locatorMock.click).not.toHaveBeenCalled();
+  });
+
+  it('extracts only safe URL origin or origin and path', async () => {
+    const fixture = setup();
+    (fixture.context.page.url as ReturnType<typeof vi.fn>) = vi.fn(
+      () => 'http://127.0.0.1:4177/customer?id=secret#fragment',
+    );
+    const result = await executeStep(
+      {
+        id: 'url',
+        type: 'extract',
+        name: 'Extract URL',
+        source: { kind: 'url', mode: 'origin_and_path' },
+        outputName: 'location',
+        retention: 'ephemeral',
+      },
+      fixture.context,
+    );
+    expect(result).toMatchObject({
+      producedOutput: { value: 'http://127.0.0.1:4177/customer' },
+    });
+    expect(JSON.stringify(result)).not.toContain('secret');
+
+    (fixture.context.page.url as ReturnType<typeof vi.fn>) = vi.fn(
+      () => 'https://not-allowed.example/result',
+    );
+    await expect(
+      executeStep(
+        {
+          id: 'disallowedUrl',
+          type: 'extract',
+          name: 'Extract disallowed URL',
+          source: { kind: 'url', mode: 'origin' },
+          outputName: 'disallowedLocation',
+          retention: 'ephemeral',
+        },
+        fixture.context,
+      ),
+    ).rejects.toMatchObject({ safe: { code: 'ORIGIN_NOT_ALLOWED' } });
+  });
+
+  it('rejects password field extraction', async () => {
+    const fixture = setup();
+    fixture.locatorMock.getAttribute.mockResolvedValueOnce('password');
+    await expect(
+      executeStep(
+        {
+          id: 'password',
+          type: 'extract',
+          name: 'Extract password',
+          locator: { kind: 'testId', value: 'password' },
+          source: { kind: 'value' },
+          outputName: 'forbidden',
+          retention: 'ephemeral',
+        },
+        fixture.context,
+      ),
+    ).rejects.toMatchObject({
+      safe: { code: 'EXTRACTION_TARGET_UNSUPPORTED' },
+    });
+  });
+
+  it('requires one unique extraction target and honours cancellation', async () => {
+    const missing = setup();
+    missing.locatorMock.count.mockResolvedValue(0);
+    missing.context.effectiveTimeoutMs = 1;
+    await expect(
+      executeStep(
+        {
+          id: 'missing',
+          type: 'extract',
+          name: 'Missing target',
+          locator: { kind: 'testId', value: 'missing' },
+          source: { kind: 'text' },
+          outputName: 'missingOutput',
+          timeoutMs: 100,
+          retention: 'ephemeral',
+        },
+        missing.context,
+      ),
+    ).rejects.toMatchObject({ safe: { code: 'LOCATOR_NOT_FOUND' } });
+
+    const duplicate = setup();
+    duplicate.locatorMock.count.mockResolvedValue(2);
+    await expect(
+      executeStep(
+        {
+          id: 'duplicate',
+          type: 'extract',
+          name: 'Duplicate target',
+          locator: { kind: 'testId', value: 'repeated' },
+          source: { kind: 'text' },
+          outputName: 'duplicateOutput',
+          retention: 'ephemeral',
+        },
+        duplicate.context,
+      ),
+    ).rejects.toMatchObject({ safe: { code: 'LOCATOR_NOT_UNIQUE' } });
+
+    const cancelled = setup();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      executeStep(
+        {
+          id: 'cancelled',
+          type: 'extract',
+          name: 'Cancelled extraction',
+          locator: { kind: 'testId', value: 'source' },
+          source: { kind: 'text' },
+          outputName: 'cancelledOutput',
+          retention: 'ephemeral',
+        },
+        { ...cancelled.context, signal: controller.signal },
+      ),
+    ).rejects.toMatchObject({ safe: { code: 'EXECUTION_CANCELLED' } });
+  });
+
   it('fills literal and variable values only at the Playwright boundary', async () => {
     const fixture = setup();
     await executeStep(

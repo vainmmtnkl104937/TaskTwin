@@ -6,6 +6,7 @@ import {
 } from '@tasktwin/workflow-inputs';
 
 import { SafeExecutionException } from './errors.js';
+import type { RuntimeOutputStore } from './runtime-output-store.js';
 
 export type RuntimeValueRecord = Readonly<Record<string, RuntimeInputValue>>;
 
@@ -29,6 +30,23 @@ export function createRuntimeValueResolver(
   };
 }
 
+export function withRuntimeOutputs(
+  resolver: WorkflowRuntimeValueResolver,
+  outputs: RuntimeOutputStore,
+): WorkflowRuntimeValueResolver {
+  return {
+    hasVariable: resolver.hasVariable.bind(resolver),
+    hasSecret: resolver.hasSecret.bind(resolver),
+    resolve(source, target) {
+      if (source.kind !== 'output') return resolver.resolve(source, target);
+      return outputs.get(
+        source.outputName,
+        getValueSourceCompatibility(target).variableTypes,
+      );
+    },
+  };
+}
+
 export function resolveValueSource(
   source: ValueSource,
   target: ValueSourceTarget,
@@ -44,6 +62,9 @@ export function resolveValueSource(
       throw new SafeExecutionException('INVALID_WORKFLOW');
     }
     return source.value;
+  }
+  if (source.kind === 'output') {
+    throw new SafeExecutionException('OUTPUT_NOT_AVAILABLE');
   }
   const runtimeValue = runtimeValues[source.variableName];
   if (

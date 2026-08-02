@@ -70,6 +70,13 @@ describe('Chromium local workflow integration', () => {
     expect(result.status, JSON.stringify(result)).toBe('succeeded');
     expect(result.counts.attempted).toBe(context.request.workflow.steps.length);
     expect(context.server.completed()).toBe(true);
+    expect(result.outputs).toEqual([
+      expect.objectContaining({ outputName: 'customerId', status: 'produced' }),
+      expect.objectContaining({
+        outputName: 'confirmedState',
+        status: 'produced',
+      }),
+    ]);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('TaskTwin sample');
     expect(serialized).not.toContain('requiredOption');

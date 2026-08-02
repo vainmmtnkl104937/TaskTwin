@@ -34,6 +34,7 @@ export type { RunStatus, RunStepStatus } from './run-status.js';
 export {
   LiteralValueSchema,
   LiteralValueSourceSchema,
+  OutputValueSourceSchema,
   SecretValueSourceSchema,
   ValueSourceSchema,
   VariableValueSourceSchema,
@@ -41,6 +42,7 @@ export {
 export type {
   LiteralValue,
   LiteralValueSource,
+  OutputValueSource,
   SecretValueSource,
   ValueSource,
   VariableValueSource,
@@ -85,6 +87,7 @@ export type {
 export {
   ApprovalStepSchema,
   AttributeExtractSourceSchema,
+  CheckedExtractSourceSchema,
   ClickStepSchema,
   ExtractSourceSchema,
   ExtractStepSchema,
@@ -93,6 +96,7 @@ export {
   SelectStepSchema,
   SetCheckedStepSchema,
   TextExtractSourceSchema,
+  UrlExtractSourceSchema,
   ValueExtractSourceSchema,
   VerifyStepSchema,
   WaitStepSchema,
@@ -101,6 +105,7 @@ export {
 export type {
   ApprovalStep,
   AttributeExtractSource,
+  CheckedExtractSource,
   ClickStep,
   ExtractSource,
   ExtractStep,
@@ -109,6 +114,7 @@ export type {
   SelectStep,
   SetCheckedStep,
   TextExtractSource,
+  UrlExtractSource,
   ValueExtractSource,
   VerifyStep,
   WaitStep,

@@ -13,6 +13,7 @@ import {
   type WorkflowStep,
   type WorkflowVariable,
 } from '@tasktwin/workflow-schema';
+import { analyzeWorkflowExtraction } from '@tasktwin/workflow-extraction';
 
 export type WorkflowVariableOperationErrorCode =
   | 'VARIABLE_INVALID'
@@ -309,7 +310,10 @@ export function updateStepValueSource(
   const blockingIssues = analyzeWorkflowInputs(candidate).issues.filter(
     (issue) => issue.severity === 'blocking',
   );
-  if (blockingIssues.length > 0) {
+  const extractionIssues = analyzeWorkflowExtraction(candidate).issues.filter(
+    (issue) => issue.severity === 'blocking',
+  );
+  if (blockingIssues.length > 0 || extractionIssues.length > 0) {
     return failure(
       source.data.kind === 'variable'
         ? 'VARIABLE_TYPE_INCOMPATIBLE'

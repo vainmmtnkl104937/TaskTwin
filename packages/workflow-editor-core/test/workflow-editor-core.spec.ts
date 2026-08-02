@@ -23,6 +23,9 @@ import {
   updateWorkflowMetadata,
   updateWorkflowStep,
   validateEditorWorkflow,
+  addElementExtractStep,
+  renameWorkflowOutput,
+  removeExtractStep,
 } from '../src/index.js';
 
 function createWorkflow(): WorkflowDefinition {
@@ -57,6 +60,91 @@ function createWorkflow(): WorkflowDefinition {
 }
 
 describe('workflow editor operations', () => {
+  it('adds, renames and safely removes Extract outputs immutably', () => {
+    const original = createWorkflow();
+    const withLocator = {
+      ...original,
+      steps: [
+        ...original.steps,
+        {
+          id: 'field',
+          type: 'fill' as const,
+          name: 'Customer field',
+          locator: { kind: 'label' as const, value: 'Customer ID' },
+          value: { kind: 'literal' as const, value: '' },
+        },
+      ],
+    };
+    const added = addElementExtractStep(
+      withLocator,
+      'field',
+      {
+        id: 'extract',
+        name: 'Extract customer',
+        outputName: 'customerId',
+      },
+      withLocator.steps.length - 1,
+    );
+    expect(added.ok).toBe(true);
+    if (!added.ok) return;
+    const consumer = updateStepValueSource(
+      added.workflow,
+      'field',
+      'fill.value',
+      { kind: 'output', outputName: 'customerId' },
+    );
+    expect(consumer.ok).toBe(true);
+    if (!consumer.ok) return;
+    const renamed = renameWorkflowOutput(
+      consumer.workflow,
+      'customerId',
+      'crmCustomerId',
+    );
+    expect(renamed.ok).toBe(true);
+    if (!renamed.ok) return;
+    expect(
+      renamed.workflow.steps.find((step) => step.id === 'field'),
+    ).toMatchObject({
+      value: { kind: 'output', outputName: 'crmCustomerId' },
+    });
+    expect(removeExtractStep(renamed.workflow, 'extract')).toMatchObject({
+      ok: false,
+      error: { code: 'OUTPUT_HAS_USAGES' },
+    });
+    expect(original).toEqual(createWorkflow());
+  });
+
+  it('allows removing an unused Extract step and rejects rename collisions', () => {
+    const original = createWorkflow();
+    const first = {
+      id: 'firstExtract',
+      type: 'extract' as const,
+      name: 'First',
+      locator: { kind: 'testId' as const, value: 'first' },
+      source: { kind: 'text' as const },
+      outputName: 'firstOutput',
+      retention: 'ephemeral' as const,
+    };
+    const second = {
+      ...first,
+      id: 'secondExtract',
+      outputName: 'secondOutput',
+    };
+    const workflow = { ...original, steps: [...original.steps, first, second] };
+    expect(
+      renameWorkflowOutput(workflow, 'firstOutput', 'secondOutput'),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'OUTPUT_NAME_COLLISION' },
+    });
+    const removed = removeExtractStep(workflow, 'firstExtract');
+    expect(removed.ok).toBe(true);
+    if (removed.ok) {
+      expect(
+        removed.workflow.steps.some((step) => step.id === 'firstExtract'),
+      ).toBe(false);
+    }
+  });
   it('updates metadata immutably', () => {
     const original = createWorkflow();
     const result = updateWorkflowMetadata(original, {

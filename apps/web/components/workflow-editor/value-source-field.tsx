@@ -5,12 +5,15 @@ import {
   type ValueSourceTarget,
 } from '@tasktwin/workflow-inputs';
 import type { ValueSource, WorkflowVariable } from '@tasktwin/workflow-schema';
+import type { WorkflowOutputDefinition } from '@tasktwin/workflow-extraction';
+import { isOutputTypeCompatible } from '@tasktwin/workflow-extraction';
 
 interface ValueSourceFieldProps {
   label: string;
   source: ValueSource;
   target: ValueSourceTarget;
   variables: WorkflowVariable[];
+  outputs?: WorkflowOutputDefinition[];
   readOnly: boolean;
   summarizeStringLiteral?: (value: string) => string;
   onChange(source: ValueSource): void;
@@ -21,6 +24,7 @@ export function ValueSourceField({
   source,
   target,
   variables,
+  outputs = [],
   readOnly,
   summarizeStringLiteral,
   onChange,
@@ -28,6 +32,9 @@ export function ValueSourceField({
   const compatibility = getValueSourceCompatibility(target);
   const compatibleVariables = variables.filter((variable) =>
     compatibility.variableTypes.includes(variable.valueType),
+  );
+  const compatibleOutputs = outputs.filter((output) =>
+    isOutputTypeCompatible(target, output.valueType),
   );
 
   function changeKind(kind: ValueSource['kind']): void {
@@ -47,6 +54,13 @@ export function ValueSourceField({
       const variable = compatibleVariables[0];
       if (variable !== undefined) {
         onChange({ kind: 'variable', variableName: variable.name });
+      }
+      return;
+    }
+    if (kind === 'output') {
+      const output = compatibleOutputs[0];
+      if (output !== undefined) {
+        onChange({ kind: 'output', outputName: output.name });
       }
       return;
     }
@@ -78,6 +92,14 @@ export function ValueSourceField({
           {compatibility.allowsSecret ? (
             <option value="secret">Secret reference</option>
           ) : null}
+          <option
+            value="output"
+            disabled={
+              compatibleOutputs.length === 0 && source.kind !== 'output'
+            }
+          >
+            Runtime output
+          </option>
         </select>
       </label>
 
@@ -129,6 +151,35 @@ export function ValueSourceField({
           <small id={`${target}-secret-help`}>
             Enter an alias only. Secret value is never displayed or requested.
           </small>
+        </label>
+      ) : null}
+
+      {source.kind === 'output' ? (
+        <label>
+          Compatible earlier output
+          <select
+            value={source.outputName}
+            disabled={readOnly}
+            onChange={(event) =>
+              onChange({
+                kind: 'output',
+                outputName: event.currentTarget.value,
+              })
+            }
+          >
+            {compatibleOutputs.some(
+              (output) => output.name === source.outputName,
+            ) ? null : (
+              <option value={source.outputName} disabled>
+                Incompatible, missing, or not produced yet
+              </option>
+            )}
+            {compatibleOutputs.map((output) => (
+              <option key={output.name} value={output.name}>
+                {output.label ?? output.name} ({output.valueType})
+              </option>
+            ))}
+          </select>
         </label>
       ) : null}
 

@@ -64,6 +64,7 @@ export class FakeAdapter implements WorkflowExecutionAdapter {
     'select',
     'setChecked',
     'wait',
+    'extract',
     'verify',
   ] as const satisfies readonly WorkflowStepType[];
   readonly executed: string[] = [];
@@ -75,6 +76,7 @@ export class FakeAdapter implements WorkflowExecutionAdapter {
   cleanupError: SafeExecutionError | null = null;
   startBehavior: 'succeed' | 'fail' | 'wait-for-abort' = 'succeed';
   readonly behavior = new Map<string, StepBehavior>();
+  readonly resolvedValues = new Map<string, string | number | boolean>();
 
   validateStep(): void {}
 
@@ -96,6 +98,31 @@ export class FakeAdapter implements WorkflowExecutionAdapter {
     this.activeSteps += 1;
     this.maxActiveSteps = Math.max(this.maxActiveSteps, this.activeSteps);
     try {
+      if (context.step.type === 'extract') {
+        return {
+          producedOutput: {
+            outputName: context.step.outputName,
+            outputType:
+              context.step.source.kind === 'checked' ? 'boolean' : 'string',
+            value:
+              context.step.source.kind === 'checked'
+                ? true
+                : 'ephemeral-customer-id',
+          },
+        };
+      }
+      if (
+        (context.step.type === 'fill' || context.step.type === 'select') &&
+        context.step.value.kind === 'output'
+      ) {
+        this.resolvedValues.set(
+          context.step.id,
+          context.valueResolver.resolve(
+            context.step.value,
+            context.step.type === 'fill' ? 'fill.value' : 'select.value',
+          ),
+        );
+      }
       switch (this.behavior.get(context.step.id) ?? 'succeed') {
         case 'succeed':
           return;

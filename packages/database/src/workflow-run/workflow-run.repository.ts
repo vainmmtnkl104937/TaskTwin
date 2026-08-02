@@ -16,7 +16,11 @@ import {
   type WorkflowRunStatus as ProtocolRunStatus,
 } from '@tasktwin/run-protocol';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
-import { WORKFLOW_VERIFICATION_CAPABILITY } from '@tasktwin/runner-protocol';
+import {
+  WORKFLOW_EXTRACTION_CAPABILITY,
+  WORKFLOW_VERIFICATION_CAPABILITY,
+} from '@tasktwin/runner-protocol';
+import { defineWorkflowOutputs } from '@tasktwin/workflow-extraction';
 import {
   RunInputAdditionalAuthenticatedDataSchema,
   SecureRunInputEnvelopeSchema,
@@ -28,6 +32,8 @@ import {
   Prisma,
   WorkflowRunStatus,
   WorkflowRunStepStatus,
+  WorkflowRunOutputStatus,
+  WorkflowRunOutputType,
   type PrismaClient,
 } from '../generated/prisma/client.js';
 import { createCanonicalJsonDigest } from '../recording/canonical-json.js';
@@ -65,6 +71,7 @@ const SERIALIZATION_RETRY_COUNT = 3;
 const runInclude = {
   workflowVersion: { select: { version: true } },
   steps: { orderBy: { sourceStepIndex: 'asc' as const } },
+  outputs: { orderBy: { producerStepIndex: 'asc' as const } },
 } as const satisfies Prisma.WorkflowRunInclude;
 
 type RunRow = Prisma.WorkflowRunGetPayload<{ include: typeof runInclude }>;
@@ -131,6 +138,20 @@ function toRecord(row: RunRow): WorkflowRunRecord {
       ...(verificationByStep.get(step.sourceStepId) === undefined
         ? {}
         : { verification: verificationByStep.get(step.sourceStepId)! }),
+    })),
+    outputs: row.outputs.map((output) => ({
+      outputName: output.outputName,
+      outputType:
+        output.outputType === WorkflowRunOutputType.STRING
+          ? 'string'
+          : 'boolean',
+      producerStepId: output.producerStepId,
+      producerStepIndex: output.producerStepIndex,
+      status:
+        output.status === WorkflowRunOutputStatus.PRODUCED
+          ? 'produced'
+          : 'not_produced',
+      producedAt: output.producedAt,
     })),
   };
 }
@@ -348,6 +369,23 @@ export class WorkflowRunRepository {
           ],
         });
       }
+      if (
+        parsed.data.steps.some((step) => step.type === 'extract') &&
+        !runner.capabilities.includes(WORKFLOW_EXTRACTION_CAPABILITY)
+      ) {
+        throw new WorkflowRunRepositoryError('RUN_NOT_READY', {
+          ...readiness,
+          ready: false,
+          issues: [
+            ...readiness.issues,
+            {
+              code: 'RUNNER_CAPABILITY_UNAVAILABLE',
+              message: 'The selected Runner cannot execute Extract steps.',
+            },
+          ],
+        });
+      }
+      const outputDefinitions = defineWorkflowOutputs(parsed.data);
       const executionOptions = {
         totalTimeoutMs: DEFAULT_RUN_TOTAL_TIMEOUT_MS,
         stepTimeoutMs: DEFAULT_RUN_STEP_TIMEOUT_MS,
@@ -370,6 +408,17 @@ export class WorkflowRunRepository {
               sourceStepId: step.id,
               sourceStepIndex: index,
               stepType: step.type,
+            })),
+          },
+          outputs: {
+            create: outputDefinitions.map((output) => ({
+              outputName: output.name,
+              outputType:
+                output.valueType === 'string'
+                  ? WorkflowRunOutputType.STRING
+                  : WorkflowRunOutputType.BOOLEAN,
+              producerStepId: output.producerStepId,
+              producerStepIndex: output.producerStepIndex,
             })),
           },
         },
@@ -595,6 +644,9 @@ export class WorkflowRunRepository {
       const stepById = new Map(
         run.steps.map((step) => [step.sourceStepId, step]),
       );
+      const outputByName = new Map(
+        run.outputs.map((output) => [output.outputName, output]),
+      );
       for (const item of input.batch.events) {
         const event = item.event;
         if (event.executionId !== run.id) {
@@ -615,6 +667,26 @@ export class WorkflowRunRepository {
           continue;
         }
         if (event.kind === 'warning') {
+          continue;
+        }
+        if (event.kind === 'output_produced') {
+          const output = outputByName.get(event.outputName);
+          const expectedType =
+            event.outputType === 'string'
+              ? WorkflowRunOutputType.STRING
+              : WorkflowRunOutputType.BOOLEAN;
+          if (
+            output === undefined ||
+            output.producerStepId !== event.producerStepId ||
+            output.outputType !== expectedType ||
+            output.status !== WorkflowRunOutputStatus.NOT_PRODUCED ||
+            stepById.get(event.producerStepId)?.status !==
+              WorkflowRunStepStatus.RUNNING
+          ) {
+            throw new WorkflowRunRepositoryError('PROGRESS_TRANSITION_INVALID');
+          }
+          output.status = WorkflowRunOutputStatus.PRODUCED;
+          output.producedAt = new Date(event.timestamp);
           continue;
         }
         const step = stepById.get(event.stepId);
@@ -672,6 +744,12 @@ export class WorkflowRunRepository {
             errorCode: step.errorCode,
             skippedReason: step.skippedReason,
           },
+        });
+      }
+      for (const output of run.outputs) {
+        await transaction.workflowRunOutput.update({
+          where: { id: output.id },
+          data: { status: output.status, producedAt: output.producedAt },
         });
       }
       await transaction.workflowRunProgressBatch.create({
@@ -747,6 +825,34 @@ export class WorkflowRunRepository {
           throw new WorkflowRunRepositoryError('COMPLETION_INVALID');
         }
       });
+      if (result.outputs.length !== run.outputs.length) {
+        throw new WorkflowRunRepositoryError('COMPLETION_INVALID');
+      }
+      result.outputs.forEach((output, index) => {
+        const source = run.outputs[index];
+        const expectedType =
+          source?.outputType === WorkflowRunOutputType.STRING
+            ? 'string'
+            : 'boolean';
+        if (
+          source === undefined ||
+          source.outputName !== output.outputName ||
+          source.producerStepId !== output.producerStepId ||
+          expectedType !== output.outputType ||
+          (source.status === WorkflowRunOutputStatus.PRODUCED &&
+            output.status !== 'produced')
+        ) {
+          throw new WorkflowRunRepositoryError('COMPLETION_INVALID');
+        }
+        const producerStep = result.steps[source.producerStepIndex];
+        if (
+          producerStep?.stepId !== source.producerStepId ||
+          (output.status === 'produced') !==
+            (producerStep.status === 'succeeded')
+        ) {
+          throw new WorkflowRunRepositoryError('COMPLETION_INVALID');
+        }
+      });
       for (const [index, step] of result.steps.entries()) {
         const source = run.steps[index]!;
         await transaction.workflowRunStep.update({
@@ -760,6 +866,22 @@ export class WorkflowRunRepository {
             durationMs: step.durationMs,
             errorCode: step.error?.code ?? null,
             skippedReason: step.skippedReason ?? null,
+          },
+        });
+      }
+      for (const [index, output] of result.outputs.entries()) {
+        const source = run.outputs[index]!;
+        await transaction.workflowRunOutput.update({
+          where: { id: source.id },
+          data: {
+            status:
+              output.status === 'produced'
+                ? WorkflowRunOutputStatus.PRODUCED
+                : WorkflowRunOutputStatus.NOT_PRODUCED,
+            producedAt:
+              output.status === 'produced'
+                ? (source.producedAt ?? new Date(result.finishedAt))
+                : null,
           },
         });
       }

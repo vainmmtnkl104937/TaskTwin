@@ -18,6 +18,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@tasktwin/workflow-extraction": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "@tasktwin/workflow-verification": "workspace:*",

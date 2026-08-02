@@ -1,5 +1,9 @@
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
 import type { SafeVerificationResult } from '@tasktwin/workflow-verification';
+import {
+  defineWorkflowOutputs,
+  type SafeWorkflowOutputSummary,
+} from '@tasktwin/workflow-extraction';
 
 import {
   TerminalStepStatusSchema,
@@ -36,12 +40,13 @@ export interface FinalResultInput {
   warnings: readonly WorkflowEngineWarning[];
   error?: SafeExecutionError;
   failedStepId?: string;
+  outputs?: readonly SafeWorkflowOutputSummary[];
 }
 
 function locatorKind(
   step: WorkflowDefinition['steps'][number],
 ): StepExecutionResult['locatorKind'] {
-  if ('locator' in step) return step.locator.kind;
+  if ('locator' in step && step.locator !== undefined) return step.locator.kind;
   if (step.type === 'verify' && 'locator' in step.assertion) {
     return step.assertion.locator.kind;
   }
@@ -107,5 +112,15 @@ export function buildWorkflowExecutionResult(
     ...(input.error === undefined ? {} : { error: input.error }),
     warnings: input.warnings,
     steps,
+    outputs:
+      input.outputs ??
+      (input.workflow === undefined
+        ? []
+        : defineWorkflowOutputs(input.workflow).map((output) => ({
+            outputName: output.name,
+            outputType: output.valueType,
+            producerStepId: output.producerStepId,
+            status: 'not_produced' as const,
+          }))),
   });
 }

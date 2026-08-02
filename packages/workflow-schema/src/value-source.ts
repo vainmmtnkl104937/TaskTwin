@@ -23,14 +23,21 @@ export const SecretValueSourceSchema = z.strictObject({
   secretName: SecretReferenceNameSchema,
 });
 
+export const OutputValueSourceSchema = z.strictObject({
+  kind: z.literal('output'),
+  outputName: IdentifierSchema,
+});
+
 export const ValueSourceSchema = z.discriminatedUnion('kind', [
   LiteralValueSourceSchema,
   VariableValueSourceSchema,
   SecretValueSourceSchema,
+  OutputValueSourceSchema,
 ]);
 
 export type LiteralValue = z.infer<typeof LiteralValueSchema>;
 export type LiteralValueSource = z.infer<typeof LiteralValueSourceSchema>;
 export type VariableValueSource = z.infer<typeof VariableValueSourceSchema>;
 export type SecretValueSource = z.infer<typeof SecretValueSourceSchema>;
+export type OutputValueSource = z.infer<typeof OutputValueSourceSchema>;
 export type ValueSource = z.infer<typeof ValueSourceSchema>;

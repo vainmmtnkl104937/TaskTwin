@@ -164,6 +164,12 @@ export function analyzeWorkflowInputs(input: unknown): WorkflowInputAnalysis {
       continue;
     }
 
+    // Runtime outputs are validated by the framework-independent extraction
+    // data-flow analyzer. They are not workflow inputs or secret requirements.
+    if (source.kind === 'output') {
+      continue;
+    }
+
     if (!isSafeSecretAlias(source.secretName)) {
       issues.push(issueForUsage('UNSAFE_SECRET_REFERENCE', usage));
       continue;

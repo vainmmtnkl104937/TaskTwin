@@ -25,6 +25,7 @@ export {
   StepCountSummarySchema,
   StepExecutionResultSchema,
   StepStatusProgressEventSchema,
+  OutputProducedProgressEventSchema,
   TerminalRunStatusSchema,
   TerminalStepStatusSchema,
   TerminationCauseSchema,
@@ -81,6 +82,7 @@ export {
   resolveTextValue,
   resolveTextWithResolver,
   resolveValueSource,
+  withRuntimeOutputs,
 } from './value-source-resolver.js';
 export type {
   RuntimeValueRecord,
@@ -88,3 +90,4 @@ export type {
 } from './value-source-resolver.js';
 export { WorkflowEngine } from './workflow-engine.js';
 export type { WorkflowEngineDependencies } from './workflow-engine.js';
+export { RuntimeOutputStore } from './runtime-output-store.js';

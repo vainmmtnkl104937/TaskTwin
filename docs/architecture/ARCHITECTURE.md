@@ -649,3 +649,16 @@ adapter supports this behavior. Run preparation and direct dispatch reject a
 Verify workflow assigned to a Runner without that capability. No persistence
 migration is required because Verify remains part of the existing versioned
 workflow JSON and safe per-step results use the existing final-result JSON.
+
+## Ephemeral workflow-output boundary
+
+`packages/workflow-extraction` owns framework-independent output contracts,
+producer/consumer analysis, compatibility rules, and safe summaries. An Extract
+step produces exactly one immutable string or boolean output. The producer must
+precede every consumer in `WorkflowDefinition.steps`.
+
+The Workflow Engine owns a per-execution RuntimeOutputStore. Playwright returns
+the produced value only through the internal adapter boundary. The store is
+cleared after success, failure, cancellation, or timeout. Public progress and
+completion contracts carry metadata only. PostgreSQL mirrors that metadata in
+WorkflowRunOutput and never stores output values.

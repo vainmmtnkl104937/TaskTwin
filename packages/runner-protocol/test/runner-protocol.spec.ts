@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ControlPlaneOriginSchema,
   PairingPollingResponseSchema,
+  RunnerCapabilitiesSchema,
   RunnerHeartbeatRequestSchema,
   RunnerDeviceMetadataSchema,
   StoredRunnerCredentialSchema,
@@ -35,6 +36,12 @@ describe('runner capabilities', () => {
         capabilities: ['workflow_verification_v1', 'workflow_verification_v1'],
       }).success,
     ).toBe(false);
+  });
+
+  it('accepts the versioned workflow extraction capability', () => {
+    expect(RunnerCapabilitiesSchema.parse(['workflow_extraction_v1'])).toEqual([
+      'workflow_extraction_v1',
+    ]);
   });
 });
 

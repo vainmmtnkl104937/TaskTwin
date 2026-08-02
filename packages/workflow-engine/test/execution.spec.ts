@@ -5,6 +5,7 @@ import {
   WorkflowEngine,
   safeError,
   type WorkflowProgressEvent,
+  RuntimeOutputStore,
 } from '../src/index.js';
 import { EXECUTION_ID, FakeAdapter, executionRequest } from './helpers.js';
 
@@ -17,7 +18,106 @@ function engine(adapter: FakeAdapter, events?: WorkflowProgressEvent[]) {
   });
 }
 
+function extractionStore() {
+  return new RuntimeOutputStore([
+    {
+      name: 'customerId',
+      valueType: 'string',
+      retention: 'ephemeral',
+      producerStepId: 'extractCustomerId',
+      producerStepIndex: 0,
+    },
+  ]);
+}
+
 describe('workflow execution orchestration', () => {
+  it('keeps Extract output memory-only while resolving a later Fill', async () => {
+    const request = executionRequest([]);
+    request.workflow.steps = [
+      {
+        id: 'extractCustomerId',
+        type: 'extract',
+        name: 'Extract customer ID',
+        locator: { kind: 'testId', value: 'customer-id' },
+        source: { kind: 'text' },
+        outputName: 'customerId',
+        retention: 'ephemeral',
+      },
+      {
+        id: 'fillCustomerId',
+        type: 'fill',
+        name: 'Fill customer ID',
+        locator: { kind: 'label', value: 'Customer ID' },
+        value: { kind: 'output', outputName: 'customerId' },
+      },
+    ];
+    const adapter = new FakeAdapter();
+    const events: WorkflowProgressEvent[] = [];
+    const store = extractionStore();
+    const result = await new WorkflowEngine(adapter, {
+      createExecutionId: () => EXECUTION_ID,
+      progressSink: { emit: (event) => events.push(event) },
+      createRuntimeOutputStore: () => store,
+    }).execute(request);
+    expect(result.status).toBe('succeeded');
+    expect(adapter.resolvedValues.get('fillCustomerId')).toBe(
+      'ephemeral-customer-id',
+    );
+    expect(result.outputs).toEqual([
+      {
+        outputName: 'customerId',
+        outputType: 'string',
+        producerStepId: 'extractCustomerId',
+        status: 'produced',
+      },
+    ]);
+    const serialized = JSON.stringify({ events, result });
+    expect(serialized).not.toContain('ephemeral-customer-id');
+    expect(events.some((event) => event.kind === 'output_produced')).toBe(true);
+    expect(store.size).toBe(0);
+  });
+
+  it('clears produced output after a later step fails', async () => {
+    const request = executionRequest([]);
+    request.workflow.steps = [
+      {
+        id: 'extractCustomerId',
+        type: 'extract',
+        name: 'Extract customer ID',
+        locator: { kind: 'testId', value: 'customer-id' },
+        source: { kind: 'text' },
+        outputName: 'customerId',
+        retention: 'ephemeral',
+      },
+      {
+        id: 'failAfterExtract',
+        type: 'click',
+        name: 'Fail after extraction',
+        locator: { kind: 'testId', value: 'missing' },
+      },
+    ];
+    const adapter = new FakeAdapter();
+    adapter.behavior.set('failAfterExtract', 'fail');
+    const store = extractionStore();
+    const result = await new WorkflowEngine(adapter, {
+      createExecutionId: () => EXECUTION_ID,
+      createRuntimeOutputStore: () => store,
+    }).execute(request);
+    expect(result.status).toBe('failed');
+    expect(store.size).toBe(0);
+  });
+
+  it('rejects duplicate production and clears the store explicitly', () => {
+    const store = extractionStore();
+    store.set('customerId', 'string', 'first');
+    expect(() => store.set('customerId', 'string', 'second')).toThrowError(
+      expect.objectContaining({
+        safe: expect.objectContaining({ code: 'DUPLICATE_OUTPUT_PRODUCTION' }),
+      }),
+    );
+    store.clear();
+    expect(store.size).toBe(0);
+  });
   it('executes sequentially and returns every step with valid counts', async () => {
     const adapter = new FakeAdapter();
     const result = await engine(adapter).execute(executionRequest());
@@ -132,7 +232,13 @@ describe('workflow execution orchestration', () => {
     expect(
       events.map(
         (event) =>
-          `${event.kind}:${'status' in event ? event.status : event.warningCode}`,
+          `${event.kind}:${
+            'status' in event
+              ? event.status
+              : event.kind === 'warning'
+                ? event.warningCode
+                : event.outputName
+          }`,
       ),
     ).toEqual([
       'run_status_changed:pending',
