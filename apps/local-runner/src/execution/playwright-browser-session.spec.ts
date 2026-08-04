@@ -11,7 +11,11 @@ const options = {
 };
 
 function setup() {
-  const page = {} as Page;
+  const page = {
+    on: vi.fn(),
+    off: vi.fn(),
+    mainFrame: vi.fn(),
+  } as unknown as Page;
   const context = {
     newPage: vi.fn().mockResolvedValue(page),
     close: vi.fn().mockResolvedValue(undefined),

@@ -120,7 +120,7 @@ export function preflightWorkflowExecution(
     return failure('INVALID_EXECUTION_TIMEOUT', workflow);
   }
   if (
-    options.data.recoveryMode === 'automatic_safe_and_manual' &&
+    options.data.recoveryMode !== 'automatic_safe_only' &&
     !recoveryCoordinatorAvailable
   ) {
     return failure('RECOVERY_COORDINATOR_UNAVAILABLE', workflow);

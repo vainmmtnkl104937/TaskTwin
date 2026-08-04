@@ -287,6 +287,18 @@ Session 22 excludes locator editing, step skipping, workflow restart,
 uncertain-side-effect retry, crash resume, background retry scheduling and AI
 repair.
 
+## Session 23: deterministic locator repair proposals
+
+- Failure eligibility based on safe effect certainty
+- Bounded semantic candidates ranked by the existing locator engine
+- Privacy filtering before candidate metadata leaves the Runner
+- Read-only, page-context-bound candidate tests
+- Existing-Draft locator-only application with optimistic concurrency
+- Immutable source Published versions and explicit manual publishing
+
+Session 23 excludes active-run overrides, automatic continuation, DOM dumps,
+screenshots, XPath, AI repair, automatic Draft creation and publishing.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

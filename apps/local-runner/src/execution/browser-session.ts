@@ -5,6 +5,7 @@ import type { BrowserExecutionOptions } from './contracts.js';
 
 export interface BrowserSession {
   readonly page: Page;
+  currentPageContextDigest(): string;
   close(): Promise<SafeExecutionError | null>;
 }
 

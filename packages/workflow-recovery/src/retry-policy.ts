@@ -79,5 +79,13 @@ export function decideRetry(input: RetryPolicyInput): RetryPolicyDecision {
   ) {
     return { category, disposition: 'manual_repair', retryAllowed: true };
   }
+  if (
+    value.recoveryMode === 'automatic_safe_and_locator_proposals' &&
+    category === 'locator_resolution' &&
+    manualEffectAllowed &&
+    MANUAL_STEP_TYPES.has(value.stepType)
+  ) {
+    return { category, disposition: 'locator_proposal', retryAllowed: false };
+  }
   return { category, disposition: 'none', retryAllowed: false };
 }

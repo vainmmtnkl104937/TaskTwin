@@ -164,6 +164,31 @@ enum WorkflowRepairRequestStatus {
   @@map("workflow_repair_request_status")
 }
 
+enum WorkflowLocatorRepairProposalStatus {
+  OPEN
+  READY
+  APPLIED
+  EXPIRED
+  INVALIDATED
+
+  @@map("workflow_locator_repair_proposal_status")
+}
+
+enum WorkflowLocatorRepairCandidateTestStatus {
+  NOT_REQUESTED
+  PENDING
+  PASSED
+  NOT_FOUND
+  NOT_UNIQUE
+  NOT_ACTIONABLE
+  INCOMPATIBLE_ELEMENT
+  STALE_PAGE_CONTEXT
+  CANCELLED
+  ERROR
+
+  @@map("workflow_locator_repair_candidate_test_status")
+}
+
 model User {
   id                         String                        @id @default(uuid()) @db.Uuid
   email                      String                        @unique(map: "users_email_key") @db.VarChar(254)
@@ -185,6 +210,8 @@ model User {
   createdRunInputPreparations WorkflowRunInputPreparation[]  @relation("WorkflowRunInputPreparationCreator")
   decidedWorkflowApprovals    WorkflowApprovalRequest[]       @relation("WorkflowApprovalDecider")
   decidedWorkflowRepairs      WorkflowRepairRequest[]          @relation("WorkflowRepairDecider")
+  appliedLocatorRepairs       WorkflowLocatorRepairProposal[]  @relation("LocatorRepairApplier")
+  requestedLocatorTests       WorkflowLocatorRepairCandidate[] @relation("LocatorRepairTestRequester")
 
   @@map("users")
 }
@@ -230,6 +257,7 @@ model Workspace {
   workflowRuns          WorkflowRun[]
   runInputPreparations  WorkflowRunInputPreparation[]
   workflowRepairRequests WorkflowRepairRequest[]
+  locatorRepairProposals WorkflowLocatorRepairProposal[]
 
   @@unique([organizationId, slug], map: "workspaces_organization_id_slug_key")
   @@map("workspaces")
@@ -294,6 +322,7 @@ model RunnerDevice {
   runInputPreparations WorkflowRunInputPreparation[]
   approvalRequests WorkflowApprovalRequest[]
   repairRequests   WorkflowRepairRequest[]
+  locatorRepairProposals WorkflowLocatorRepairProposal[]
 
   @@index([workspaceId, revokedAt, lastSeenAt], map: "runner_devices_workspace_id_revoked_at_last_seen_at_idx")
   @@index([revokedById], map: "runner_devices_revoked_by_id_idx")
@@ -354,6 +383,8 @@ model WorkflowVersion {
   recordingConversion  RecordingWorkflowConversion?
   runs                 WorkflowRun[]
   runInputPreparations WorkflowRunInputPreparation[]
+  sourceLocatorRepairProposals WorkflowLocatorRepairProposal[] @relation("LocatorRepairSourceVersion")
+  appliedLocatorRepairProposals WorkflowLocatorRepairProposal[] @relation("LocatorRepairDraftVersion")
 
   @@unique([workflowId, version], map: "workflow_versions_workflow_id_version_key")
   @@unique([workflowId, clientCreationId], map: "workflow_versions_workflow_id_client_creation_id_key")
@@ -408,6 +439,7 @@ model WorkflowRun {
   approvalRequests        WorkflowApprovalRequest[]
   repairRequests          WorkflowRepairRequest[]
   stepAttempts            WorkflowRunStepAttempt[]
+  locatorRepairProposals  WorkflowLocatorRepairProposal[]
 
   @@unique([workspaceId, clientRunId], map: "workflow_runs_workspace_id_client_run_id_key")
   @@unique([runnerDeviceId, claimAttemptId], map: "workflow_runs_runner_device_id_claim_attempt_id_key")
@@ -578,6 +610,7 @@ model WorkflowRepairRequest {
   runnerDevice       RunnerDevice                     @relation(fields: [runnerDeviceId], references: [id], onDelete: Restrict)
   decidedBy          User?                            @relation("WorkflowRepairDecider", fields: [decidedByUserId], references: [id], onDelete: Restrict)
   authorizedAttempt  WorkflowRunStepAttempt?          @relation("RepairAuthorizedAttempt")
+  locatorRepairProposal WorkflowLocatorRepairProposal?
 
   @@unique([workflowRunId, stepId, attemptNumber], map: "workflow_repair_requests_run_step_attempt_key")
   @@unique([workflowRunId, clientRequestId], map: "workflow_repair_requests_run_client_request_key")
@@ -586,6 +619,90 @@ model WorkflowRepairRequest {
   @@index([runnerDeviceId, status], map: "workflow_repair_requests_runner_status_idx")
   @@index([decidedByUserId], map: "workflow_repair_requests_decided_by_idx")
   @@map("workflow_repair_requests")
+}
+
+model WorkflowLocatorRepairProposal {
+  id                      String                              @id @default(uuid()) @db.Uuid
+  workspaceId             String                              @map("workspace_id") @db.Uuid
+  workflowRunId           String                              @map("workflow_run_id") @db.Uuid
+  sourceWorkflowVersionId String                              @map("source_workflow_version_id") @db.Uuid
+  runnerDeviceId          String                              @map("runner_device_id") @db.Uuid
+  workflowRepairRequestId String                              @unique(map: "workflow_locator_repair_proposals_repair_request_id_key") @map("workflow_repair_request_id") @db.Uuid
+  stepId                  String                              @map("step_id") @db.VarChar(256)
+  stepIndex               Int                                 @map("step_index")
+  failedAttemptNumber     Int                                 @map("failed_attempt_number")
+  clientProposalId        String                              @map("client_proposal_id") @db.Uuid
+  requestDigest           String                              @map("request_digest") @db.Char(64)
+  sourceStepDigest        String                              @map("source_step_digest") @db.Char(64)
+  sourceLocatorDigest     String                              @map("source_locator_digest") @db.Char(64)
+  pageContextDigest       String                              @map("page_context_digest") @db.Char(64)
+  status                  WorkflowLocatorRepairProposalStatus @default(OPEN)
+  selectedCandidateId     String?                             @unique(map: "workflow_locator_repair_proposals_selected_candidate_id_key") @map("selected_candidate_id") @db.Uuid
+  appliedDraftVersionId   String?                             @map("applied_draft_version_id") @db.Uuid
+  appliedDraftRevision    Int?                                @map("applied_draft_revision")
+  appliedByUserId         String?                             @map("applied_by_user_id") @db.Uuid
+  clientApplyId           String?                             @map("client_apply_id") @db.Uuid
+  applyDigest             String?                             @map("apply_digest") @db.Char(64)
+  appliedAt               DateTime?                           @map("applied_at") @db.Timestamptz(3)
+  expiresAt               DateTime                            @map("expires_at") @db.Timestamptz(3)
+  createdAt               DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace               Workspace                           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  workflowRun             WorkflowRun                         @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+  sourceWorkflowVersion   WorkflowVersion                     @relation("LocatorRepairSourceVersion", fields: [sourceWorkflowVersionId], references: [id], onDelete: Restrict)
+  runnerDevice            RunnerDevice                        @relation(fields: [runnerDeviceId], references: [id], onDelete: Restrict)
+  workflowRepairRequest   WorkflowRepairRequest               @relation(fields: [workflowRepairRequestId], references: [id], onDelete: Restrict)
+  candidates              WorkflowLocatorRepairCandidate[]    @relation("LocatorRepairProposalCandidates")
+  selectedCandidate       WorkflowLocatorRepairCandidate?     @relation("LocatorRepairSelectedCandidate", fields: [selectedCandidateId], references: [id], onDelete: Restrict)
+  appliedDraftVersion     WorkflowVersion?                    @relation("LocatorRepairDraftVersion", fields: [appliedDraftVersionId], references: [id], onDelete: Restrict)
+  appliedBy               User?                               @relation("LocatorRepairApplier", fields: [appliedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([workflowRunId, clientProposalId], map: "workflow_locator_repair_proposals_run_client_key")
+  @@unique([workflowRunId, stepId, failedAttemptNumber], map: "workflow_locator_repair_proposals_run_step_attempt_key")
+  @@unique([workspaceId, clientApplyId], map: "workflow_locator_repair_proposals_workspace_apply_key")
+  @@index([workspaceId, status, createdAt], map: "workflow_locator_repair_proposals_workspace_status_idx")
+  @@index([runnerDeviceId, status], map: "workflow_locator_repair_proposals_runner_status_idx")
+  @@index([sourceWorkflowVersionId], map: "workflow_locator_repair_proposals_source_version_idx")
+  @@index([appliedDraftVersionId], map: "workflow_locator_repair_proposals_draft_version_idx")
+  @@map("workflow_locator_repair_proposals")
+}
+
+model WorkflowLocatorRepairCandidate {
+  id                    String                                   @id @default(uuid()) @db.Uuid
+  proposalId            String                                   @map("proposal_id") @db.Uuid
+  clientCandidateId     String                                   @map("client_candidate_id") @db.Uuid
+  locator               Json                                     @db.JsonB
+  locatorDigest         String                                   @map("locator_digest") @db.Char(64)
+  rank                  Int
+  strategy              String                                   @db.VarChar(32)
+  confidence            String                                   @db.VarChar(16)
+  score                 Int
+  elementKind           String                                   @map("element_kind") @db.VarChar(32)
+  reasonCodes           Json                                     @map("reason_codes") @db.JsonB
+  evidenceCodes         Json                                     @map("evidence_codes") @db.JsonB
+  privacyClassification String                                   @map("privacy_classification") @db.VarChar(32)
+  privacyRuleIds        Json                                     @map("privacy_rule_ids") @db.JsonB
+  testStatus            WorkflowLocatorRepairCandidateTestStatus @default(NOT_REQUESTED) @map("test_status")
+  clientTestRequestId   String?                                  @unique(map: "workflow_locator_repair_candidates_test_request_id_key") @map("client_test_request_id") @db.Uuid
+  testRequestDigest     String?                                  @map("test_request_digest") @db.Char(64)
+  testRequestedByUserId String?                                  @map("test_requested_by_user_id") @db.Uuid
+  testRequestedAt       DateTime?                                @map("test_requested_at") @db.Timestamptz(3)
+  clientTestResultId    String?                                  @unique(map: "workflow_locator_repair_candidates_test_result_id_key") @map("client_test_result_id") @db.Uuid
+  testResultDigest      String?                                  @map("test_result_digest") @db.Char(64)
+  testObservations      Json?                                    @map("test_observations") @db.JsonB
+  testedAt              DateTime?                                @map("tested_at") @db.Timestamptz(3)
+  createdAt             DateTime                                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime                                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  proposal              WorkflowLocatorRepairProposal            @relation("LocatorRepairProposalCandidates", fields: [proposalId], references: [id], onDelete: Cascade)
+  selectedByProposal    WorkflowLocatorRepairProposal?           @relation("LocatorRepairSelectedCandidate")
+  testRequestedBy       User?                                    @relation("LocatorRepairTestRequester", fields: [testRequestedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([proposalId, clientCandidateId], map: "workflow_locator_repair_candidates_proposal_client_key")
+  @@unique([proposalId, locatorDigest], map: "workflow_locator_repair_candidates_proposal_locator_key")
+  @@unique([proposalId, rank], map: "workflow_locator_repair_candidates_proposal_rank_key")
+  @@index([proposalId, testStatus], map: "workflow_locator_repair_candidates_proposal_test_status_idx")
+  @@index([testRequestedByUserId], map: "workflow_locator_repair_candidates_test_requester_idx")
+  @@map("workflow_locator_repair_candidates")
 }
 
 model WorkflowApprovalRequest {

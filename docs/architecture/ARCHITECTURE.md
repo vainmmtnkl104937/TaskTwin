@@ -702,3 +702,26 @@ PostgreSQL stores bounded safe attempt and repair metadata only. It excludes
 raw errors, runtime values, secrets, outputs, locators, complete URLs, DOM and
 screenshots. Idempotency keys and serializable row-locked decisions provide a
 single winner for concurrent Retry and Abort.
+
+## Locator repair proposal boundary
+
+`@tasktwin/workflow-locator-repair` owns framework-independent eligibility,
+privacy eligibility, deterministic ranking, candidate contracts and immutable
+locator-only patching. It reuses the workflow locator contract, locator engine,
+privacy engine and recovery effect certainty without importing Playwright,
+Prisma, NestJS or React.
+
+For a locator-not-found or locator-not-unique failure, mutating steps are
+eligible only when the action is known `not_started`; read-only Verify and
+Extract steps may also use `read_only`. The Local Runner inspects only bounded
+relevant elements, removes privacy-blocked candidates, and uploads at most five
+safe locator candidates. It never uploads DOM, HTML, field values, screenshots
+or complete URLs.
+
+Candidate tests remain inside the current isolated BrowserContext and use only
+read operations. A navigation-derived page-context digest rejects stale tests.
+The failed run stays paused and is never continued with a replacement locator.
+A passed candidate can replace exactly one locator in a compatible existing
+Draft. PostgreSQL row locks, idempotency digests, source-locator digests and
+expected Draft revision prevent conflicting or stale application; complete
+workflow validation runs before the Draft revision is atomically incremented.

@@ -128,3 +128,13 @@ occurs, the Runner retains its BrowserContext, keeps heartbeat and lease
 renewal active, performs no browser action, and polls the repair request. Retry
 executes only the failed step; every terminal outcome closes browser resources.
 Manual page changes are not fully audited and must never contain secrets.
+
+## Locator repair proposals
+
+An attended headed Runner advertises `locator_repair_proposals_v1`. With the
+matching run recovery mode, eligible locator failures produce at most five
+deterministic, privacy-filtered candidates. Tests use only read-only Locator
+queries in the current page context; they never execute the failed action.
+The active run receives no locator override and cannot resume from a proposal.
+A passed candidate is applied later to an existing Draft through the Web
+Repair Center with revision and lineage checks.

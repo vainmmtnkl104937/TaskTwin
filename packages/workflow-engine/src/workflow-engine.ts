@@ -804,7 +804,12 @@ export class WorkflowEngine {
                 repairRequestId = undefined;
                 continue;
               }
-              if (decision.disposition === 'manual_repair') {
+              if (
+                decision.disposition === 'manual_repair' ||
+                decision.disposition === 'locator_proposal'
+              ) {
+                const proposalOnly =
+                  decision.disposition === 'locator_proposal';
                 const coordinator = this.dependencies.recoveryCoordinator;
                 if (coordinator === undefined) {
                   stepError = safeError('RECOVERY_COORDINATOR_UNAVAILABLE');
@@ -866,11 +871,15 @@ export class WorkflowEngine {
                   status: repairStatus[repair.decision],
                   errorCode: attemptError.code,
                   effectCertainty,
-                  retryAllowed: repair.decision === 'retry',
+                  retryAllowed: !proposalOnly && repair.decision === 'retry',
                 });
                 recordDeadlineIfElapsed();
                 primary = choosePrimary();
-                if (repair.decision === 'retry' && primary === null) {
+                if (
+                  !proposalOnly &&
+                  repair.decision === 'retry' &&
+                  primary === null
+                ) {
                   transitionRun('running');
                   this.transitionStep(
                     record,
@@ -905,6 +914,13 @@ export class WorkflowEngine {
                   const selected = termination[repair.decision];
                   arbiter.record({
                     ...selected,
+                    atMs: this.clock.nowMs(),
+                    stepId: record.step.id,
+                  });
+                } else if (proposalOnly) {
+                  arbiter.record({
+                    cause: 'repair_invalidated',
+                    error: safeError('RECOVERY_INVALIDATED'),
                     atMs: this.clock.nowMs(),
                     stepId: record.step.id,
                   });

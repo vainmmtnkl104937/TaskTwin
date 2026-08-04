@@ -40,6 +40,17 @@ import {
   type RunnerRepairRequestCreated,
   type RunnerRepairStatus,
 } from '@tasktwin/workflow-recovery';
+import {
+  LocatorRepairDiscoverySeedSchema,
+  RunnerLocatorRepairCandidateTestResultSchema,
+  RunnerLocatorRepairPollResponseSchema,
+  RunnerLocatorRepairProposalCreatedSchema,
+  type LocatorRepairDiscoverySeed,
+  type RunnerLocatorRepairCandidateTestResult,
+  type RunnerLocatorRepairPollResponse,
+  type RunnerLocatorRepairProposalCreate,
+  type RunnerLocatorRepairProposalCreated,
+} from '@tasktwin/workflow-locator-repair';
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
@@ -116,6 +127,32 @@ export interface RunnerJobTransport {
     leaseToken: string,
     repairRequestId: string,
   ): Promise<RunnerRepairStatus>;
+  getLocatorRepairDiscoverySeed?(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    repairRequestId: string,
+  ): Promise<LocatorRepairDiscoverySeed>;
+  createLocatorRepairProposal?(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    request: RunnerLocatorRepairProposalCreate,
+  ): Promise<RunnerLocatorRepairProposalCreated>;
+  pollLocatorRepairProposal?(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    proposalId: string,
+  ): Promise<RunnerLocatorRepairPollResponse>;
+  submitLocatorRepairCandidateTestResult?(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    proposalId: string,
+    candidateId: string,
+    result: RunnerLocatorRepairCandidateTestResult,
+  ): Promise<RunnerLocatorRepairCandidateTestResult>;
 }
 
 export class HttpRunnerControlPlaneTransport
@@ -299,6 +336,68 @@ export class HttpRunnerControlPlaneTransport
       {
         method: 'GET',
         headers: this.runnerHeaders(credential, leaseToken),
+      },
+    );
+  }
+
+  getLocatorRepairDiscoverySeed(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    repairRequestId: string,
+  ): Promise<LocatorRepairDiscoverySeed> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/jobs/${encodeURIComponent(runId)}/locator-repairs/discovery/${encodeURIComponent(repairRequestId)}`,
+      LocatorRepairDiscoverySeedSchema,
+      { method: 'GET', headers: this.runnerHeaders(credential, leaseToken) },
+    );
+  }
+
+  createLocatorRepairProposal(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    request: RunnerLocatorRepairProposalCreate,
+  ): Promise<RunnerLocatorRepairProposalCreated> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/jobs/${encodeURIComponent(runId)}/locator-repairs`,
+      RunnerLocatorRepairProposalCreatedSchema,
+      {
+        method: 'POST',
+        headers: this.runnerHeaders(credential, leaseToken),
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  pollLocatorRepairProposal(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    proposalId: string,
+  ): Promise<RunnerLocatorRepairPollResponse> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/jobs/${encodeURIComponent(runId)}/locator-repairs/${encodeURIComponent(proposalId)}/poll`,
+      RunnerLocatorRepairPollResponseSchema,
+      { method: 'GET', headers: this.runnerHeaders(credential, leaseToken) },
+    );
+  }
+
+  submitLocatorRepairCandidateTestResult(
+    credential: StoredRunnerCredential,
+    runId: string,
+    leaseToken: string,
+    proposalId: string,
+    candidateId: string,
+    result: RunnerLocatorRepairCandidateTestResult,
+  ): Promise<RunnerLocatorRepairCandidateTestResult> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/jobs/${encodeURIComponent(runId)}/locator-repairs/${encodeURIComponent(proposalId)}/candidates/${encodeURIComponent(candidateId)}/result`,
+      RunnerLocatorRepairCandidateTestResultSchema,
+      {
+        method: 'POST',
+        headers: this.runnerHeaders(credential, leaseToken),
+        body: JSON.stringify(result),
       },
     );
   }

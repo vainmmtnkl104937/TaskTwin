@@ -15,6 +15,8 @@ import { WorkflowApprovalsController } from '../workflow-approvals/workflow-appr
 import { WorkflowApprovalsService } from '../workflow-approvals/workflow-approvals.service.js';
 import { WorkflowRepairsController } from '../workflow-repairs/workflow-repairs.controller.js';
 import { WorkflowRepairsService } from '../workflow-repairs/workflow-repairs.service.js';
+import { WorkflowLocatorRepairsController } from '../workflow-locator-repairs/workflow-locator-repairs.controller.js';
+import { WorkflowLocatorRepairsService } from '../workflow-locator-repairs/workflow-locator-repairs.service.js';
 
 @Module({
   imports: [
@@ -29,6 +31,7 @@ import { WorkflowRepairsService } from '../workflow-repairs/workflow-repairs.ser
     RunnerJobsController,
     WorkflowApprovalsController,
     WorkflowRepairsController,
+    WorkflowLocatorRepairsController,
   ],
   providers: [
     WorkflowRunsService,
@@ -37,6 +40,7 @@ import { WorkflowRepairsService } from '../workflow-repairs/workflow-repairs.ser
     RunnerJobLeaseGuard,
     WorkflowApprovalsService,
     WorkflowRepairsService,
+    WorkflowLocatorRepairsService,
   ],
 })
 export class WorkflowRunsModule {}

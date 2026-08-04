@@ -21,6 +21,7 @@ import {
   type SecureRunInputEnvelope,
 } from '@tasktwin/secure-run-inputs';
 import {
+  LOCATOR_REPAIR_PROPOSALS_CAPABILITY,
   WORKFLOW_EXTRACTION_CAPABILITY,
   WORKFLOW_APPROVAL_CAPABILITY,
   WORKFLOW_MANUAL_REPAIR_CAPABILITY,
@@ -296,6 +297,12 @@ export class SecureRunInputRepository {
       if (
         options.recoveryMode === 'automatic_safe_and_manual' &&
         !runner.capabilities.includes(WORKFLOW_MANUAL_REPAIR_CAPABILITY)
+      ) {
+        throw new SecureRunInputRepositoryError('CAPABILITY_UNAVAILABLE');
+      }
+      if (
+        options.recoveryMode === 'automatic_safe_and_locator_proposals' &&
+        !runner.capabilities.includes(LOCATOR_REPAIR_PROPOSALS_CAPABILITY)
       ) {
         throw new SecureRunInputRepositoryError('CAPABILITY_UNAVAILABLE');
       }

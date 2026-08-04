@@ -51,6 +51,18 @@ describe('workflow recovery policy', () => {
     ).toBe(false);
   });
 
+  it('offers a proposal without retry permission for eligible locator failures', () => {
+    expect(
+      decideRetry({
+        ...base,
+        stepType: 'fill',
+        errorCode: 'LOCATOR_NOT_FOUND',
+        effectCertainty: 'not_started',
+        recoveryMode: 'automatic_safe_and_locator_proposals',
+      }),
+    ).toMatchObject({ disposition: 'locator_proposal', retryAllowed: false });
+  });
+
   it('enforces attempt limits and approval gating', () => {
     expect(decideRetry({ ...base, totalAttemptCount: 3 }).retryAllowed).toBe(
       false,

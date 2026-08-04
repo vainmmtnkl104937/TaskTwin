@@ -16,6 +16,7 @@ import {
   WORKFLOW_EXTRACTION_CAPABILITY,
   WORKFLOW_APPROVAL_CAPABILITY,
   WORKFLOW_MANUAL_REPAIR_CAPABILITY,
+  LOCATOR_REPAIR_PROPOSALS_CAPABILITY,
 } from './constants.js';
 
 const UuidSchema = z.string().uuid();
@@ -29,10 +30,11 @@ export const RunnerCapabilitySchema = z.union([
   z.literal(WORKFLOW_EXTRACTION_CAPABILITY),
   z.literal(WORKFLOW_APPROVAL_CAPABILITY),
   z.literal(WORKFLOW_MANUAL_REPAIR_CAPABILITY),
+  z.literal(LOCATOR_REPAIR_PROPOSALS_CAPABILITY),
 ]);
 export const RunnerCapabilitiesSchema = z
   .array(RunnerCapabilitySchema)
-  .max(6)
+  .max(7)
   .superRefine((values, context) => {
     if (new Set(values).size !== values.length) {
       context.addIssue({

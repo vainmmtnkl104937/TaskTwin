@@ -16,6 +16,7 @@ import type {
 import type { BrowserExecutionOptions } from './contracts.js';
 import { validateExecutableLocator } from './locator-adapter.js';
 import { executeStep, type SupportedWorkflowStep } from './step-executor.js';
+import type { LocatorRepairBrowserBridge } from '../locator-repair/browser-bridge.js';
 
 const SUPPORTED_STEP_TYPES = [
   'navigate',
@@ -43,6 +44,7 @@ export class PlaywrightWorkflowExecutionAdapter implements WorkflowExecutionAdap
   constructor(
     private readonly sessions: BrowserSessionFactory,
     private readonly options: BrowserExecutionOptions,
+    private readonly locatorRepairBridge?: LocatorRepairBrowserBridge,
   ) {}
 
   validateStep(step: WorkflowStep): void {
@@ -68,6 +70,7 @@ export class PlaywrightWorkflowExecutionAdapter implements WorkflowExecutionAdap
       ),
     });
     this.session = session;
+    this.locatorRepairBridge?.attach(session);
     this.startSignal = context.signal;
     this.abortListener = () => {
       void session.close();
@@ -106,6 +109,7 @@ export class PlaywrightWorkflowExecutionAdapter implements WorkflowExecutionAdap
     this.startSignal = null;
     const session = this.session;
     this.session = null;
+    if (session !== null) this.locatorRepairBridge?.detach(session);
     return session === null ? null : session.close();
   }
 }

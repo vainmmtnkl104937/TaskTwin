@@ -317,7 +317,10 @@ function parseJsonArray(input: Prisma.JsonValue): string[] {
 function parseOptions(input: Prisma.JsonValue): {
   totalTimeoutMs: number;
   stepTimeoutMs: number;
-  recoveryMode: 'automatic_safe_only' | 'automatic_safe_and_manual';
+  recoveryMode:
+    | 'automatic_safe_only'
+    | 'automatic_safe_and_manual'
+    | 'automatic_safe_and_locator_proposals';
 } {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     throw new WorkflowRunRepositoryError('RUN_CONFLICT');
@@ -329,7 +332,8 @@ function parseOptions(input: Prisma.JsonValue): {
     typeof totalTimeoutMs !== 'number' ||
     typeof stepTimeoutMs !== 'number' ||
     (recoveryMode !== 'automatic_safe_only' &&
-      recoveryMode !== 'automatic_safe_and_manual')
+      recoveryMode !== 'automatic_safe_and_manual' &&
+      recoveryMode !== 'automatic_safe_and_locator_proposals')
   ) {
     throw new WorkflowRunRepositoryError('RUN_CONFLICT');
   }
@@ -385,7 +389,10 @@ export class WorkflowRunRepository {
     options: {
       totalTimeoutMs: number;
       stepTimeoutMs: number;
-      recoveryMode: 'automatic_safe_only' | 'automatic_safe_and_manual';
+      recoveryMode:
+        | 'automatic_safe_only'
+        | 'automatic_safe_and_manual'
+        | 'automatic_safe_and_locator_proposals';
     };
   }): Promise<CreateWorkflowRunResult> {
     return this.runSerializable(async (transaction) => {
@@ -539,6 +546,23 @@ export class WorkflowRunRepository {
               code: 'RUNNER_CAPABILITY_UNAVAILABLE',
               message:
                 'The selected Runner does not support attended manual repair.',
+            },
+          ],
+        });
+      }
+      if (
+        input.options.recoveryMode === 'automatic_safe_and_locator_proposals' &&
+        !runner.capabilities.includes('locator_repair_proposals_v1')
+      ) {
+        throw new WorkflowRunRepositoryError('RUN_NOT_READY', {
+          ...readiness,
+          ready: false,
+          issues: [
+            ...readiness.issues,
+            {
+              code: 'RUNNER_CAPABILITY_UNAVAILABLE',
+              message:
+                'The selected Runner does not support locator repair proposals.',
             },
           ],
         });

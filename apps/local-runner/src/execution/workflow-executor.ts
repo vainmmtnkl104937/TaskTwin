@@ -13,6 +13,7 @@ import {
 import type { BrowserSessionFactory } from './browser-session.js';
 import { LocalExecutionRequestSchema } from './contracts.js';
 import { PlaywrightWorkflowExecutionAdapter } from './playwright-workflow-execution-adapter.js';
+import type { LocatorRepairBrowserBridge } from '../locator-repair/browser-bridge.js';
 
 export class LocalWorkflowExecutor {
   constructor(
@@ -20,6 +21,7 @@ export class LocalWorkflowExecutor {
     private readonly progressSink?: WorkflowProgressSink,
     private readonly approvalCoordinator?: WorkflowApprovalCoordinator,
     private readonly recoveryCoordinator?: WorkflowRecoveryCoordinator,
+    private readonly locatorRepairBridge?: LocatorRepairBrowserBridge,
   ) {}
 
   execute(
@@ -32,11 +34,15 @@ export class LocalWorkflowExecutor {
     if (!request.success) {
       throw new SafeExecutionException('INVALID_EXECUTION_REQUEST');
     }
-    const adapter = new PlaywrightWorkflowExecutionAdapter(this.sessions, {
-      headless: request.data.options.headless,
-      actionTimeoutMs: request.data.options.actionTimeoutMs,
-      navigationTimeoutMs: request.data.options.navigationTimeoutMs,
-    });
+    const adapter = new PlaywrightWorkflowExecutionAdapter(
+      this.sessions,
+      {
+        headless: request.data.options.headless,
+        actionTimeoutMs: request.data.options.actionTimeoutMs,
+        navigationTimeoutMs: request.data.options.navigationTimeoutMs,
+      },
+      this.locatorRepairBridge,
+    );
     const engine = new WorkflowEngine(adapter, {
       createExecutionId:
         executionId === undefined ? randomUUID : () => executionId,

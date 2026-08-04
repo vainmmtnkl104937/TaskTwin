@@ -23,6 +23,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@tasktwin/locator-engine": "workspace:*",
     "@tasktwin/workflow-extraction": "workspace:*",
     "@tasktwin/workflow-approval": "workspace:*",
     "@prisma/adapter-pg": "7.9.1",
@@ -35,9 +36,11 @@
     "@tasktwin/workflow-engine": "workspace:*",
     "@tasktwin/workflow-editor-core": "workspace:*",
     "@tasktwin/workflow-lifecycle": "workspace:*",
+    "@tasktwin/workflow-locator-repair": "workspace:*",
     "@tasktwin/workflow-recovery": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
-    "pg": "8.22.0"
+    "pg": "8.22.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@tasktwin/config": "workspace:*",

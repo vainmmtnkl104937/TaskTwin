@@ -246,7 +246,10 @@ export class WorkflowRepairRepository {
           totalAttemptCount: storedStep.attempts.length,
           approvalGated: isApprovalGatedStep(workflow, step.id),
         });
-        if (decision.disposition !== 'manual_repair') {
+        if (
+          decision.disposition !== 'manual_repair' &&
+          decision.disposition !== 'locator_proposal'
+        ) {
           throw new WorkflowRepairRepositoryError('REPAIR_INVALID');
         }
         const expiresAt = new Date(input.request.expiresAt);
@@ -288,7 +291,7 @@ export class WorkflowRepairRepository {
             requestDigest: digest,
             safeErrorCode: input.request.safeErrorCode,
             effectCertainty: effectToDatabase(input.request.effectCertainty),
-            retryAllowed: true,
+            retryAllowed: decision.retryAllowed,
             requestedAt: input.now,
             expiresAt,
           },

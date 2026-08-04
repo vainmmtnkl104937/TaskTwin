@@ -65,6 +65,16 @@ const detailSelect = {
       conversionReport: true,
     },
   },
+  appliedLocatorRepairProposals: {
+    where: { status: 'APPLIED' },
+    select: {
+      id: true,
+      stepId: true,
+      selectedCandidate: {
+        select: { strategy: true, confidence: true },
+      },
+    },
+  },
   workflow: {
     select: {
       workspaceId: true,
@@ -125,6 +135,19 @@ function toDetailRecord(
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     conversionReport: row.recordingConversion?.conversionReport ?? null,
+    locatorRepairMetadata: (row.appliedLocatorRepairProposals ?? []).flatMap(
+      (proposal) =>
+        proposal.selectedCandidate === null
+          ? []
+          : [
+              {
+                proposalId: proposal.id,
+                stepId: proposal.stepId,
+                strategy: proposal.selectedCandidate.strategy,
+                confidence: proposal.selectedCandidate.confidence,
+              },
+            ],
+    ),
     access: toAccessRecord(actorUserId, membership),
   };
 }

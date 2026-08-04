@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  LOCATOR_REPAIR_PROPOSALS_CAPABILITY,
   WORKFLOW_MANUAL_REPAIR_CAPABILITY,
   WORKFLOW_VERIFICATION_CAPABILITY,
 } from '@tasktwin/runner-protocol';
@@ -178,6 +179,16 @@ export function RunWorkflowPanel({
             }
           >
             Attended manual repair
+          </option>
+          <option
+            value="automatic_safe_and_locator_proposals"
+            disabled={
+              !compatibleRunners
+                .find((runner) => runner.id === runnerId)
+                ?.capabilities.includes(LOCATOR_REPAIR_PROPOSALS_CAPABILITY)
+            }
+          >
+            Locator repair proposals
           </option>
         </select>
       </label>
