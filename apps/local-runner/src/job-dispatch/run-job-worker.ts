@@ -17,6 +17,7 @@ import type { RunnerKeyManager } from '../secure-inputs/runner-key-manager.js';
 import { acquireSecureRuntime } from '../secure-inputs/secure-runtime.js';
 import { HttpApprovalCoordinator } from './http-approval-coordinator.js';
 import { HttpRecoveryCoordinator } from './http-recovery-coordinator.js';
+import { LocatorRepairBrowserBridge } from '../locator-repair/browser-bridge.js';
 
 export class RunJobWorker {
   constructor(
@@ -121,6 +122,10 @@ export class RunJobWorker {
           invalidSecureInput = true;
         }
       }
+      const locatorRepairBridge =
+        job.options.recoveryMode === 'automatic_safe_and_locator_proposals'
+          ? new LocatorRepairBrowserBridge()
+          : undefined;
       const result = await new LocalWorkflowExecutor(
         this.sessions,
         sink,
@@ -138,8 +143,10 @@ export class RunJobWorker {
               job.runId,
               job.leaseToken,
               () => sink.flush(),
+              locatorRepairBridge,
             )
           : undefined,
+        locatorRepairBridge,
       ).execute(
         {
           schemaVersion: 1,

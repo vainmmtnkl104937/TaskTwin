@@ -14,17 +14,25 @@ import type {
 } from './browser-session.js';
 import type { BrowserExecutionOptions } from './contracts.js';
 import { SafeExecutionException, safeError } from './errors.js';
+import { PageContextTracker } from '../locator-repair/page-context.js';
 
 type ChromiumLauncher = Pick<BrowserType<ChromiumBrowser>, 'launch'>;
 
 class OwnedPlaywrightBrowserSession implements BrowserSession {
   private closePromise: Promise<SafeExecutionError | null> | null = null;
+  private readonly pageContext: PageContextTracker;
 
   constructor(
     private readonly browser: Browser,
     private readonly context: BrowserContext,
     readonly page: Page,
-  ) {}
+  ) {
+    this.pageContext = new PageContextTracker(page);
+  }
+
+  currentPageContextDigest(): string {
+    return this.pageContext.digest();
+  }
 
   close(): Promise<SafeExecutionError | null> {
     this.closePromise ??= this.closeResources();
@@ -32,6 +40,7 @@ class OwnedPlaywrightBrowserSession implements BrowserSession {
   }
 
   private async closeResources(): Promise<SafeExecutionError | null> {
+    this.pageContext.dispose();
     let failed = false;
     try {
       await this.context.close();

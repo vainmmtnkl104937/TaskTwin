@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@tasktwin/locator-engine": "workspace:*",
+    "@tasktwin/privacy-engine": "workspace:*",
     "@tasktwin/run-protocol": "workspace:*",
     "@tasktwin/runner-protocol": "workspace:*",
     "@tasktwin/secure-run-inputs": "workspace:*",
@@ -27,6 +28,7 @@
     "@tasktwin/workflow-approval": "workspace:*",
     "@tasktwin/workflow-extraction": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",
+    "@tasktwin/workflow-locator-repair": "workspace:*",
     "@tasktwin/workflow-recovery": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "@tasktwin/workflow-verification": "workspace:*",

@@ -101,7 +101,19 @@ export function toWorkflowVersionDetailResponse(
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
     },
-    locatorMetadata: toSafeLocatorMetadata(definition, record.conversionReport),
+    locatorMetadata: [
+      ...toSafeLocatorMetadata(definition, record.conversionReport).filter(
+        (metadata) =>
+          !(record.locatorRepairMetadata ?? []).some(
+            (repair) => repair.stepId === metadata.stepId,
+          ),
+      ),
+      ...(record.locatorRepairMetadata ?? []).map((repair) => ({
+        stepId: repair.stepId,
+        confidence: repair.confidence,
+        provenance: `repair:${repair.proposalId}`,
+      })),
+    ],
     publishReadiness: analyzePublishReadiness(definition),
   });
 }

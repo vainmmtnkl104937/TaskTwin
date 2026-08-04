@@ -78,7 +78,10 @@ export type ClaimWorkflowRunResult =
       options: {
         totalTimeoutMs: number;
         stepTimeoutMs: number;
-        recoveryMode: 'automatic_safe_only' | 'automatic_safe_and_manual';
+        recoveryMode:
+          | 'automatic_safe_only'
+          | 'automatic_safe_and_manual'
+          | 'automatic_safe_and_locator_proposals';
       };
       runtimeInput: ClaimedRunInput;
       leaseExpiresAt: Date;

@@ -123,6 +123,16 @@ export type {
 } from './workflow-repair/workflow-repair-records.js';
 export { WorkflowRepairRepository } from './workflow-repair/workflow-repair.repository.js';
 export {
+  WorkflowLocatorRepairRepositoryError,
+  type WorkflowLocatorRepairRepositoryErrorCode,
+} from './workflow-locator-repair/workflow-locator-repair-errors.js';
+export type {
+  WorkflowLocatorRepairAccess,
+  WorkflowLocatorRepairCandidateRecord,
+  WorkflowLocatorRepairProposalRecord,
+} from './workflow-locator-repair/workflow-locator-repair-records.js';
+export { WorkflowLocatorRepairRepository } from './workflow-locator-repair/workflow-locator-repair.repository.js';
+export {
   SecureRunInputRepositoryError,
   type SecureRunInputRepositoryErrorCode,
 } from './secure-run-input/secure-run-input-errors.js';

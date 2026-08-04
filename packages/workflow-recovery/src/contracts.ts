@@ -37,6 +37,7 @@ export const ExecutionEffectCertaintySchema = z.enum([
 export const RecoveryModeSchema = z.enum([
   'automatic_safe_only',
   'automatic_safe_and_manual',
+  'automatic_safe_and_locator_proposals',
 ]);
 
 export const RetryTriggerSchema = z.enum([
@@ -49,6 +50,7 @@ export const RetryDispositionSchema = z.enum([
   'none',
   'automatic_retry',
   'manual_repair',
+  'locator_proposal',
   'new_run_required',
 ]);
 

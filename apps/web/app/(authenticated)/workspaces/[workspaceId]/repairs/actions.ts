@@ -5,7 +5,11 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { getAccessToken } from '@/lib/server/auth-session';
-import { decideRepairRequest } from '@/lib/server/control-plane';
+import {
+  applyLocatorRepairCandidate,
+  decideRepairRequest,
+  requestLocatorRepairCandidateTest,
+} from '@/lib/server/control-plane';
 
 const DecisionInputSchema = z.strictObject({
   workspaceId: z.string().uuid(),
@@ -23,5 +27,43 @@ export async function decideRepairAction(input: unknown): Promise<void> {
     parsed.data.decision,
     randomUUID(),
   );
+  revalidatePath(`/workspaces/${parsed.data.workspaceId}/repairs`);
+}
+
+const TestInputSchema = z.strictObject({
+  workspaceId: z.string().uuid(),
+  candidateId: z.string().uuid(),
+});
+
+export async function requestLocatorTestAction(input: unknown): Promise<void> {
+  const parsed = TestInputSchema.safeParse(input);
+  const token = await getAccessToken();
+  if (!parsed.success || token === null) return;
+  await requestLocatorRepairCandidateTest(
+    token,
+    parsed.data.candidateId,
+    randomUUID(),
+  );
+  revalidatePath(`/workspaces/${parsed.data.workspaceId}/repairs`);
+}
+
+const ApplyInputSchema = z.strictObject({
+  workspaceId: z.string().uuid(),
+  proposalId: z.string().uuid(),
+  candidateId: z.string().uuid(),
+  targetDraftVersionId: z.string().uuid(),
+  expectedRevision: z.number().int().positive(),
+});
+
+export async function applyLocatorRepairAction(input: unknown): Promise<void> {
+  const parsed = ApplyInputSchema.safeParse(input);
+  const token = await getAccessToken();
+  if (!parsed.success || token === null) return;
+  await applyLocatorRepairCandidate(token, parsed.data.proposalId, {
+    clientApplyId: randomUUID(),
+    candidateId: parsed.data.candidateId,
+    targetDraftVersionId: parsed.data.targetDraftVersionId,
+    expectedRevision: parsed.data.expectedRevision,
+  });
   revalidatePath(`/workspaces/${parsed.data.workspaceId}/repairs`);
 }

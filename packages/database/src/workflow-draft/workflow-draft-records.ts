@@ -42,6 +42,12 @@ export interface WorkflowVersionDetailRecord {
   createdAt: Date;
   updatedAt: Date;
   conversionReport: Prisma.JsonValue | null;
+  locatorRepairMetadata?: Array<{
+    proposalId: string;
+    stepId: string;
+    strategy: string;
+    confidence: string;
+  }>;
   access: WorkflowAccessRecord;
 }
 

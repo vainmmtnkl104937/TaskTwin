@@ -10,6 +10,7 @@ import {
   WORKFLOW_EXTRACTION_CAPABILITY,
   WORKFLOW_APPROVAL_CAPABILITY,
   WORKFLOW_MANUAL_REPAIR_CAPABILITY,
+  LOCATOR_REPAIR_PROPOSALS_CAPABILITY,
   type RunnerCapability,
   type RunnerDeviceMetadata,
   type StoredRunnerCredential,
@@ -248,6 +249,7 @@ export class LocalRunnerService {
           this.executionConfiguration.attended
         ) {
           capabilities.push(WORKFLOW_MANUAL_REPAIR_CAPABILITY);
+          capabilities.push(LOCATOR_REPAIR_PROPOSALS_CAPABILITY);
         }
       }
     }

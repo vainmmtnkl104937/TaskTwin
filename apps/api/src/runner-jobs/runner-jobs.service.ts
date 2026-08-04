@@ -14,6 +14,8 @@ import {
   WorkflowRunRepositoryError,
   WorkflowRepairRepository,
   WorkflowRepairRepositoryError,
+  WorkflowLocatorRepairRepository,
+  WorkflowLocatorRepairRepositoryError,
   createCanonicalJsonDigest,
 } from '@tasktwin/database';
 import {
@@ -42,6 +44,13 @@ import {
   RunnerRepairRequestCreatedSchema,
   RunnerRepairStatusSchema,
 } from '@tasktwin/workflow-recovery';
+import {
+  LocatorRepairDiscoverySeedSchema,
+  RunnerLocatorRepairCandidateTestResultSchema,
+  RunnerLocatorRepairPollResponseSchema,
+  RunnerLocatorRepairProposalCreateSchema,
+  RunnerLocatorRepairProposalCreatedSchema,
+} from '@tasktwin/workflow-locator-repair';
 
 import type { AuthenticatedRunner } from '../runner-auth/runner-authenticated-request.js';
 import type { AuthenticatedRunLease } from './runner-job-lease-context.js';
@@ -77,6 +86,7 @@ export class RunnerJobsService {
     private readonly crypto: RunnerJobLeaseCryptoService,
     private readonly approvalRepository: WorkflowApprovalRepository,
     private readonly repairRepository: WorkflowRepairRepository,
+    private readonly locatorRepairRepository: WorkflowLocatorRepairRepository,
   ) {}
 
   private rethrowApproval(error: unknown): never {
@@ -112,6 +122,129 @@ export class RunnerJobsService {
           code: error.code,
           message: 'The repair operation conflicts with current state.',
         });
+    }
+  }
+
+  private rethrowLocatorRepair(error: unknown): never {
+    if (!(error instanceof WorkflowLocatorRepairRepositoryError)) throw error;
+    switch (error.code) {
+      case 'LOCATOR_REPAIR_NOT_FOUND':
+        throw new NotFoundException();
+      case 'RUNNER_MISMATCH':
+      case 'LOCATOR_REPAIR_FORBIDDEN':
+        throw new ForbiddenException();
+      case 'LEASE_INVALID':
+        throw new UnauthorizedException();
+      default:
+        throw new ConflictException({
+          code: error.code,
+          message: 'The locator repair operation conflicts with current state.',
+        });
+    }
+  }
+
+  async locatorRepairDiscovery(
+    runner: AuthenticatedRunner,
+    lease: AuthenticatedRunLease,
+    repairRequestId: string,
+  ) {
+    if (!UuidSchema.safeParse(repairRequestId).success)
+      throw new BadRequestException();
+    try {
+      return LocatorRepairDiscoverySeedSchema.parse(
+        await this.locatorRepairRepository.discoverySeedForRunner({
+          workflowRunId: lease.workflowRunId,
+          repairRequestId,
+          runnerDeviceId: runner.runnerDeviceId,
+          leaseTokenHash: lease.leaseTokenHash,
+          now: new Date(),
+        }),
+      );
+    } catch (error: unknown) {
+      this.rethrowLocatorRepair(error);
+    }
+  }
+
+  async createLocatorRepair(
+    runner: AuthenticatedRunner,
+    lease: AuthenticatedRunLease,
+    body: unknown,
+  ) {
+    const request = RunnerLocatorRepairProposalCreateSchema.safeParse(body);
+    if (!request.success)
+      throw new BadRequestException('Invalid locator repair proposal.');
+    try {
+      const result = await this.locatorRepairRepository.createForRunner({
+        workflowRunId: lease.workflowRunId,
+        runnerDeviceId: runner.runnerDeviceId,
+        leaseTokenHash: lease.leaseTokenHash,
+        request: request.data,
+        now: new Date(),
+      });
+      return RunnerLocatorRepairProposalCreatedSchema.parse({
+        schemaVersion: 1,
+        proposalId: result.record.id,
+        status: result.record.status,
+        expiresAt: result.record.expiresAt.toISOString(),
+        idempotent: result.idempotent,
+        candidates: result.record.candidates.map((candidate) => ({
+          clientCandidateId: candidate.clientCandidateId,
+          candidateId: candidate.id,
+        })),
+      });
+    } catch (error: unknown) {
+      this.rethrowLocatorRepair(error);
+    }
+  }
+
+  async pollLocatorRepair(
+    runner: AuthenticatedRunner,
+    lease: AuthenticatedRunLease,
+    proposalId: string,
+  ) {
+    if (!UuidSchema.safeParse(proposalId).success)
+      throw new BadRequestException();
+    try {
+      const result = await this.locatorRepairRepository.pollForRunner({
+        workflowRunId: lease.workflowRunId,
+        runnerDeviceId: runner.runnerDeviceId,
+        leaseTokenHash: lease.leaseTokenHash,
+        now: new Date(),
+      });
+      if (result.record.id !== proposalId) throw new NotFoundException();
+      return RunnerLocatorRepairPollResponseSchema.parse({
+        schemaVersion: 1,
+        proposalId,
+        status: result.record.status,
+        command: result.command,
+      });
+    } catch (error: unknown) {
+      this.rethrowLocatorRepair(error);
+    }
+  }
+
+  async submitLocatorRepairTest(
+    runner: AuthenticatedRunner,
+    lease: AuthenticatedRunLease,
+    candidateId: string,
+    body: unknown,
+  ) {
+    const result = RunnerLocatorRepairCandidateTestResultSchema.safeParse(body);
+    if (!result.success || !UuidSchema.safeParse(candidateId).success) {
+      throw new BadRequestException('Invalid locator repair candidate result.');
+    }
+    try {
+      await this.locatorRepairRepository.submitTestResultForRunner({
+        workflowRunId: lease.workflowRunId,
+        candidateId,
+        runnerDeviceId: runner.runnerDeviceId,
+        leaseTokenHash: lease.leaseTokenHash,
+        result: result.data,
+        now: new Date(),
+      });
+      return result.data;
+    } catch (error: unknown) {
+      this.rethrowLocatorRepair(error);
     }
   }
 

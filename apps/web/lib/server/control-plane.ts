@@ -1,6 +1,12 @@
 import 'server-only';
 
 import type { z } from 'zod';
+import {
+  ApplyLocatorRepairToDraftResponseSchema,
+  LocatorRepairCandidateTestRequestResponseSchema,
+  LocatorRepairProposalDetailResponseSchema,
+  LocatorRepairProposalListResponseSchema,
+} from '@tasktwin/workflow-locator-repair';
 
 import {
   LoginResponseSchema,
@@ -264,7 +270,10 @@ export function createWorkflowRun(
   workflowVersionId: string,
   runnerDeviceId: string,
   clientRunId: string,
-  recoveryMode: 'automatic_safe_only' | 'automatic_safe_and_manual',
+  recoveryMode:
+    | 'automatic_safe_only'
+    | 'automatic_safe_and_manual'
+    | 'automatic_safe_and_locator_proposals',
 ) {
   return request(
     `/workflow-versions/${encodeURIComponent(workflowVersionId)}/runs`,
@@ -296,7 +305,10 @@ export function prepareWorkflowRunInputs(
     options: {
       totalTimeoutMs: number;
       stepTimeoutMs: number;
-      recoveryMode: 'automatic_safe_only' | 'automatic_safe_and_manual';
+      recoveryMode:
+        | 'automatic_safe_only'
+        | 'automatic_safe_and_manual'
+        | 'automatic_safe_and_locator_proposals';
     };
   },
 ) {
@@ -438,6 +450,65 @@ export function decideRepairRequest(
       method: 'POST',
       headers: { authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ clientDecisionId }),
+    },
+  );
+}
+
+export function listLocatorRepairProposals(
+  accessToken: string,
+  workspaceId: string,
+) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/locator-repair-proposals`,
+    LocatorRepairProposalListResponseSchema,
+    { method: 'GET', headers: { authorization: `Bearer ${accessToken}` } },
+  );
+}
+
+export function getLocatorRepairProposal(
+  accessToken: string,
+  proposalId: string,
+) {
+  return request(
+    `/locator-repair-proposals/${encodeURIComponent(proposalId)}`,
+    LocatorRepairProposalDetailResponseSchema,
+    { method: 'GET', headers: { authorization: `Bearer ${accessToken}` } },
+  );
+}
+
+export function requestLocatorRepairCandidateTest(
+  accessToken: string,
+  candidateId: string,
+  clientTestRequestId: string,
+) {
+  return request(
+    `/locator-repair-candidates/${encodeURIComponent(candidateId)}/test`,
+    LocatorRepairCandidateTestRequestResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ schemaVersion: 1, clientTestRequestId }),
+    },
+  );
+}
+
+export function applyLocatorRepairCandidate(
+  accessToken: string,
+  proposalId: string,
+  input: {
+    clientApplyId: string;
+    candidateId: string;
+    targetDraftVersionId: string;
+    expectedRevision: number;
+  },
+) {
+  return request(
+    `/locator-repair-proposals/${encodeURIComponent(proposalId)}/apply`,
+    ApplyLocatorRepairToDraftResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ schemaVersion: 1, ...input }),
     },
   );
 }

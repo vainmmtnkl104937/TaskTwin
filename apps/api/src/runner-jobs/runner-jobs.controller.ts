@@ -102,4 +102,54 @@ export class RunnerJobsController {
   ) {
     return this.service.repairStatus(runner, lease, repairRequestId);
   }
+
+  @Get('runner/jobs/:workflowRunId/locator-repairs/discovery/:repairRequestId')
+  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  locatorRepairDiscovery(
+    @CurrentRunner() runner: AuthenticatedRunner,
+    @CurrentRunLease() lease: AuthenticatedRunLease,
+    @Param('repairRequestId') repairRequestId: string,
+  ) {
+    return this.service.locatorRepairDiscovery(runner, lease, repairRequestId);
+  }
+
+  @Post('runner/jobs/:workflowRunId/locator-repairs')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  createLocatorRepair(
+    @CurrentRunner() runner: AuthenticatedRunner,
+    @CurrentRunLease() lease: AuthenticatedRunLease,
+    @Body() body: unknown,
+  ) {
+    return this.service.createLocatorRepair(runner, lease, body);
+  }
+
+  @Get('runner/jobs/:workflowRunId/locator-repairs/:proposalId/poll')
+  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  pollLocatorRepair(
+    @CurrentRunner() runner: AuthenticatedRunner,
+    @CurrentRunLease() lease: AuthenticatedRunLease,
+    @Param('proposalId') proposalId: string,
+  ) {
+    return this.service.pollLocatorRepair(runner, lease, proposalId);
+  }
+
+  @Post(
+    'runner/jobs/:workflowRunId/locator-repairs/:proposalId/candidates/:candidateId/result',
+  )
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  locatorRepairResult(
+    @CurrentRunner() runner: AuthenticatedRunner,
+    @CurrentRunLease() lease: AuthenticatedRunLease,
+    @Param('candidateId') candidateId: string,
+    @Body() body: unknown,
+  ) {
+    return this.service.submitLocatorRepairTest(
+      runner,
+      lease,
+      candidateId,
+      body,
+    );
+  }
 }

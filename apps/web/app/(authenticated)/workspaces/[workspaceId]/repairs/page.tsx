@@ -2,9 +2,13 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { getAccessToken } from '@/lib/server/auth-session';
-import { listRepairRequests } from '@/lib/server/control-plane';
+import {
+  listLocatorRepairProposals,
+  listRepairRequests,
+} from '@/lib/server/control-plane';
 
 import { RepairDecisionButtons } from './repair-decision-buttons';
+import { LocatorRepairControls } from './locator-repair-controls';
 
 const effectDescription = {
   not_started: 'The browser action is known not to have started.',
@@ -22,7 +26,10 @@ export default async function RepairCenterPage({
   const { workspaceId } = await params;
   const token = await getAccessToken();
   if (token === null) redirect('/login');
-  const result = await listRepairRequests(token, workspaceId);
+  const [result, locatorRepairs] = await Promise.all([
+    listRepairRequests(token, workspaceId),
+    listLocatorRepairProposals(token, workspaceId),
+  ]);
   return (
     <main className="dashboard-page">
       <nav aria-label="Breadcrumb">
@@ -73,6 +80,43 @@ export default async function RepairCenterPage({
         ))}
         {result.requests.length === 0 ? (
           <p className="empty-state">No repair request exists.</p>
+        ) : null}
+      </section>
+      <section className="workflow-list" aria-label="Locator repair proposals">
+        <h2>Locator repair proposals</h2>
+        <p>
+          Candidate tests are read-only. A passed candidate can update only an
+          existing Draft; the failed run is never resumed.
+        </p>
+        {locatorRepairs.proposals.map((proposal) => (
+          <article className="panel workflow-list-item" key={proposal.id}>
+            <div>
+              <h3>{proposal.step.name}</h3>
+              <p className="metadata">
+                Source version {proposal.sourceWorkflowVersion} ·{' '}
+                {proposal.status} · attempt {proposal.failedAttemptNumber}
+              </p>
+              {proposal.candidates.map((candidate) => (
+                <div key={candidate.id}>
+                  <p>
+                    Candidate {candidate.rank}: {candidate.strategy} ·{' '}
+                    {candidate.confidence} confidence · {candidate.testStatus}
+                  </p>
+                  <LocatorRepairControls
+                    workspaceId={workspaceId}
+                    proposalId={proposal.id}
+                    candidateId={candidate.id}
+                    testStatus={candidate.testStatus}
+                    canTest={locatorRepairs.access.canTest}
+                    canApply={locatorRepairs.access.canApply}
+                  />
+                </div>
+              ))}
+            </div>
+          </article>
+        ))}
+        {locatorRepairs.proposals.length === 0 ? (
+          <p className="empty-state">No locator repair proposal exists.</p>
         ) : null}
       </section>
     </main>

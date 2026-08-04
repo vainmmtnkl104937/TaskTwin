@@ -37,6 +37,7 @@
     "@tasktwin/workflow-engine": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",
     "@tasktwin/workflow-lifecycle": "workspace:*",
+    "@tasktwin/workflow-locator-repair": "workspace:*",
     "@tasktwin/workflow-recovery": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "class-transformer": "0.5.1",
