@@ -1,4 +1,13 @@
 export {
+  ClickActionIntentSchema,
+  WorkflowActionIntentSchema,
+} from './action-intent.js';
+export type {
+  ClickActionIntent,
+  WorkflowActionIntent,
+} from './action-intent.js';
+
+export {
   CssLocatorSchema,
   ElementLocatorSchema,
   LabelLocatorSchema,

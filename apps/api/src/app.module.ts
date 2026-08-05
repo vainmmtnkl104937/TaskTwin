@@ -13,6 +13,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module.js';
 import { WorkflowLifecycleModule } from './workflow-lifecycle/workflow-lifecycle.module.js';
 import { WorkflowsModule } from './workflows/workflows.module.js';
 import { WorkflowRunsModule } from './workflow-runs/workflow-runs.module.js';
+import { ExecutionPolicyModule } from './execution-policy/execution-policy.module.js';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { WorkflowRunsModule } from './workflow-runs/workflow-runs.module.js';
     WorkflowLifecycleModule,
     WorkflowsModule,
     WorkflowRunsModule,
+    ExecutionPolicyModule,
   ],
   controllers: [HealthController],
   providers: [HealthService],

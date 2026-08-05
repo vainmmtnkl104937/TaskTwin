@@ -61,6 +61,19 @@ function rethrowRepositoryError(error: unknown): never {
         code: 'WORKFLOW_DEFINITION_INVALID',
         message: 'The workflow definition is invalid.',
       });
+    case 'WORKFLOW_POLICY_BLOCKED':
+      throw new BadRequestException({
+        code: error.code,
+        message: 'The workflow is blocked by the active execution policy.',
+        ...(error.readiness === undefined
+          ? {}
+          : { readiness: error.readiness }),
+      });
+    case 'WORKFLOW_POLICY_MISSING':
+      throw new InternalServerErrorException({
+        code: error.code,
+        message: 'The Workspace execution policy is unavailable.',
+      });
     case 'SERIALIZATION_FAILURE':
       throw new ServiceUnavailableException({
         code: 'WORKFLOW_DRAFT_SERIALIZATION_FAILURE',

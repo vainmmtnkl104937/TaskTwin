@@ -431,3 +431,12 @@ Draft with optimistic revision protection.
 It does not resume the failed run, override a runtime locator, modify Published
 versions, create or publish Drafts automatically, upload DOM or screenshots,
 or use XPath, workflow JavaScript, or AI.
+
+## Session 24 scope
+
+Session 24 adds immutable Workspace execution-policy versions, deterministic
+origin and action-risk decisions, explicit Approval requirements, policy-pinned
+runs, stale queued-run rejection, and independent Local Runner enforcement.
+
+It does not add policy scripts, AI classification, automatic approvals or
+workflow edits, active-run policy mutation, or an emergency kill switch.

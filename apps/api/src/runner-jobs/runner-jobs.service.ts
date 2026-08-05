@@ -396,6 +396,7 @@ export class RunnerJobsService {
                 runId: result.runId,
                 definitionDigest: result.definitionDigest,
                 workflow: result.workflow,
+                policy: result.policy,
                 runtimeInput: result.runtimeInput,
                 allowedOrigins: result.allowedOrigins,
                 options: result.options,

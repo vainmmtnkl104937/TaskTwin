@@ -17,6 +17,7 @@ import type { BrowserExecutionOptions } from './contracts.js';
 import { validateExecutableLocator } from './locator-adapter.js';
 import { executeStep, type SupportedWorkflowStep } from './step-executor.js';
 import type { LocatorRepairBrowserBridge } from '../locator-repair/browser-bridge.js';
+import type { LocalRuntimePolicyContext } from './workflow-executor.js';
 
 const SUPPORTED_STEP_TYPES = [
   'navigate',
@@ -45,6 +46,7 @@ export class PlaywrightWorkflowExecutionAdapter implements WorkflowExecutionAdap
     private readonly sessions: BrowserSessionFactory,
     private readonly options: BrowserExecutionOptions,
     private readonly locatorRepairBridge?: LocatorRepairBrowserBridge,
+    private readonly runtimePolicy?: LocalRuntimePolicyContext,
   ) {}
 
   validateStep(step: WorkflowStep): void {
@@ -98,6 +100,9 @@ export class PlaywrightWorkflowExecutionAdapter implements WorkflowExecutionAdap
       options: this.options,
       effectiveTimeoutMs: context.effectiveTimeoutMs,
       signal: context.signal,
+      ...(this.runtimePolicy === undefined
+        ? {}
+        : { runtimePolicy: this.runtimePolicy }),
     });
   }
 

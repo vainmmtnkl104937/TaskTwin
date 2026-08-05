@@ -5,6 +5,7 @@ import { getAccessToken } from '@/lib/server/auth-session';
 import {
   ControlPlaneError,
   getWorkflowVersion,
+  getExecutionPolicy,
 } from '@/lib/server/control-plane';
 
 export default async function WorkflowEditorPage({
@@ -22,9 +23,11 @@ export default async function WorkflowEditorPage({
     redirect('/login');
   }
 
-  let detail;
+  let detail: Awaited<ReturnType<typeof getWorkflowVersion>>;
   try {
-    detail = await getWorkflowVersion(accessToken, versionId);
+    [detail] = await Promise.all([
+      getWorkflowVersion(accessToken, versionId),
+    ]);
   } catch (error: unknown) {
     if (error instanceof ControlPlaneError && error.status === 401) {
       redirect('/auth/expired');
@@ -42,11 +45,13 @@ export default async function WorkflowEditorPage({
     notFound();
   }
 
+  const policy = await getExecutionPolicy(accessToken, workspaceId);
   return (
     <WorkflowEditor
       key={`${detail.workflowVersion.id}-${detail.workflowVersion.status}-${detail.workflowVersion.revision}`}
       detail={detail}
       workspaceId={workspaceId}
+      executionPolicy={policy.active.definition}
     />
   );
 }

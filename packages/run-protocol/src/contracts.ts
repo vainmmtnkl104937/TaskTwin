@@ -8,6 +8,12 @@ import { SafeVerificationResultSchema } from '@tasktwin/workflow-verification';
 import { SafeWorkflowOutputSummarySchema } from '@tasktwin/workflow-extraction';
 import { SafeStepAttemptSchema } from '@tasktwin/workflow-recovery';
 import {
+  PolicyDecisionSchema,
+  PolicyRiskLevelSchema,
+  WorkflowPolicyEvaluationSchema,
+  WorkspaceExecutionPolicyDefinitionSchema,
+} from '@tasktwin/workflow-policy';
+import {
   RunInputPreparationResponseSchema,
   RunInputAdditionalAuthenticatedDataSchema,
   SecureExecutionOptionsSchema,
@@ -153,6 +159,10 @@ export const SafeWorkflowRunMetadataSchema = z.strictObject({
   clientRunId: UuidSchema,
   status: WorkflowRunStatusSchema,
   definitionDigest: Sha256DigestSchema,
+  policyVersionId: UuidSchema.nullable(),
+  policyDigest: Sha256DigestSchema.nullable(),
+  policyDecision: PolicyDecisionSchema.nullable(),
+  policyHighestRisk: PolicyRiskLevelSchema.nullable(),
   stepCount: z.number().int().nonnegative(),
   lastProgressSequence: z.number().int().nonnegative(),
   createdAt: IsoDateSchema,
@@ -222,6 +232,13 @@ export const ClaimedRunnerJobSchema = z.strictObject({
   runId: UuidSchema,
   definitionDigest: Sha256DigestSchema,
   workflow: WorkflowDefinitionSchema,
+  policy: z.strictObject({
+    versionId: UuidSchema,
+    revision: z.number().int().positive(),
+    digest: Sha256DigestSchema,
+    definition: WorkspaceExecutionPolicyDefinitionSchema,
+    evaluation: WorkflowPolicyEvaluationSchema,
+  }),
   runtimeInput: ClaimedRunInputSchema,
   allowedOrigins: z.array(z.string().url().max(512)).min(1).max(32),
   options: WorkflowEngineExecutionOptionsSchema,

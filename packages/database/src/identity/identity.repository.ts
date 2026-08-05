@@ -1,5 +1,11 @@
+import {
+  canonicalizePolicyDefinition,
+  DEFAULT_WORKSPACE_EXECUTION_POLICY,
+} from '@tasktwin/workflow-policy';
+
 import type { PrismaClient } from '../generated/prisma/client.js';
-import { OrganizationRole } from '../generated/prisma/client.js';
+import { OrganizationRole, Prisma } from '../generated/prisma/client.js';
+import { createCanonicalJsonDigest } from '../recording/canonical-json.js';
 import { DuplicateEmailError } from './identity-errors.js';
 import type {
   AuthenticationUserRecord,
@@ -182,6 +188,20 @@ export class IdentityRepository {
             slug: input.workspaceSlug,
           },
           select: workspaceSelect,
+        });
+        const defaultPolicy = canonicalizePolicyDefinition(
+          DEFAULT_WORKSPACE_EXECUTION_POLICY,
+        );
+        await transaction.workspaceExecutionPolicyVersion.create({
+          data: {
+            workspaceId: workspace.id,
+            revision: 1,
+            schemaVersion: 1,
+            definition: defaultPolicy as Prisma.InputJsonValue,
+            digest: createCanonicalJsonDigest(defaultPolicy),
+            clientVersionId: '00000000-0000-4000-8000-000000000024',
+            createdByUserId: user.id,
+          },
         });
 
         return { user, organization, membership, workspace };

@@ -20,6 +20,7 @@
     "@tasktwin/workflow-inputs": "workspace:*",
     "@tasktwin/workflow-lifecycle": "workspace:*",
     "@tasktwin/workflow-locator-repair": "workspace:*",
+    "@tasktwin/workflow-policy": "workspace:*",
     "@tasktwin/workflow-recovery": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "@xyflow/react": "12.11.2",

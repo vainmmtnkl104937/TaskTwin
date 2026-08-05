@@ -1,4 +1,8 @@
 import {
+  WorkspaceExecutionPolicyDefinitionSchema,
+  type WorkspaceExecutionPolicyDefinition,
+} from '@tasktwin/workflow-policy';
+import {
   analyzePublishReadiness,
   createDraftVersionClone,
   validateWorkflowLifecycleTransition,
@@ -374,13 +378,21 @@ export class WorkflowLifecycleRepository {
       if (current.status === 'published') {
         return {
           workflowVersion: current,
-          readiness: analyzePublishReadiness(current.definition),
+          readiness: await this.analyzeReadiness(
+            transaction,
+            current.workspaceId,
+            current.definition,
+          ),
           idempotent: true,
         };
       }
 
       this.requireTransition(current.status, 'published');
-      const readiness = this.requireReadiness(current.definition);
+      const readiness = await this.requireReadiness(
+        transaction,
+        current.workspaceId,
+        current.definition,
+      );
 
       await transaction.workflowVersion.updateMany({
         where: {
@@ -643,7 +655,11 @@ export class WorkflowLifecycleRepository {
       this.requireRole(current.access.role, EDITOR_ROLES);
       this.requireRevision(current.revision, expectedRevision);
       this.requireTransition(current.status, to);
-      const readiness = this.requireReadiness(current.definition);
+      const readiness = await this.requireReadiness(
+        transaction,
+        current.workspaceId,
+        current.definition,
+      );
 
       const updated = await transaction.workflowVersion.updateMany({
         where: {
@@ -747,8 +763,16 @@ export class WorkflowLifecycleRepository {
     }
   }
 
-  private requireReadiness(definition: unknown): PublishReadinessReport {
-    const readiness = analyzePublishReadiness(definition);
+  private async requireReadiness(
+    transaction: Prisma.TransactionClient,
+    workspaceId: string,
+    definition: unknown,
+  ): Promise<PublishReadinessReport> {
+    const readiness = await this.analyzeReadiness(
+      transaction,
+      workspaceId,
+      definition,
+    );
     if (!readiness.ready) {
       throw new WorkflowLifecycleRepositoryError(
         'WORKFLOW_PUBLISH_READINESS_BLOCKED',
@@ -756,6 +780,31 @@ export class WorkflowLifecycleRepository {
       );
     }
     return readiness;
+  }
+
+  private async analyzeReadiness(
+    transaction: Prisma.TransactionClient,
+    workspaceId: string,
+    definition: unknown,
+  ): Promise<PublishReadinessReport> {
+    const storedPolicy = await transaction.workspaceExecutionPolicyVersion.findFirst(
+      {
+        where: { workspaceId, status: 'ACTIVE' },
+        select: { definition: true },
+      },
+    );
+    const parsedPolicy = WorkspaceExecutionPolicyDefinitionSchema.safeParse(
+      storedPolicy?.definition,
+    );
+    if (!parsedPolicy.success) {
+      throw new WorkflowLifecycleRepositoryError(
+        'PERSISTED_WORKFLOW_INVALID',
+      );
+    }
+    return analyzePublishReadiness(
+      definition,
+      parsedPolicy.data satisfies WorkspaceExecutionPolicyDefinition,
+    );
   }
 
   private requireTimestamp(timestamp: Date): void {

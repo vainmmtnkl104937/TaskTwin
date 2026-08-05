@@ -28,6 +28,10 @@ import {
   WORKFLOW_VERIFICATION_CAPABILITY,
 } from '@tasktwin/runner-protocol';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import {
+  WorkspaceExecutionPolicyDefinitionSchema,
+  evaluateWorkflowPolicy,
+} from '@tasktwin/workflow-policy';
 import { defineWorkflowOutputs } from '@tasktwin/workflow-extraction';
 
 import {
@@ -239,6 +243,35 @@ export class SecureRunInputRepository {
           issues: blockingIssues,
         });
       }
+      const activePolicy =
+        await transaction.workspaceExecutionPolicyVersion.findFirst({
+          where: {
+            workspaceId: version.workflow.workspaceId,
+            status: 'ACTIVE',
+          },
+          select: { digest: true, definition: true },
+        });
+      const policy = WorkspaceExecutionPolicyDefinitionSchema.safeParse(
+        activePolicy?.definition,
+      );
+      if (activePolicy === null || !policy.success) {
+        throw new SecureRunInputRepositoryError('RUN_NOT_READY');
+      }
+      const policyEvaluation = evaluateWorkflowPolicy({
+        policy: policy.data,
+        workflow: parsed.data,
+        policyDigest: activePolicy.digest,
+        workflowDigest: createCanonicalJsonDigest(parsed.data),
+      });
+      if (
+        policyEvaluation.overallDecision === 'deny' ||
+        policyEvaluation.hasBlockingIssues
+      ) {
+        throw new SecureRunInputRepositoryError(
+          'RUN_NOT_READY',
+          policyEvaluation,
+        );
+      }
       const manifest = deriveSecureRunInputManifest(parsed.data);
       const runner = await transaction.runnerDevice.findFirst({
         where: {
@@ -433,6 +466,29 @@ export class SecureRunInputRepository {
       const workflow = WorkflowDefinitionSchema.parse(
         preparation.workflowVersion.definition,
       );
+      const activePolicy =
+        await transaction.workspaceExecutionPolicyVersion.findFirst({
+          where: { workspaceId: preparation.workspaceId, status: 'ACTIVE' },
+          select: { id: true, digest: true, definition: true },
+        });
+      const policy = WorkspaceExecutionPolicyDefinitionSchema.safeParse(
+        activePolicy?.definition,
+      );
+      if (activePolicy === null || !policy.success) {
+        throw new SecureRunInputRepositoryError('PREPARATION_CONFLICT');
+      }
+      const policyEvaluation = evaluateWorkflowPolicy({
+        policy: policy.data,
+        workflow,
+        policyDigest: activePolicy.digest,
+        workflowDigest: preparation.definitionDigest,
+      });
+      if (
+        policyEvaluation.overallDecision === 'deny' ||
+        policyEvaluation.hasBlockingIssues
+      ) {
+        throw new SecureRunInputRepositoryError('PREPARATION_CONFLICT');
+      }
       const outputDefinitions = defineWorkflowOutputs(workflow);
       await transaction.workflowRun.create({
         data: {
@@ -446,6 +502,9 @@ export class SecureRunInputRepository {
           runProtocolVersion: RUN_PROTOCOL_VERSION,
           workflowEngineVersion: 1,
           definitionDigest: preparation.definitionDigest,
+          policyVersionId: activePolicy.id,
+          policyDigest: activePolicy.digest,
+          policyEvaluation: policyEvaluation as Prisma.InputJsonValue,
           allowedOrigins: preparation.allowedOrigins as Prisma.InputJsonValue,
           executionOptions:
             preparation.executionOptions as Prisma.InputJsonValue,

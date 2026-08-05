@@ -29,6 +29,7 @@
     "@tasktwin/workflow-extraction": "workspace:*",
     "@tasktwin/workflow-inputs": "workspace:*",
     "@tasktwin/workflow-locator-repair": "workspace:*",
+    "@tasktwin/workflow-policy": "workspace:*",
     "@tasktwin/workflow-recovery": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
     "@tasktwin/workflow-verification": "workspace:*",

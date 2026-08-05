@@ -13,6 +13,7 @@ import {
   WorkflowApprovalRepository,
   WorkflowRepairRepository,
   WorkflowLocatorRepairRepository,
+  ExecutionPolicyRepository,
   type PrismaClient,
 } from '@tasktwin/database';
 
@@ -91,6 +92,12 @@ import { PrismaService } from './prisma.service.js';
       useFactory: (client: PrismaClient) =>
         new WorkflowLocatorRepairRepository(client),
     },
+    {
+      provide: ExecutionPolicyRepository,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: PrismaClient) =>
+        new ExecutionPolicyRepository(client),
+    },
   ],
   exports: [
     IdentityRepository,
@@ -104,6 +111,7 @@ import { PrismaService } from './prisma.service.js';
     WorkflowApprovalRepository,
     WorkflowRepairRepository,
     WorkflowLocatorRepairRepository,
+    ExecutionPolicyRepository,
   ],
 })
 export class DatabaseModule {}

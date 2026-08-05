@@ -30,7 +30,11 @@ import {
   RepairDecisionResponseSchema,
   RepairRequestDetailResponseSchema,
   RepairRequestListResponseSchema,
+  ActiveExecutionPolicyResponseSchema,
+  ExecutionPolicyVersionListResponseSchema,
+  CreateExecutionPolicyVersionResponseSchema,
 } from '../control-plane-contracts';
+import type { WorkspaceExecutionPolicyDefinition } from '@tasktwin/workflow-policy';
 import { getControlPlaneOrigin } from './environment';
 
 export class ControlPlaneError extends Error {
@@ -80,6 +84,45 @@ export function listWorkspaces(accessToken: string) {
     method: 'GET',
     headers: { authorization: `Bearer ${accessToken}` },
   });
+}
+
+export function getExecutionPolicy(accessToken: string, workspaceId: string) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/execution-policy`,
+    ActiveExecutionPolicyResponseSchema,
+    { method: 'GET', headers: { authorization: `Bearer ${accessToken}` } },
+  );
+}
+
+export function listExecutionPolicyVersions(
+  accessToken: string,
+  workspaceId: string,
+) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/execution-policy/versions`,
+    ExecutionPolicyVersionListResponseSchema,
+    { method: 'GET', headers: { authorization: `Bearer ${accessToken}` } },
+  );
+}
+
+export function createExecutionPolicyVersion(
+  accessToken: string,
+  workspaceId: string,
+  input: {
+    clientVersionId: string;
+    expectedActiveRevision: number;
+    definition: WorkspaceExecutionPolicyDefinition;
+  },
+) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/execution-policy/versions`,
+    CreateExecutionPolicyVersionResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 export function inspectRunnerPairing(accessToken: string, userCode: string) {

@@ -15,6 +15,11 @@ import {
 } from '@tasktwin/run-protocol';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
 import {
+  WorkspaceExecutionPolicyDefinitionSchema,
+  WorkflowPolicyEvaluationSchema,
+  evaluateWorkflowPolicy,
+} from '@tasktwin/workflow-policy';
+import {
   WORKFLOW_EXTRACTION_CAPABILITY,
   WORKFLOW_APPROVAL_CAPABILITY,
   WORKFLOW_VERIFICATION_CAPABILITY,
@@ -149,6 +154,12 @@ function toRecord(row: RunRow): WorkflowRunRecord {
         )
       : [],
   );
+  const parsedPolicyEvaluation = WorkflowPolicyEvaluationSchema.safeParse(
+    row.policyEvaluation,
+  );
+  const policyEvaluation = parsedPolicyEvaluation.success
+    ? parsedPolicyEvaluation.data
+    : null;
   return {
     id: row.id,
     workspaceId: row.workspaceId,
@@ -160,6 +171,10 @@ function toRecord(row: RunRow): WorkflowRunRecord {
     clientRunId: row.clientRunId,
     status: row.status as ProtocolRunStatus,
     definitionDigest: row.definitionDigest,
+    policyVersionId: row.policyVersionId,
+    policyDigest: row.policyDigest,
+    policyDecision: policyEvaluation?.overallDecision ?? null,
+    policyHighestRisk: policyEvaluation?.highestRisk ?? null,
     lastProgressSequence: row.lastProgressSequence,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -485,6 +500,33 @@ export class WorkflowRunRepository {
       if (!readiness.ready) {
         throw new WorkflowRunRepositoryError('RUN_NOT_READY', readiness);
       }
+      const activePolicy =
+        await transaction.workspaceExecutionPolicyVersion.findFirst({
+          where: {
+            workspaceId: version.workflow.workspaceId,
+            status: 'ACTIVE',
+          },
+          select: { id: true, revision: true, digest: true, definition: true },
+        });
+      const parsedPolicy = WorkspaceExecutionPolicyDefinitionSchema.safeParse(
+        activePolicy?.definition,
+      );
+      if (activePolicy === null || !parsedPolicy.success) {
+        throw new WorkflowRunRepositoryError('RUN_NOT_READY');
+      }
+      const definitionDigest = createCanonicalJsonDigest(parsed.data);
+      const policyEvaluation = evaluateWorkflowPolicy({
+        policy: parsedPolicy.data,
+        workflow: parsed.data,
+        policyDigest: activePolicy.digest,
+        workflowDigest: definitionDigest,
+      });
+      if (
+        policyEvaluation.overallDecision === 'deny' ||
+        policyEvaluation.hasBlockingIssues
+      ) {
+        throw new WorkflowRunRepositoryError('RUN_NOT_READY', policyEvaluation);
+      }
       if (
         parsed.data.steps.some((step) => step.type === 'verify') &&
         !runner.capabilities.includes(WORKFLOW_VERIFICATION_CAPABILITY)
@@ -579,7 +621,10 @@ export class WorkflowRunRepository {
           clientRunId: input.clientRunId,
           runProtocolVersion: RUN_PROTOCOL_VERSION,
           workflowEngineVersion: 1,
-          definitionDigest: createCanonicalJsonDigest(parsed.data),
+          definitionDigest,
+          policyVersionId: activePolicy.id,
+          policyDigest: activePolicy.digest,
+          policyEvaluation: policyEvaluation as Prisma.InputJsonValue,
           allowedOrigins: readiness.allowedOrigins,
           executionOptions,
           steps: {
@@ -639,6 +684,11 @@ export class WorkflowRunRepository {
           allowedOrigins: true,
           executionOptions: true,
           workflowVersion: { select: { definition: true } },
+          policyVersion: {
+            select: { id: true, revision: true, definition: true, digest: true },
+          },
+          policyDigest: true,
+          policyEvaluation: true,
           inputEnvelope: {
             include: {
               preparation: {
@@ -701,6 +751,46 @@ export class WorkflowRunRepository {
       if (runId === undefined) {
         return { status: 'no_job' };
       }
+      const queued = await transaction.workflowRun.findUnique({
+        where: { id: runId },
+        select: {
+          policyVersionId: true,
+          workspace: {
+            select: {
+              executionPolicyVersions: {
+                where: { status: 'ACTIVE' },
+                select: { id: true },
+                take: 1,
+              },
+            },
+          },
+        },
+      });
+      if (
+        queued === null ||
+        queued.policyVersionId === null ||
+        queued.workspace.executionPolicyVersions[0]?.id !== queued.policyVersionId
+      ) {
+        await transaction.workflowRun.update({
+          where: { id: runId },
+          data: {
+            status: WorkflowRunStatus.FAILED,
+            finishedAt: input.now,
+            terminationCause: 'policy_changed_before_execution',
+            steps: {
+              updateMany: {
+                where: { status: WorkflowRunStepStatus.PENDING },
+                data: {
+                  status: WorkflowRunStepStatus.SKIPPED,
+                  finishedAt: input.now,
+                  skippedReason: 'policy_changed_before_execution',
+                },
+              },
+            },
+          },
+        });
+        return { status: 'no_job' };
+      }
       const row = await transaction.workflowRun.update({
         where: { id: runId },
         data: {
@@ -719,6 +809,11 @@ export class WorkflowRunRepository {
           allowedOrigins: true,
           executionOptions: true,
           workflowVersion: { select: { definition: true } },
+          policyVersion: {
+            select: { id: true, revision: true, definition: true, digest: true },
+          },
+          policyDigest: true,
+          policyEvaluation: true,
           inputEnvelope: {
             include: {
               preparation: {
@@ -1460,6 +1555,14 @@ export class WorkflowRunRepository {
       allowedOrigins: Prisma.JsonValue;
       executionOptions: Prisma.JsonValue;
       workflowVersion: { definition: Prisma.JsonValue };
+      policyVersion: {
+        id: string;
+        revision: number;
+        definition: Prisma.JsonValue;
+        digest: string;
+      } | null;
+      policyDigest: string | null;
+      policyEvaluation: Prisma.JsonValue | null;
       inputEnvelope: {
         schemaVersion: number;
         profile: string;
@@ -1486,11 +1589,23 @@ export class WorkflowRunRepository {
     if (row.leaseExpiresAt === null) {
       throw new WorkflowRunRepositoryError('RUN_CONFLICT');
     }
+    if (row.policyVersion === null || row.policyDigest === null) {
+      throw new WorkflowRunRepositoryError('RUN_CONFLICT');
+    }
     return {
       status: 'claimed',
       runId: row.id,
       workflow: WorkflowDefinitionSchema.parse(row.workflowVersion.definition),
       definitionDigest: row.definitionDigest,
+      policy: {
+        versionId: row.policyVersion.id,
+        revision: row.policyVersion.revision,
+        digest: row.policyDigest,
+        definition: WorkspaceExecutionPolicyDefinitionSchema.parse(
+          row.policyVersion.definition,
+        ),
+        evaluation: WorkflowPolicyEvaluationSchema.parse(row.policyEvaluation),
+      },
       allowedOrigins: parseJsonArray(row.allowedOrigins),
       options: parseOptions(row.executionOptions),
       runtimeInput:

@@ -3,6 +3,10 @@ import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
 import { analyzeWorkflowVerifications } from '@tasktwin/workflow-verification';
 import { analyzeWorkflowExtraction } from '@tasktwin/workflow-extraction';
 import { analyzeWorkflowApprovals } from '@tasktwin/workflow-approval';
+import {
+  evaluateWorkflowPolicy,
+  type WorkspaceExecutionPolicyDefinition,
+} from '@tasktwin/workflow-policy';
 
 import {
   MAX_LIFECYCLE_ISSUES,
@@ -114,6 +118,54 @@ const ISSUE_DETAILS = {
     severity: 'blocking',
     message: 'The Approval Step has an invalid gated-step binding.',
   },
+  POLICY_UNKNOWN_ACTION_INTENT: {
+    severity: 'warning',
+    message: 'An action has an explicit unknown intent.',
+  },
+  POLICY_HIGH_RISK_ACTION: {
+    severity: 'warning',
+    message: 'The workflow contains a high-risk action.',
+  },
+  POLICY_MULTIPLE_WORKFLOW_ORIGINS: {
+    severity: 'warning',
+    message: 'The workflow declares multiple execution origins.',
+  },
+  POLICY_UNSAFE_URL_SCHEME: {
+    severity: 'blocking',
+    message: 'The execution policy denies an unsafe URL scheme.',
+  },
+  POLICY_URL_CREDENTIALS_DENIED: {
+    severity: 'blocking',
+    message: 'The execution policy denies credential-bearing URLs.',
+  },
+  POLICY_ORIGIN_INVALID: {
+    severity: 'blocking',
+    message: 'The workflow origin cannot be evaluated safely.',
+  },
+  POLICY_HTTP_ORIGIN_DENIED: {
+    severity: 'blocking',
+    message: 'The execution policy denies this HTTP origin.',
+  },
+  POLICY_ORIGIN_BLOCKED: {
+    severity: 'blocking',
+    message: 'The execution policy blocks a workflow origin.',
+  },
+  POLICY_ORIGIN_NOT_ALLOWED: {
+    severity: 'blocking',
+    message: 'A workflow origin is not allowed by policy.',
+  },
+  POLICY_ACTION_DENIED: {
+    severity: 'blocking',
+    message: 'The execution policy denies a workflow action.',
+  },
+  POLICY_APPROVAL_REQUIRED_MISSING: {
+    severity: 'blocking',
+    message: 'A policy-gated action requires an immediate Approval step.',
+  },
+  POLICY_APPROVAL_BINDING_INVALID: {
+    severity: 'blocking',
+    message: 'The policy-required Approval binding is invalid.',
+  },
 } as const satisfies Record<
   PublishReadinessIssueCode,
   { severity: 'blocking' | 'warning'; message: string }
@@ -198,6 +250,7 @@ function getIdentity(input: unknown): {
 
 export function analyzePublishReadiness(
   input: unknown,
+  policy?: WorkspaceExecutionPolicyDefinition,
 ): PublishReadinessReport {
   const parsed = WorkflowDefinitionSchema.safeParse(input);
   const identity = getIdentity(input);
@@ -280,6 +333,32 @@ export function analyzePublishReadiness(
       stepIndex: issue.stepIndex,
     })),
   );
+  if (policy !== undefined) {
+    const placeholderDigest = '0'.repeat(64);
+    const policyEvaluation = evaluateWorkflowPolicy({
+      policy,
+      workflow: parsed.data,
+      policyDigest: placeholderDigest,
+      workflowDigest: placeholderDigest,
+    });
+    issues.push(
+      ...policyEvaluation.issues.map((policyIssue) => ({
+        code: policyIssue.code,
+        severity: policyIssue.severity,
+        message: ISSUE_DETAILS[policyIssue.code].message,
+        path:
+          policyIssue.stepIndex === undefined
+            ? ['steps']
+            : ['steps', policyIssue.stepIndex],
+        ...(policyIssue.stepId === undefined
+          ? {}
+          : { stepId: policyIssue.stepId }),
+        ...(policyIssue.stepIndex === undefined
+          ? {}
+          : { stepIndex: policyIssue.stepIndex }),
+      })),
+    );
+  }
   const blockingCount = issues.filter(
     (issue) => issue.severity === 'blocking',
   ).length;
