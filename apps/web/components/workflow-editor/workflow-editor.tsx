@@ -26,6 +26,11 @@ import {
 import type { ValueSourceTarget } from '@tasktwin/workflow-inputs';
 import { analyzePublishReadiness } from '@tasktwin/workflow-lifecycle';
 import { analyzeWorkflowExtraction } from '@tasktwin/workflow-extraction';
+import {
+  evaluateWorkflowPolicy,
+  DEFAULT_WORKSPACE_EXECUTION_POLICY,
+  type WorkspaceExecutionPolicyDefinition,
+} from '@tasktwin/workflow-policy';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -48,9 +53,14 @@ import { OutputsPanel } from './outputs-panel';
 interface WorkflowEditorProps {
   detail: WorkflowVersionDetailResponse;
   workspaceId: string;
+  executionPolicy?: WorkspaceExecutionPolicyDefinition;
 }
 
-export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
+export function WorkflowEditor({
+  detail,
+  workspaceId,
+  executionPolicy = DEFAULT_WORKSPACE_EXECUTION_POLICY,
+}: WorkflowEditorProps) {
   const initialDefinition = detail.workflowVersion.definition;
   const [definition, setDefinition] =
     useState<WorkflowDefinition>(initialDefinition);
@@ -81,8 +91,18 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
     [definition],
   );
   const publishReadiness = useMemo(
-    () => analyzePublishReadiness(definition),
-    [definition],
+    () => analyzePublishReadiness(definition, executionPolicy),
+    [definition, executionPolicy],
+  );
+  const policyEvaluation = useMemo(
+    () =>
+      evaluateWorkflowPolicy({
+        policy: executionPolicy,
+        workflow: definition,
+        policyDigest: '0'.repeat(64),
+        workflowDigest: '0'.repeat(64),
+      }),
+    [definition, executionPolicy],
   );
   const extractionAnalysis = useMemo(
     () => analyzeWorkflowExtraction(definition),
@@ -497,6 +517,12 @@ export function WorkflowEditor({ detail, workspaceId }: WorkflowEditorProps) {
                 outputs={availableOutputs}
                 readOnly={readOnly}
                 locatorMetadata={detail.locatorMetadata}
+                {...(policyEvaluation.steps[selectedIndex] === undefined
+                  ? {}
+                  : {
+                      policyEvaluation:
+                        policyEvaluation.steps[selectedIndex],
+                    })}
                 onChange={updateStep}
                 onValueSourceChange={updateValueSource}
               />

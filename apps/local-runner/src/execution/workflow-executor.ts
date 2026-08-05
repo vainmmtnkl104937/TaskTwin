@@ -14,6 +14,17 @@ import type { BrowserSessionFactory } from './browser-session.js';
 import { LocalExecutionRequestSchema } from './contracts.js';
 import { PlaywrightWorkflowExecutionAdapter } from './playwright-workflow-execution-adapter.js';
 import type { LocatorRepairBrowserBridge } from '../locator-repair/browser-bridge.js';
+import type {
+  WorkflowPolicyEvaluation,
+  WorkspaceExecutionPolicyDefinition,
+} from '@tasktwin/workflow-policy';
+import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
+
+export interface LocalRuntimePolicyContext {
+  definition: WorkspaceExecutionPolicyDefinition;
+  evaluation: WorkflowPolicyEvaluation;
+  workflow: WorkflowDefinition;
+}
 
 export class LocalWorkflowExecutor {
   constructor(
@@ -22,6 +33,7 @@ export class LocalWorkflowExecutor {
     private readonly approvalCoordinator?: WorkflowApprovalCoordinator,
     private readonly recoveryCoordinator?: WorkflowRecoveryCoordinator,
     private readonly locatorRepairBridge?: LocatorRepairBrowserBridge,
+    private readonly runtimePolicy?: LocalRuntimePolicyContext,
   ) {}
 
   execute(
@@ -42,6 +54,7 @@ export class LocalWorkflowExecutor {
         navigationTimeoutMs: request.data.options.navigationTimeoutMs,
       },
       this.locatorRepairBridge,
+      this.runtimePolicy,
     );
     const engine = new WorkflowEngine(adapter, {
       createExecutionId:

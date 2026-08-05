@@ -12,6 +12,12 @@ import type {
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
 import type { SafeWorkflowOutputSummary } from '@tasktwin/workflow-extraction';
 import type { SafeStepAttempt } from '@tasktwin/workflow-recovery';
+import type {
+  PolicyDecision,
+  PolicyRiskLevel,
+  WorkflowPolicyEvaluation,
+  WorkspaceExecutionPolicyDefinition,
+} from '@tasktwin/workflow-policy';
 
 export interface WorkflowRunOutputRecord extends SafeWorkflowOutputSummary {
   producerStepIndex: number;
@@ -43,6 +49,10 @@ export interface WorkflowRunRecord {
   clientRunId: string;
   status: WorkflowRunStatus;
   definitionDigest: string;
+  policyVersionId: string | null;
+  policyDigest: string | null;
+  policyDecision: PolicyDecision | null;
+  policyHighestRisk: PolicyRiskLevel | null;
   lastProgressSequence: number;
   createdAt: Date;
   updatedAt: Date;
@@ -74,6 +84,13 @@ export type ClaimWorkflowRunResult =
       runId: string;
       workflow: WorkflowDefinition;
       definitionDigest: string;
+      policy: {
+        versionId: string;
+        revision: number;
+        digest: string;
+        definition: WorkspaceExecutionPolicyDefinition;
+        evaluation: WorkflowPolicyEvaluation;
+      };
       allowedOrigins: string[];
       options: {
         totalTimeoutMs: number;

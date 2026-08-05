@@ -725,3 +725,18 @@ A passed candidate can replace exactly one locator in a compatible existing
 Draft. PostgreSQL row locks, idempotency digests, source-locator digests and
 expected Draft revision prevent conflicting or stale application; complete
 workflow validation runs before the Draft revision is atomically incremented.
+
+## Deterministic execution-policy boundary
+
+`@tasktwin/workflow-policy` owns JSON policy contracts, canonicalization,
+origin matching, action intent, risk aggregation and safe evaluations without
+framework or runtime dependencies. Validation answers whether data is shaped
+correctly; policy answers whether a valid action may execute.
+
+The Control Plane versions policy per Workspace, evaluates it during authoring
+and run creation, and pins one immutable policy revision to each run. Queued
+runs fail if that revision is no longer active. Claimed runs retain their
+pinned semantics. The Local Runner recomputes both digests and evaluation,
+checks navigation destinations and redirects, and checks current page origin
+before browser actions. Neither Web, Runner payloads nor AI output can supply an
+override.

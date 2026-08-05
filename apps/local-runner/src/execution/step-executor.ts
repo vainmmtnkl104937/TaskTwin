@@ -6,6 +6,7 @@ import {
 } from '@tasktwin/workflow-engine';
 import type { ElementLocator, WorkflowStep } from '@tasktwin/workflow-schema';
 import type { Page } from 'playwright';
+import { evaluateRuntimeOrigin } from '@tasktwin/workflow-policy';
 
 import type { BrowserExecutionOptions } from './contracts.js';
 import { SafeExecutionException, mapActionError } from './errors.js';
@@ -16,6 +17,7 @@ import {
 } from './origin-policy.js';
 import { executeVerification } from './verification-executor.js';
 import { executeExtraction } from './extraction-executor.js';
+import type { LocalRuntimePolicyContext } from './workflow-executor.js';
 
 export type SupportedWorkflowStep = Extract<
   WorkflowStep,
@@ -39,6 +41,7 @@ export interface StepExecutionContext {
   options: BrowserExecutionOptions;
   effectiveTimeoutMs: number;
   signal?: AbortSignal;
+  runtimePolicy?: LocalRuntimePolicyContext;
 }
 
 export function stepLocatorKind(
@@ -85,12 +88,29 @@ export async function executeStep(
     throw new SafeExecutionException('EXECUTION_CANCELLED');
   }
 
+  const stepPolicy = context.runtimePolicy?.evaluation.steps.find(
+    (item) => item.stepId === step.id,
+  );
+  if (stepPolicy?.decision === 'deny') {
+    throw new SafeExecutionException('ACTION_FAILED');
+  }
+
   if (step.type === 'navigate') {
     const value = resolveTextWithResolver(
       step.url,
       'navigate.url',
       context.valueResolver,
     );
+    if (
+      context.runtimePolicy !== undefined &&
+      !evaluateRuntimeOrigin(
+        context.runtimePolicy.definition,
+        context.runtimePolicy.workflow,
+        value,
+      ).allowed
+    ) {
+      throw new SafeExecutionException('ORIGIN_NOT_ALLOWED');
+    }
     const url = validateNavigationUrl(value, context.allowedOrigins);
     try {
       await context.page.goto(url.href, {
@@ -101,6 +121,16 @@ export async function executeStep(
         ),
       });
       assertFinalOriginAllowed(context.page.url(), context.allowedOrigins);
+      if (
+        context.runtimePolicy !== undefined &&
+        !evaluateRuntimeOrigin(
+          context.runtimePolicy.definition,
+          context.runtimePolicy.workflow,
+          context.page.url(),
+        ).allowed
+      ) {
+        throw new SafeExecutionException('POST_NAVIGATION_ORIGIN_NOT_ALLOWED');
+      }
       return;
     } catch (error: unknown) {
       throw mapActionError(
@@ -110,6 +140,17 @@ export async function executeStep(
         'side_effect_possible',
       );
     }
+  }
+
+  if (
+    context.runtimePolicy !== undefined &&
+    !evaluateRuntimeOrigin(
+      context.runtimePolicy.definition,
+      context.runtimePolicy.workflow,
+      context.page.url(),
+    ).allowed
+  ) {
+    throw new SafeExecutionException('ORIGIN_NOT_ALLOWED');
   }
 
   if (step.type === 'wait') {

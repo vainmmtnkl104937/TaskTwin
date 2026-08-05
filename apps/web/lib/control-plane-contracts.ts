@@ -1,4 +1,5 @@
 import { PublishReadinessReportSchema } from '@tasktwin/workflow-lifecycle';
+import { WorkspaceExecutionPolicyDefinitionSchema } from '@tasktwin/workflow-policy';
 export {
   ApprovalDecisionResponseSchema,
   ApprovalRequestDetailResponseSchema,
@@ -38,6 +39,42 @@ const UuidSchema = z.string().uuid();
 const IsoDateSchema = z.string().datetime({ offset: true });
 const RoleSchema = z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']);
 const StatusSchema = WorkflowLifecycleStatusSchema;
+
+export const SafeExecutionPolicyVersionSchema = z.strictObject({
+  id: UuidSchema,
+  workspaceId: UuidSchema,
+  revision: z.number().int().positive(),
+  status: z.enum(['ACTIVE', 'ARCHIVED']),
+  definition: WorkspaceExecutionPolicyDefinitionSchema,
+  digest: z.string().regex(/^[a-f0-9]{64}$/),
+  clientVersionId: UuidSchema,
+  createdByUserId: UuidSchema,
+  activatedAt: IsoDateSchema,
+  archivedAt: IsoDateSchema.nullable(),
+  createdAt: IsoDateSchema,
+});
+
+const ExecutionPolicyAccessSchema = z.strictObject({
+  role: RoleSchema,
+  canEdit: z.boolean(),
+});
+
+export const ActiveExecutionPolicyResponseSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  workspaceId: UuidSchema,
+  access: ExecutionPolicyAccessSchema,
+  active: SafeExecutionPolicyVersionSchema,
+});
+
+export const ExecutionPolicyVersionListResponseSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  workspaceId: UuidSchema,
+  access: ExecutionPolicyAccessSchema,
+  versions: z.array(SafeExecutionPolicyVersionSchema).max(1_000),
+});
+
+export const CreateExecutionPolicyVersionResponseSchema =
+  ActiveExecutionPolicyResponseSchema.extend({ idempotent: z.boolean() });
 const AccessSchema = z.strictObject({
   role: RoleSchema,
   canEdit: z.boolean(),

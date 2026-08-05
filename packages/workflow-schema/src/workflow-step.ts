@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { ClickActionIntentSchema } from './action-intent.js';
 import { ElementLocatorSchema } from './element-locator.js';
 import {
   DEFAULT_APPROVAL_TIMEOUT_MS,
@@ -30,6 +31,7 @@ export const ClickStepSchema = z.strictObject({
   ...baseStepShape,
   type: z.literal('click'),
   locator: ElementLocatorSchema,
+  actionIntent: ClickActionIntentSchema.optional(),
 });
 
 export const FillStepSchema = z.strictObject({
@@ -134,7 +136,12 @@ export const VerifyStepSchema = z.strictObject({
     .optional(),
 });
 
-export const ApprovalRiskLevelSchema = z.enum(['low', 'medium', 'high']);
+export const ApprovalRiskLevelSchema = z.enum([
+  'low',
+  'medium',
+  'high',
+  'critical',
+]);
 
 export const ApprovalStepSchema = z.strictObject({
   ...baseStepShape,

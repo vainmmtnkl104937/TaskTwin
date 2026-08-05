@@ -120,6 +120,7 @@ enum WorkflowApprovalRiskLevel {
   LOW
   MEDIUM
   HIGH
+  CRITICAL
 
   @@map("workflow_approval_risk_level")
 }
@@ -189,6 +190,13 @@ enum WorkflowLocatorRepairCandidateTestStatus {
   @@map("workflow_locator_repair_candidate_test_status")
 }
 
+enum WorkspaceExecutionPolicyStatus {
+  ACTIVE
+  ARCHIVED
+
+  @@map("workspace_execution_policy_status")
+}
+
 model User {
   id                         String                        @id @default(uuid()) @db.Uuid
   email                      String                        @unique(map: "users_email_key") @db.VarChar(254)
@@ -212,6 +220,7 @@ model User {
   decidedWorkflowRepairs      WorkflowRepairRequest[]          @relation("WorkflowRepairDecider")
   appliedLocatorRepairs       WorkflowLocatorRepairProposal[]  @relation("LocatorRepairApplier")
   requestedLocatorTests       WorkflowLocatorRepairCandidate[] @relation("LocatorRepairTestRequester")
+  createdExecutionPolicies    WorkspaceExecutionPolicyVersion[] @relation("WorkspaceExecutionPolicyCreator")
 
   @@map("users")
 }
@@ -258,6 +267,7 @@ model Workspace {
   runInputPreparations  WorkflowRunInputPreparation[]
   workflowRepairRequests WorkflowRepairRequest[]
   locatorRepairProposals WorkflowLocatorRepairProposal[]
+  executionPolicyVersions WorkspaceExecutionPolicyVersion[]
 
   @@unique([organizationId, slug], map: "workspaces_organization_id_slug_key")
   @@map("workspaces")
@@ -423,6 +433,9 @@ model WorkflowRun {
   completionDigest        String?           @map("completion_digest") @db.Char(64)
   finalResult             Json?             @map("final_result") @db.JsonB
   terminationCause        String?           @map("termination_cause") @db.VarChar(80)
+  policyVersionId         String?           @map("policy_version_id") @db.Uuid
+  policyDigest            String?           @map("policy_digest") @db.Char(64)
+  policyEvaluation        Json?             @map("policy_evaluation") @db.JsonB
   finishedAt              DateTime?         @map("finished_at") @db.Timestamptz(3)
   createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt               DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -440,6 +453,7 @@ model WorkflowRun {
   repairRequests          WorkflowRepairRequest[]
   stepAttempts            WorkflowRunStepAttempt[]
   locatorRepairProposals  WorkflowLocatorRepairProposal[]
+  policyVersion           WorkspaceExecutionPolicyVersion? @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
 
   @@unique([workspaceId, clientRunId], map: "workflow_runs_workspace_id_client_run_id_key")
   @@unique([runnerDeviceId, claimAttemptId], map: "workflow_runs_runner_device_id_claim_attempt_id_key")
@@ -450,7 +464,33 @@ model WorkflowRun {
   @@index([status, leaseExpiresAt], map: "workflow_runs_status_lease_expires_at_idx")
   @@index([createdByUserId, createdAt], map: "workflow_runs_created_by_user_id_created_at_idx")
   @@index([cancelRequestedByUserId], map: "workflow_runs_cancel_requested_by_user_id_idx")
+  @@index([policyVersionId, createdAt], map: "workflow_runs_policy_version_id_created_at_idx")
   @@map("workflow_runs")
+}
+
+model WorkspaceExecutionPolicyVersion {
+  id              String                         @id @default(uuid()) @db.Uuid
+  workspaceId     String                         @map("workspace_id") @db.Uuid
+  revision        Int
+  status          WorkspaceExecutionPolicyStatus @default(ACTIVE)
+  schemaVersion   Int                            @map("schema_version")
+  definition      Json                           @db.JsonB
+  digest          String                         @db.Char(64)
+  clientVersionId String                         @map("client_version_id") @db.Uuid
+  createdByUserId String                         @map("created_by_user_id") @db.Uuid
+  activatedAt     DateTime                       @default(now()) @map("activated_at") @db.Timestamptz(3)
+  archivedAt      DateTime?                      @map("archived_at") @db.Timestamptz(3)
+  createdAt       DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
+  workspace       Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  createdBy       User                           @relation("WorkspaceExecutionPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  workflowRuns    WorkflowRun[]
+
+  @@unique([workspaceId, revision], map: "workspace_policy_versions_workspace_revision_key")
+  @@unique([workspaceId, clientVersionId], map: "workspace_policy_versions_workspace_client_key")
+  @@index([workspaceId, status, revision], map: "workspace_policy_versions_workspace_status_idx")
+  @@index([workspaceId, digest], map: "workspace_policy_versions_workspace_digest_idx")
+  @@index([createdByUserId], map: "workspace_policy_versions_creator_idx")
+  @@map("workspace_execution_policy_versions")
 }
 
 model RunnerEncryptionKey {

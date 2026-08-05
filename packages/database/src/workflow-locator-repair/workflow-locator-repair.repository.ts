@@ -32,6 +32,8 @@ import {
   type WorkflowStep,
 } from '@tasktwin/workflow-schema';
 import { validateEditorWorkflow } from '@tasktwin/workflow-editor-core';
+import { analyzePublishReadiness } from '@tasktwin/workflow-lifecycle';
+import { WorkspaceExecutionPolicyDefinitionSchema } from '@tasktwin/workflow-policy';
 import { z } from 'zod';
 
 import {
@@ -1031,6 +1033,22 @@ export class WorkflowLocatorRepairRepository {
         ElementLocatorSchema.parse(candidate.locator),
       );
       if (!patched.ok || validateEditorWorkflow(patched.workflow).length > 0) {
+        throw new WorkflowLocatorRepairRepositoryError(
+          'LOCATOR_REPAIR_INVALID',
+        );
+      }
+      const activePolicy =
+        await transaction.workspaceExecutionPolicyVersion.findFirst({
+          where: { workspaceId: proposal.workspaceId, status: 'ACTIVE' },
+          select: { definition: true },
+        });
+      const policy = WorkspaceExecutionPolicyDefinitionSchema.safeParse(
+        activePolicy?.definition,
+      );
+      if (
+        !policy.success ||
+        !analyzePublishReadiness(patched.workflow, policy.data).ready
+      ) {
         throw new WorkflowLocatorRepairRepositoryError(
           'LOCATOR_REPAIR_INVALID',
         );

@@ -18,6 +18,7 @@ import { acquireSecureRuntime } from '../secure-inputs/secure-runtime.js';
 import { HttpApprovalCoordinator } from './http-approval-coordinator.js';
 import { HttpRecoveryCoordinator } from './http-recovery-coordinator.js';
 import { LocatorRepairBrowserBridge } from '../locator-repair/browser-bridge.js';
+import { assertClaimedJobPolicy } from './policy-preflight.js';
 
 export class RunJobWorker {
   constructor(
@@ -101,6 +102,7 @@ export class RunJobWorker {
       null;
     let primaryError: unknown;
     try {
+      assertClaimedJobPolicy(job);
       this.output.write(`Workflow run ${job.runId} started.`);
       let invalidSecureInput = false;
       if (job.runtimeInput.kind === 'encrypted_envelope') {
@@ -147,6 +149,11 @@ export class RunJobWorker {
             )
           : undefined,
         locatorRepairBridge,
+        {
+          definition: job.policy.definition,
+          evaluation: job.policy.evaluation,
+          workflow: job.workflow,
+        },
       ).execute(
         {
           schemaVersion: 1,

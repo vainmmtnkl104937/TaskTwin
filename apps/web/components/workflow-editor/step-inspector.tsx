@@ -11,6 +11,7 @@ import type {
   WorkflowVariable,
 } from '@tasktwin/workflow-schema';
 import type { WorkflowOutputDefinition } from '@tasktwin/workflow-extraction';
+import type { StepPolicyEvaluation } from '@tasktwin/workflow-policy';
 
 import type { WorkflowVersionDetailResponse } from '@/lib/control-plane-contracts';
 
@@ -23,6 +24,7 @@ interface StepInspectorProps {
   outputs: WorkflowOutputDefinition[];
   readOnly: boolean;
   locatorMetadata: WorkflowVersionDetailResponse['locatorMetadata'];
+  policyEvaluation?: StepPolicyEvaluation;
   onChange(step: WorkflowStep): void;
   onValueSourceChange(target: ValueSourceTarget, source: ValueSource): void;
 }
@@ -250,6 +252,7 @@ export function StepInspector({
   outputs,
   readOnly,
   locatorMetadata,
+  policyEvaluation,
   onChange,
   onValueSourceChange,
 }: StepInspectorProps) {
@@ -273,6 +276,39 @@ export function StepInspector({
           }
         />
       </label>
+
+      {policyEvaluation === undefined ? null : (
+        <p className="metadata">
+          Risk: {policyEvaluation.risk} · Policy: {policyEvaluation.decision}
+          {policyEvaluation.approvalRequired ? ' · Approval required' : ''}
+        </p>
+      )}
+
+      {step.type === 'click' ? (
+        <label>
+          Action intent
+          <select
+            value={step.actionIntent ?? 'unknown'}
+            disabled={readOnly}
+            onChange={(event) =>
+              onChange({
+                ...step,
+                actionIntent: event.currentTarget.value as NonNullable<
+                  typeof step.actionIntent
+                >,
+              })
+            }
+          >
+            <option value="unknown">Unknown</option>
+            <option value="change_state">Change state</option>
+            <option value="submit">Submit</option>
+            <option value="send">Send</option>
+            <option value="delete">Delete</option>
+            <option value="purchase">Purchase</option>
+            <option value="permission_change">Permission change</option>
+          </select>
+        </label>
+      ) : null}
 
       {locator === null ? null : (
         <div className="locator-summary">
@@ -381,13 +417,17 @@ export function StepInspector({
                 onChange({
                   ...step,
                   riskLevel: event.currentTarget.value as
-                    'low' | 'medium' | 'high',
+                    | 'low'
+                    | 'medium'
+                    | 'high'
+                    | 'critical',
                 })
               }
             >
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
+              <option value="critical">Critical</option>
             </select>
           </label>
           <label>

@@ -1,4 +1,6 @@
 import { validateEditorWorkflow } from '@tasktwin/workflow-editor-core';
+import { analyzePublishReadiness } from '@tasktwin/workflow-lifecycle';
+import { WorkspaceExecutionPolicyDefinitionSchema } from '@tasktwin/workflow-policy';
 import {
   WorkflowDefinitionSchema,
   type WorkflowDefinition,
@@ -389,6 +391,31 @@ export class WorkflowDraftRepository {
       }
       if (current.status !== 'draft') {
         throw new WorkflowDraftRepositoryError('WORKFLOW_VERSION_NOT_DRAFT');
+      }
+      const activePolicy =
+        await transaction.workspaceExecutionPolicyVersion.findFirst({
+          where: {
+            workspaceId: current.workflow.workspaceId,
+            status: 'ACTIVE',
+          },
+          select: { definition: true },
+        });
+      if (activePolicy === null) {
+        throw new WorkflowDraftRepositoryError('WORKFLOW_POLICY_MISSING');
+      }
+      const policy = WorkspaceExecutionPolicyDefinitionSchema.safeParse(
+        activePolicy.definition,
+      );
+      if (!policy.success) {
+        throw new WorkflowDraftRepositoryError('WORKFLOW_POLICY_MISSING');
+      }
+      const readiness = analyzePublishReadiness(definition.data, policy.data);
+      if (!readiness.ready) {
+        throw new WorkflowDraftRepositoryError(
+          'WORKFLOW_POLICY_BLOCKED',
+          undefined,
+          readiness,
+        );
       }
       this.assertImmutableFields(current, definition.data);
       if (current.revision !== expectedRevision) {

@@ -1,9 +1,13 @@
+import type { PublishReadinessReport } from '@tasktwin/workflow-lifecycle';
+
 export type WorkflowDraftRepositoryErrorCode =
   | 'WORKSPACE_NOT_FOUND'
   | 'WORKFLOW_VERSION_NOT_FOUND'
   | 'WORKFLOW_DRAFT_FORBIDDEN'
   | 'WORKFLOW_VERSION_NOT_DRAFT'
   | 'WORKFLOW_DEFINITION_INVALID'
+  | 'WORKFLOW_POLICY_BLOCKED'
+  | 'WORKFLOW_POLICY_MISSING'
   | 'WORKFLOW_ID_IMMUTABLE'
   | 'WORKFLOW_VERSION_IMMUTABLE'
   | 'WORKFLOW_SCHEMA_VERSION_IMMUTABLE'
@@ -16,6 +20,7 @@ export class WorkflowDraftRepositoryError extends Error {
   constructor(
     readonly code: WorkflowDraftRepositoryErrorCode,
     readonly currentRevision?: number,
+    readonly readiness?: PublishReadinessReport,
   ) {
     super(code);
     this.name = 'WorkflowDraftRepositoryError';

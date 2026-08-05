@@ -299,6 +299,18 @@ repair.
 Session 23 excludes active-run overrides, automatic continuation, DOM dumps,
 screenshots, XPath, AI repair, automatic Draft creation and publishing.
 
+## Session 24: deterministic execution policy
+
+- Immutable Workspace policy versions with one active revision
+- Deterministic origin, action-intent, risk and decision evaluation
+- Immediate Approval binding for gated actions, with deny precedence
+- Authoring, publish, run-creation and locator-repair validation
+- Policy-pinned runs, stale queued-run rejection and Runner defense in depth
+- Structured Workspace Policy Settings and safe run metadata
+
+Session 24 excludes policy scripts, OPA/Rego, AI classification, automatic
+workflow edits, live policy mutation and an emergency kill switch.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

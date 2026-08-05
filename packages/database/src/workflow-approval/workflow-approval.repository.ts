@@ -41,11 +41,12 @@ function toProtocolStatus(
   return status;
 }
 
-function toRisk(level: 'low' | 'medium' | 'high') {
+function toRisk(level: 'low' | 'medium' | 'high' | 'critical') {
   return {
     low: WorkflowApprovalRiskLevel.LOW,
     medium: WorkflowApprovalRiskLevel.MEDIUM,
     high: WorkflowApprovalRiskLevel.HIGH,
+    critical: WorkflowApprovalRiskLevel.CRITICAL,
   }[level];
 }
 

@@ -142,3 +142,13 @@ export type {
   RunnerEncryptionKeyRegistrationResult,
 } from './secure-run-input/secure-run-input-records.js';
 export { SecureRunInputRepository } from './secure-run-input/secure-run-input.repository.js';
+export {
+  ExecutionPolicyRepositoryError,
+  type ExecutionPolicyRepositoryErrorCode,
+} from './execution-policy/execution-policy-errors.js';
+export type {
+  ExecutionPolicyVersionListRecord,
+  ExecutionPolicyVersionRecord,
+  WorkspaceExecutionPolicyRecord,
+} from './execution-policy/execution-policy-records.js';
+export { ExecutionPolicyRepository } from './execution-policy/execution-policy.repository.js';
