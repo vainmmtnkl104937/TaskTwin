@@ -331,6 +331,33 @@ workflow edits, live policy mutation and an emergency kill switch.
 Session 25 excludes external SIEM forwarding, long-term archival, granular
 per-actor retention, HSM-backed signing and compression of large payloads.
 
+## Session 26: safe scheduled workflow runs
+
+- Database-backed scheduler polling every 30 seconds for due ACTIVE schedules.
+- Framework-independent `packages/workflow-scheduling` with Zod schemas, DST-aware
+  occurrence calculation, and unattended readiness analysis.
+- Three structured schedule types: `one_time`, `daily` (every N days), and
+  `weekly` (weekdays every N weeks), all using validated IANA timezone
+  identifiers.
+- DST semantics: nonexistent local times are skipped, ambiguous times use the
+  earlier UTC instant.
+- Occurrence idempotency via unique `[scheduleId, scheduledFor]` constraint;
+  active run guard via unique `[scheduleId]` for active scheduled runs.
+- Multi-instance scheduling with `FOR UPDATE SKIP LOCKED` and serializable
+  transactions — no Redis or in-memory mutex.
+- Start window (default 5 minutes) with `missed_start_window` policy.
+- Policy re-evaluation at every occurrence: policy change, denial, or approval
+  gate skips the occurrence and auto-pauses the schedule.
+- Ambiguous outcome protection: INTERRUPTED or unknown-side-effect runs
+  auto-pause the schedule; OWNER or ADMIN must review and resume.
+- `scheduled_execution_v1` capability advertised only in unattended headless mode;
+  scheduled runs exclude approval steps, manual repair, and locator repair.
+- Audit events for schedule lifecycle and occurrence lifecycle.
+
+Session 26 excludes cron expressions, RRULE, runtime inputs and secrets in
+schedules, approval steps, manual repair, locator repair, backfill, catch-up,
+and Run Now.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

@@ -143,6 +143,17 @@ export type {
 } from './secure-run-input/secure-run-input-records.js';
 export { SecureRunInputRepository } from './secure-run-input/secure-run-input.repository.js';
 export {
+  WorkflowScheduleRepositoryError,
+  type WorkflowScheduleRepositoryErrorCode,
+} from './workflow-schedule/workflow-schedule-errors.js';
+export type {
+  ScheduleCreationResult,
+  WorkflowScheduleAccess,
+  WorkflowScheduleOccurrenceRecord,
+  WorkflowScheduleRecord,
+} from './workflow-schedule/workflow-schedule-records.js';
+export { WorkflowScheduleRepository } from './workflow-schedule/workflow-schedule.repository.js';
+export {
   ExecutionPolicyRepositoryError,
   type ExecutionPolicyRepositoryErrorCode,
 } from './execution-policy/execution-policy-errors.js';

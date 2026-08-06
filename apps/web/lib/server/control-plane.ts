@@ -42,6 +42,10 @@ import {
   type AuditVerifyRequest,
   type AuditVerifyResponse,
   type RunEvidenceResponse,
+  WorkflowScheduleListResponseSchema,
+  WorkflowScheduleResponseSchema,
+  OccurrenceListResponseSchema,
+  CreateWorkflowScheduleResponseSchema,
 } from '../control-plane-contracts';
 import type { WorkspaceExecutionPolicyDefinition } from '@tasktwin/workflow-policy';
 import { getControlPlaneOrigin } from './environment';
@@ -690,6 +694,126 @@ export function getRunEvidence(
     {
       method: 'GET',
       headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function createWorkflowSchedule(
+  accessToken: string,
+  workflowVersionId: string,
+  request_2: {
+    clientScheduleId: string;
+    name: string;
+    definition: unknown;
+    runnerDeviceId: string;
+    overlapPolicy?: 'skip';
+    misfirePolicy?: 'skip';
+    maxStartDelaySeconds?: number;
+  },
+): Promise<{
+  schemaVersion: 1;
+  schedule: unknown;
+}> {
+  return request(
+    `/workflow-versions/${encodeURIComponent(workflowVersionId)}/schedules`,
+    CreateWorkflowScheduleResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ schemaVersion: 1, ...request_2 }),
+    },
+  );
+}
+
+export function listWorkflowSchedules(
+  accessToken: string,
+  workspaceId: string,
+) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/workflow-schedules`,
+    WorkflowScheduleListResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function getWorkflowSchedule(
+  accessToken: string,
+  scheduleId: string,
+) {
+  return request(
+    `/workflow-schedules/${encodeURIComponent(scheduleId)}`,
+    WorkflowScheduleResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function listScheduleOccurrences(
+  accessToken: string,
+  scheduleId: string,
+  limit?: number,
+  before?: string,
+) {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set('limit', String(limit));
+  if (before !== undefined) params.set('before', before);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return request(
+    `/workflow-schedules/${encodeURIComponent(scheduleId)}/occurrences${query}`,
+    OccurrenceListResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function pauseWorkflowSchedule(
+  accessToken: string,
+  scheduleId: string,
+) {
+  return request(
+    `/workflow-schedules/${encodeURIComponent(scheduleId)}/pause`,
+    WorkflowScheduleResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ schemaVersion: 1 }),
+    },
+  );
+}
+
+export function resumeWorkflowSchedule(
+  accessToken: string,
+  scheduleId: string,
+) {
+  return request(
+    `/workflow-schedules/${encodeURIComponent(scheduleId)}/resume`,
+    WorkflowScheduleResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ schemaVersion: 1 }),
+    },
+  );
+}
+
+export function archiveWorkflowSchedule(
+  accessToken: string,
+  scheduleId: string,
+) {
+  return request(
+    `/workflow-schedules/${encodeURIComponent(scheduleId)}/archive`,
+    WorkflowScheduleResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ schemaVersion: 1 }),
     },
   );
 }

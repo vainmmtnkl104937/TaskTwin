@@ -14,6 +14,7 @@ import {
   WorkflowRepairRepository,
   WorkflowLocatorRepairRepository,
   ExecutionPolicyRepository,
+  WorkflowScheduleRepository,
   WorkspaceAuditTrailRepository,
   type PrismaClient,
 } from '@tasktwin/database';
@@ -100,6 +101,12 @@ import { PrismaService } from './prisma.service.js';
         new ExecutionPolicyRepository(client),
     },
     {
+      provide: WorkflowScheduleRepository,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: PrismaClient) =>
+        new WorkflowScheduleRepository(client),
+    },
+    {
       provide: WorkspaceAuditTrailRepository,
       inject: [DATABASE_CLIENT],
       useFactory: (client: PrismaClient) =>
@@ -119,6 +126,7 @@ import { PrismaService } from './prisma.service.js';
     WorkflowRepairRepository,
     WorkflowLocatorRepairRepository,
     ExecutionPolicyRepository,
+    WorkflowScheduleRepository,
     WorkspaceAuditTrailRepository,
   ],
 })

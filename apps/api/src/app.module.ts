@@ -9,12 +9,14 @@ import { RecordingSessionsModule } from './recording-sessions/recording-sessions
 import { RecordingWorkflowDraftsModule } from './recording-workflow-drafts/recording-workflow-drafts.module.js';
 import { RunnerPairingModule } from './runner-pairing/runner-pairing.module.js';
 import { RunnerModule } from './runner/runner.module.js';
+import { SchedulerModule } from './scheduler/scheduler.module.js';
 import { WorkspacesModule } from './workspaces/workspaces.module.js';
 import { WorkflowLifecycleModule } from './workflow-lifecycle/workflow-lifecycle.module.js';
 import { WorkflowsModule } from './workflows/workflows.module.js';
 import { WorkflowRunsModule } from './workflow-runs/workflow-runs.module.js';
 import { ExecutionPolicyModule } from './execution-policy/execution-policy.module.js';
 import { AuditTrailModule } from './audit-trail/audit-trail.module.js';
+import { WorkflowScheduleModule } from './workflow-schedule/workflow-schedule.module.js';
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { AuditTrailModule } from './audit-trail/audit-trail.module.js';
     WorkflowRunsModule,
     ExecutionPolicyModule,
     AuditTrailModule,
+    WorkflowScheduleModule,
+    SchedulerModule,
   ],
   controllers: [HealthController],
   providers: [HealthService],

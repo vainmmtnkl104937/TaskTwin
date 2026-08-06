@@ -9,6 +9,7 @@ import {
   ControlPlaneError,
   cancelWorkflowRun,
   createWorkflowRun,
+  getRunEvidence,
   prepareWorkflowRunInputs,
   commitWorkflowRunInputs,
 } from '@/lib/server/control-plane';
@@ -136,5 +137,23 @@ export async function cancelWorkflowRunAction(
       ok: false as const,
       message: 'Cancellation could not be requested.',
     };
+  }
+}
+
+const LoadRunEvidenceInputSchema = z.strictObject({
+  workflowRunId: z.string().uuid(),
+});
+
+export async function loadRunEvidenceAction(input: unknown) {
+  const parsed = LoadRunEvidenceInputSchema.safeParse(input);
+  const token = await getAccessToken();
+  if (!parsed.success || token === null) {
+    return { ok: false as const, message: 'Invalid evidence request.' };
+  }
+  try {
+    const result = await getRunEvidence(token, parsed.data.workflowRunId);
+    return { ok: true as const, evidence: result };
+  } catch {
+    return { ok: false as const, message: 'Run evidence could not be loaded.' };
   }
 }

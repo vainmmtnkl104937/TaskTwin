@@ -3,16 +3,14 @@
 import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 
-import { getRunEvidence } from '@/lib/server/control-plane';
+import { loadRunEvidenceAction } from '@/app/(authenticated)/workspaces/[workspaceId]/runs/actions';
 import type { RunEvidenceResponse } from '@/lib/control-plane-contracts';
 
 interface RunEvidenceListProps {
-  accessToken: string;
   workflowRunId: string;
 }
 
 export function RunEvidenceList({
-  accessToken,
   workflowRunId,
 }: RunEvidenceListProps): JSX.Element {
   const [evidence, setEvidence] = useState<RunEvidenceResponse | null>(null);
@@ -22,10 +20,15 @@ export function RunEvidenceList({
     let cancelled = false;
     async function load(): Promise<void> {
       try {
-        const result = await getRunEvidence(accessToken, workflowRunId);
-        if (!cancelled) {
-          setEvidence(result);
+        const result = await loadRunEvidenceAction({ workflowRunId });
+        if (cancelled) {
+          return;
         }
+        if (!result.ok) {
+          setError(result.message);
+          return;
+        }
+        setEvidence(result.evidence);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Unknown error');
@@ -36,7 +39,7 @@ export function RunEvidenceList({
     return (): void => {
       cancelled = true;
     };
-  }, [accessToken, workflowRunId]);
+  }, [workflowRunId]);
 
   if (error !== null) {
     return <p role="alert">{error}</p>;

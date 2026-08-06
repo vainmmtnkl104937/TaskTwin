@@ -29,6 +29,9 @@ export type AuditPayloadEnvelope = {
   };
 }[AuditEventType];
 
+// The payload is typed as `unknown` here because the schema transforms/validates
+// at parse time. Callers pass raw values (Date, etc.) and the result of
+// `parseAuditEventInput` is the parsed/transformed payload.
 export interface AuditEventInput<EventType extends AuditEventType = AuditEventType> {
   schemaVersion?: 1;
   workspaceId: string;
@@ -39,7 +42,7 @@ export interface AuditEventInput<EventType extends AuditEventType = AuditEventTy
   occurredAt: Date | string;
   sourceId: string;
   correlationId?: string;
-  payload: AuditPayloadByType[EventType];
+  payload: unknown;
 }
 
 const AuditEventInputBoundarySchema = z

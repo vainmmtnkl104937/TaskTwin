@@ -10,7 +10,8 @@ export type OrganizationResourceKind =
   | 'workflowRun'
   | 'runnerDevice'
   | 'approvalRequest'
-  | 'repairRequest';
+  | 'repairRequest'
+  | 'schedule';
 
 export interface OrganizationResourceMetadata {
   kind: OrganizationResourceKind;

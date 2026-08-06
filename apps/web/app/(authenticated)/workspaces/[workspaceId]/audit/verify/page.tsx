@@ -27,7 +27,7 @@ export default async function AuditVerifyPage({ params }: AuditVerifyPageProps) 
           is intact from the first event through the latest head.
         </p>
       </section>
-      <AuditVerifyButton accessToken={token} workspaceId={workspaceId} />
+      <AuditVerifyButton workspaceId={workspaceId} />
     </main>
   );
 }

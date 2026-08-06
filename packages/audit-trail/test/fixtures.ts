@@ -15,6 +15,8 @@ export const APPROVAL_ID = '00000000-0000-4000-8000-000000000017';
 export const REPAIR_ID = '00000000-0000-4000-8000-000000000018';
 export const PROPOSAL_ID = '00000000-0000-4000-8000-000000000019';
 export const CANDIDATE_ID = '00000000-0000-4000-8000-000000000020';
+export const SCHEDULE_ID = '00000000-0000-4000-8000-000000000030';
+export const OCCURRENCE_ID = '00000000-0000-4000-8000-000000000031';
 export const DIGEST = 'a'.repeat(64);
 export const OCCURRED_AT = '2026-08-05T12:00:00.000Z';
 
@@ -263,6 +265,70 @@ export const VALID_PAYLOADS: AuditPayloadByType = {
     workflowRunId: RUN_ID,
     reason: 'expired',
     dismissedAt: OCCURRED_AT,
+  },
+  'schedule.created': {
+    scheduleId: SCHEDULE_ID,
+    workflowId: 'workflow-1',
+    workflowVersionId: WORKFLOW_VERSION_ID,
+    runnerDeviceId: RUNNER_ID,
+    scheduleName: 'Daily Cleanup',
+    scheduleType: 'daily',
+    timezone: 'America/New_York',
+    scheduleDigest: DIGEST,
+    workflowDigest: DIGEST,
+    policyVersionId: POLICY_VERSION_ID,
+    policyDigest: DIGEST,
+    nextOccurrenceAt: '2026-08-06T08:00:00.000Z',
+    maxStartDelaySeconds: 300,
+  },
+  'schedule.paused': {
+    scheduleId: SCHEDULE_ID,
+    pausedAt: OCCURRED_AT,
+  },
+  'schedule.resumed': {
+    scheduleId: SCHEDULE_ID,
+    resumedAt: OCCURRED_AT,
+    nextOccurrenceAt: '2026-08-06T08:00:00.000Z',
+  },
+  'schedule.completed': {
+    scheduleId: SCHEDULE_ID,
+    completedAt: OCCURRED_AT,
+  },
+  'schedule.archived': {
+    scheduleId: SCHEDULE_ID,
+    archivedAt: OCCURRED_AT,
+  },
+  'schedule.auto_paused': {
+    scheduleId: SCHEDULE_ID,
+    reason: 'policy_review_required',
+    autoPausedAt: OCCURRED_AT,
+  },
+  'schedule.occurrence.dispatched': {
+    scheduleId: SCHEDULE_ID,
+    occurrenceId: OCCURRENCE_ID,
+    workflowRunId: RUN_ID,
+    scheduledFor: '2026-08-06T08:00:00.000Z',
+    startDeadlineAt: '2026-08-06T08:05:00.000Z',
+  },
+  'schedule.occurrence.skipped': {
+    scheduleId: SCHEDULE_ID,
+    occurrenceId: OCCURRENCE_ID,
+    scheduledFor: '2026-08-06T08:00:00.000Z',
+    skipReason: 'runner_busy',
+    skippedAt: OCCURRED_AT,
+  },
+  'schedule.occurrence.start_window_expired': {
+    scheduleId: SCHEDULE_ID,
+    occurrenceId: OCCURRENCE_ID,
+    workflowRunId: RUN_ID,
+    scheduledFor: '2026-08-06T08:00:00.000Z',
+    startDeadlineAt: '2026-08-06T08:05:00.000Z',
+    expiredAt: OCCURRED_AT,
+  },
+  'schedule.occurrence.succeeded': {
+    scheduleId: SCHEDULE_ID,
+    occurrenceId: OCCURRENCE_ID,
+    workflowRunId: RUN_ID,
   },
 };
 

@@ -41,6 +41,7 @@
     "@tasktwin/workflow-policy": "workspace:*",
     "@tasktwin/workflow-recovery": "workspace:*",
     "@tasktwin/workflow-schema": "workspace:*",
+    "@tasktwin/workflow-scheduling": "workspace:*",
     "pg": "8.22.0",
     "zod": "4.4.3"
   },

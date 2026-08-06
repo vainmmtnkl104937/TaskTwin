@@ -3,18 +3,16 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 
-import { verifyAuditTrail } from '../../lib/server/control-plane';
-import type { AuditVerifyResponse } from '../../lib/control-plane-contracts';
+import { verifyAuditTrailAction } from '@/app/(authenticated)/workspaces/[workspaceId]/audit/actions';
+import type { AuditVerifyResponse } from '@/lib/control-plane-contracts';
 
 type VerifyStatus = 'idle' | 'pending' | 'ok' | 'tampered' | 'sequence_gap' | 'error';
 
 interface AuditVerifyButtonProps {
-  accessToken: string;
   workspaceId: string;
 }
 
 export function AuditVerifyButton({
-  accessToken,
   workspaceId,
 }: AuditVerifyButtonProps): JSX.Element {
   const [status, setStatus] = useState<VerifyStatus>('idle');
@@ -25,11 +23,17 @@ export function AuditVerifyButton({
     setStatus('pending');
     setError(null);
     try {
-      const response = await verifyAuditTrail(accessToken, workspaceId, {
+      const outcome = await verifyAuditTrailAction({
+        workspaceId,
         sampleLimit: 200,
       });
-      setResult(response);
-      setStatus(response.status);
+      if (!outcome.ok) {
+        setStatus('error');
+        setError(outcome.message);
+        return;
+      }
+      setResult(outcome.result);
+      setStatus(outcome.result.status);
     } catch (err) {
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Unknown error');

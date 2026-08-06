@@ -467,3 +467,143 @@ export type AuditEventDetailResponse = z.infer<
 export type AuditVerifyRequest = z.infer<typeof AuditVerifyRequestSchema>;
 export type AuditVerifyResponse = z.infer<typeof AuditVerifyResponseSchema>;
 export type RunEvidenceResponse = z.infer<typeof RunEvidenceResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// Workflow Schedules
+// ---------------------------------------------------------------------------
+
+export const WorkflowScheduleStatusSchema = z.enum([
+  'ACTIVE',
+  'PAUSED',
+  'AUTO_PAUSED',
+  'COMPLETED',
+  'ARCHIVED',
+]);
+
+export type WorkflowScheduleStatus = z.infer<typeof WorkflowScheduleStatusSchema>;
+
+export const WorkflowScheduleOccurrenceStatusSchema = z.enum([
+  'PENDING',
+  'DISPATCHED',
+  'SUCCEEDED',
+  'SKIPPED',
+  'TIMED_OUT',
+  'CANCELLED',
+]);
+
+export type WorkflowScheduleOccurrenceStatus = z.infer<
+  typeof WorkflowScheduleOccurrenceStatusSchema
+>;
+
+export const WorkflowScheduleRecordSchema = z.strictObject({
+  id: UuidSchema,
+  workspaceId: UuidSchema,
+  workflowId: z.string().min(1),
+  workflowVersionId: UuidSchema,
+  workflowVersion: z.number().int().positive(),
+  runnerDeviceId: UuidSchema,
+  clientScheduleId: UuidSchema,
+  name: z.string().min(1),
+  definition: z.unknown(),
+  definitionDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  workflowDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  status: WorkflowScheduleStatusSchema,
+  overlapPolicy: z.string(),
+  misfirePolicy: z.string(),
+  maxStartDelaySeconds: z.number().int().nonnegative(),
+  nextOccurrenceAt: IsoDateSchema.nullable(),
+  lastOccurrenceAt: IsoDateSchema.nullable(),
+  autoPauseReason: z.string().nullable(),
+  autoPausedAt: IsoDateSchema.nullable(),
+  completedAt: IsoDateSchema.nullable(),
+  archivedAt: IsoDateSchema.nullable(),
+  createdAt: IsoDateSchema,
+  updatedAt: IsoDateSchema,
+});
+
+export type WorkflowScheduleRecord = z.infer<typeof WorkflowScheduleRecordSchema>;
+
+export const WorkflowScheduleOccurrenceRecordSchema = z.strictObject({
+  id: UuidSchema,
+  scheduleId: UuidSchema,
+  workflowRunId: UuidSchema.nullable(),
+  scheduledFor: IsoDateSchema,
+  startDeadlineAt: IsoDateSchema,
+  status: WorkflowScheduleOccurrenceStatusSchema,
+  skipReason: z.string().nullable(),
+  skippedAt: IsoDateSchema.nullable(),
+  dispatchedAt: IsoDateSchema.nullable(),
+  completedAt: IsoDateSchema.nullable(),
+  terminationCause: z.string().nullable(),
+  createdAt: IsoDateSchema,
+});
+
+export type WorkflowScheduleOccurrenceRecord = z.infer<
+  typeof WorkflowScheduleOccurrenceRecordSchema
+>;
+
+export const WorkflowScheduleAccessSchema = z.strictObject({
+  role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']),
+  canEdit: z.boolean(),
+});
+
+export const WorkflowScheduleListResponseSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  workspaceId: UuidSchema,
+  access: WorkflowScheduleAccessSchema,
+  schedules: z.array(WorkflowScheduleRecordSchema).max(1_000),
+});
+
+export type WorkflowScheduleListResponse = z.infer<
+  typeof WorkflowScheduleListResponseSchema
+>;
+
+export const WorkflowScheduleResponseSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  workspaceId: UuidSchema,
+  access: WorkflowScheduleAccessSchema,
+  schedule: WorkflowScheduleRecordSchema,
+});
+
+export type WorkflowScheduleResponse = z.infer<
+  typeof WorkflowScheduleResponseSchema
+>;
+
+export const OccurrenceListResponseSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  scheduleId: UuidSchema,
+  occurrences: z.array(WorkflowScheduleOccurrenceRecordSchema).max(1_000),
+  nextCursor: z.string().nullable(),
+});
+
+export type OccurrenceListResponse = z.infer<typeof OccurrenceListResponseSchema>;
+
+export const CreateWorkflowScheduleRequestSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  workflowVersionId: UuidSchema,
+  clientScheduleId: UuidSchema,
+  name: z.string().min(1).max(120),
+  definition: z.unknown(),
+  runnerDeviceId: UuidSchema,
+  overlapPolicy: z.enum(['skip']).default('skip'),
+  misfirePolicy: z.enum(['skip']).default('skip'),
+  maxStartDelaySeconds: z
+    .number()
+    .int()
+    .min(30)
+    .max(3600)
+    .default(300),
+});
+
+export type CreateWorkflowScheduleRequest = z.infer<
+  typeof CreateWorkflowScheduleRequestSchema
+>;
+
+export const CreateWorkflowScheduleResponseSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  schedule: WorkflowScheduleRecordSchema,
+});
+
+export type CreateWorkflowScheduleResponse = z.infer<
+  typeof CreateWorkflowScheduleResponseSchema
+>;

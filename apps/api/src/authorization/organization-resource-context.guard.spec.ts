@@ -13,6 +13,7 @@ import {
   type WorkflowRunRepository,
   type WorkflowApprovalRepository,
   type WorkflowRepairRepository,
+  type WorkflowScheduleRepository,
 } from '@tasktwin/database';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -67,7 +68,8 @@ function createReflector(
     | 'workflow'
     | 'workflowVersion'
     | 'workflowRun'
-    | 'runnerDevice' = 'workspace',
+    | 'runnerDevice'
+    | 'schedule' = 'workspace',
   parameterName = 'workspaceId',
 ): Reflector {
   return {
@@ -97,6 +99,9 @@ describe('OrganizationResourceContextGuard', () => {
   const workflowRepairRepository = {
     resolveRepairAccess: vi.fn(),
   } as unknown as WorkflowRepairRepository;
+  const workflowScheduleRepository = {
+    resolveScheduleAccess: vi.fn(),
+  } as unknown as WorkflowScheduleRepository;
 
   it('resolves membership and attaches trusted organization context', async () => {
     const request = createRequest();
@@ -116,6 +121,7 @@ describe('OrganizationResourceContextGuard', () => {
       workflowRunRepository,
       workflowApprovalRepository,
       workflowRepairRepository,
+      workflowScheduleRepository,
     );
 
     await expect(
@@ -140,6 +146,7 @@ describe('OrganizationResourceContextGuard', () => {
       workflowRunRepository,
       workflowApprovalRepository,
       workflowRepairRepository,
+      workflowScheduleRepository,
     );
 
     await expect(
@@ -160,6 +167,7 @@ describe('OrganizationResourceContextGuard', () => {
       workflowRunRepository,
       workflowApprovalRepository,
       workflowRepairRepository,
+      workflowScheduleRepository,
     );
 
     await expect(
@@ -186,6 +194,7 @@ describe('OrganizationResourceContextGuard', () => {
       workflowRunRepository,
       workflowApprovalRepository,
       workflowRepairRepository,
+      workflowScheduleRepository,
     );
 
     await expect(
@@ -219,6 +228,7 @@ describe('OrganizationResourceContextGuard', () => {
       workflowRunRepository,
       workflowApprovalRepository,
       workflowRepairRepository,
+      workflowScheduleRepository,
     );
 
     await expect(

@@ -762,3 +762,62 @@ Payloads are validated by per-event-family zod schemas and never contain
 observed/expected values, secrets, tokens, locators, URLs, screenshots or
 runtime outputs. Run evidence is a typed subset of safe execution events
 that omits attempt-level and output-level events.
+
+## Scheduled Execution
+
+TaskTwin supports scheduled workflow runs through a database-backed scheduler.
+The scheduler is implemented in `apps/local-runner` and is powered by the
+framework-independent `packages/workflow-scheduling` package.
+
+### Scheduler
+
+- Polls every 30 seconds for due ACTIVE schedules.
+- Multiple instances use `FOR UPDATE SKIP LOCKED` for safe concurrency without
+  Redis or in-memory mutexes.
+- Creates occurrence and WorkflowRun in a serializable transaction.
+- The `scheduled_execution_v1` capability is advertised only when the Runner
+  is in unattended headless mode.
+
+### Schedule Types
+
+- **one_time**: fires once at a specific local instant in an IANA timezone.
+- **daily**: fires every N days (1-365) at a local time, with an optional
+  end date.
+- **weekly**: fires on selected weekdays every N weeks (1-52) at a local time,
+  with an optional end date.
+
+All schedules are created with a pinned WorkflowVersion and use validated IANA
+timezone identifiers.
+
+### Timezone Handling
+
+- All schedules use validated IANA timezone identifiers.
+- DST handling: nonexistent local times are skipped, ambiguous times use the
+  earlier UTC instant.
+- Uses Luxon for timezone arithmetic; no manual Date manipulation.
+
+### Concurrency
+
+- Occurrence idempotency: unique constraint on `[scheduleId, scheduledFor]`
+  (stored as UTC instant).
+- Active run guard: unique constraint on `[scheduleId]` for active scheduled
+  runs.
+- Runner capacity: active scheduled run check per runner.
+
+### Policy
+
+- The current active policy is evaluated at every occurrence dispatch.
+- Policy change: occurrence skipped, schedule auto-paused.
+- WorkflowVersion pinning: schedule stays on selected version.
+
+### Start Window
+
+- Scheduled runs must start within a bounded window (default 5 minutes).
+- Expired unclaimed runs are reconciled to `TIMED_OUT`.
+- `missed_start_window` policy controls behavior on missed windows.
+
+### Ambiguous Outcomes
+
+- INTERRUPTED or side-effect-unknown runs trigger automatic schedule pause.
+- OWNER or ADMIN must review and manually resume.
+- No automatic retry or Run Now for scheduled runs.

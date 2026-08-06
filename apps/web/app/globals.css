@@ -536,6 +536,74 @@ p {
   color: #4f4f57;
 }
 
+/* Schedule status badges */
+.schedule-status-active {
+  border-color: #48a47e;
+  background: #e8f6ef;
+  color: #176044;
+}
+
+.schedule-status-paused {
+  border-color: #d7a34a;
+  background: #fff5dc;
+  color: #684b12;
+}
+
+.schedule-status-auto_paused {
+  border-color: #e88a3d;
+  background: #fff3e9;
+  color: #8a4512;
+}
+
+.schedule-status-completed {
+  border-color: #4a7ab0;
+  background: #e9f1f8;
+  color: #274f70;
+}
+
+.schedule-status-archived {
+  border-color: #a4a4ad;
+  background: #f1f1f3;
+  color: #4f4f57;
+}
+
+/* Occurrence status badges */
+.occurrence-status-pending {
+  border-color: #4a7ab0;
+  background: #e9f1f8;
+  color: #274f70;
+}
+
+.occurrence-status-dispatched {
+  border-color: #d7a34a;
+  background: #fff5dc;
+  color: #684b12;
+}
+
+.occurrence-status-succeeded {
+  border-color: #48a47e;
+  background: #e8f6ef;
+  color: #176044;
+}
+
+.occurrence-status-skipped {
+  border-color: #a4a4ad;
+  background: #f1f1f3;
+  color: #4f4f57;
+}
+
+.occurrence-status-timed_out {
+  border-color: #a83e3e;
+  background: #feecec;
+  color: #8a2424;
+}
+
+.occurrence-status-cancelled {
+  border-color: #a4a4ad;
+  background: #f1f1f3;
+  color: #4f4f57;
+}
+
 .lifecycle-actions,
 .readiness-panel {
   margin-top: 1rem;
@@ -646,4 +714,31 @@ p {
     align-items: stretch;
     flex-direction: column;
   }
+}
+
+.workspace-nav {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #d7e2de;
+}
+
+.workspace-nav a {
+  color: #587168;
+  font-weight: 700;
+  text-decoration: none;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.15s;
+}
+
+.workspace-nav a:hover {
+  background-color: #e8f6ef;
+  color: #1c664d;
+}
+
+.workspace-nav a.active {
+  background-color: #1c664d;
+  color: white;
 }

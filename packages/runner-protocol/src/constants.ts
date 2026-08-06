@@ -3,6 +3,8 @@ export const WORKFLOW_VERIFICATION_CAPABILITY = 'workflow_verification_v1';
 export const WORKFLOW_EXTRACTION_CAPABILITY = 'workflow_extraction_v1';
 export const WORKFLOW_APPROVAL_CAPABILITY = 'workflow_approval_v1';
 export const WORKFLOW_MANUAL_REPAIR_CAPABILITY = 'workflow_manual_repair_v1';
+export const WORKFLOW_SCHEDULED_EXECUTION_CAPABILITY =
+  'scheduled_execution_v1';
 export const LOCATOR_REPAIR_PROPOSALS_CAPABILITY =
   'locator_repair_proposals_v1';
 export const DEFAULT_PAIRING_EXPIRES_IN_SECONDS = 600;

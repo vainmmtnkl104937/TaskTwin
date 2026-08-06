@@ -53,7 +53,7 @@ const RiskLevelSchema = z.enum(['low', 'medium', 'high', 'critical']);
 
 export const WorkflowCreatedPayloadSchema = z
   .object({ workflowId: StableIdSchema })
-  .strict();
+    .strict();
 
 export const WorkflowVersionCreatedPayloadSchema = z
   .object({
@@ -64,7 +64,7 @@ export const WorkflowVersionCreatedPayloadSchema = z
     sourceVersionId: UuidSchema.optional(),
     schemaVersion: SequenceSchema,
   })
-  .strict();
+    .strict();
 
 export const WorkflowDraftUpdatedPayloadSchema = z
   .object({
@@ -74,7 +74,7 @@ export const WorkflowDraftUpdatedPayloadSchema = z
     revision: SequenceSchema,
     stepCount: CountSchema,
   })
-  .strict();
+    .strict();
 
 export const WorkflowVersionTransitionPayloadSchema = z
   .object({
@@ -83,7 +83,7 @@ export const WorkflowVersionTransitionPayloadSchema = z
     version: SequenceSchema,
     revision: SequenceSchema,
   })
-  .strict();
+    .strict();
 
 export const WorkflowVersionPublishedPayloadSchema = z
   .object({
@@ -94,7 +94,7 @@ export const WorkflowVersionPublishedPayloadSchema = z
     workflowDigest: DigestSchema,
     replacedVersionId: UuidSchema.optional(),
   })
-  .strict();
+    .strict();
 
 export const WorkflowVersionArchivedPayloadSchema = z
   .object({
@@ -104,7 +104,7 @@ export const WorkflowVersionArchivedPayloadSchema = z
     revision: SequenceSchema,
     reason: z.enum(['manual', 'replaced_by_publish']),
   })
-  .strict();
+    .strict();
 
 export const PolicyVersionArchivedPayloadSchema = z
   .object({
@@ -113,7 +113,7 @@ export const PolicyVersionArchivedPayloadSchema = z
     policyDigest: DigestSchema,
     reason: z.literal('superseded'),
   })
-  .strict();
+    .strict();
 
 export const PolicyVersionActivatedPayloadSchema = z
   .object({
@@ -122,7 +122,7 @@ export const PolicyVersionActivatedPayloadSchema = z
     policyDigest: DigestSchema,
     previousPolicyVersionId: UuidSchema.optional(),
   })
-  .strict();
+    .strict();
 
 export const WorkflowRunCreatedPayloadSchema = z
   .object({
@@ -134,7 +134,7 @@ export const WorkflowRunCreatedPayloadSchema = z
     policyVersionId: UuidSchema,
     policyDigest: DigestSchema,
   })
-  .strict();
+    .strict();
 
 export const WorkflowRunClaimedPayloadSchema = z
   .object({
@@ -143,14 +143,14 @@ export const WorkflowRunClaimedPayloadSchema = z
     claimAttemptId: UuidSchema,
     leaseExpiresAt: AuditTimestampSchema,
   })
-  .strict();
+    .strict();
 
 export const WorkflowRunStartedPayloadSchema = z
   .object({
     workflowRunId: UuidSchema,
     startedAt: AuditTimestampSchema,
   })
-  .strict();
+    .strict();
 
 export const WorkflowRunWaitingPayloadSchema = z
   .object({
@@ -159,14 +159,14 @@ export const WorkflowRunWaitingPayloadSchema = z
     stepIndex: CountSchema,
     attemptNumber: SequenceSchema.optional(),
   })
-  .strict();
+    .strict();
 
 export const WorkflowRunCancelRequestedPayloadSchema = z
   .object({
     workflowRunId: UuidSchema,
     requestedAt: AuditTimestampSchema,
   })
-  .strict();
+    .strict();
 
 export const WorkflowRunTerminalPayloadSchema = z
   .object({
@@ -179,7 +179,7 @@ export const WorkflowRunTerminalPayloadSchema = z
     stepCount: CountSchema,
     producedOutputCount: CountSchema,
   })
-  .strict();
+    .strict();
 
 export const ExecutionAttemptStartedPayloadSchema = z
   .object({
@@ -193,7 +193,7 @@ export const ExecutionAttemptStartedPayloadSchema = z
     effectCertainty: EffectCertaintySchema,
     authorizedByRepairRequestId: UuidSchema.optional(),
   })
-  .strict();
+    .strict();
 
 export const ExecutionAttemptTerminalPayloadSchema = z
   .object({
@@ -209,7 +209,7 @@ export const ExecutionAttemptTerminalPayloadSchema = z
     safeErrorCode: SafeCodeSchema.optional(),
     durationMs: DurationSchema.optional(),
   })
-  .strict();
+    .strict();
 
 export const ExecutionVerificationCompletedPayloadSchema = z
   .object({
@@ -221,7 +221,7 @@ export const ExecutionVerificationCompletedPayloadSchema = z
     outcome: z.enum(['passed', 'failed']),
     attemptCount: SequenceSchema,
   })
-  .strict();
+    .strict();
 
 export const ExecutionOutputProducedPayloadSchema = z
   .object({
@@ -231,7 +231,7 @@ export const ExecutionOutputProducedPayloadSchema = z
     producerStepId: StableIdSchema,
     producerStepIndex: CountSchema,
   })
-  .strict();
+    .strict();
 
 export const ApprovalRequestedPayloadSchema = z
   .object({
@@ -243,7 +243,7 @@ export const ApprovalRequestedPayloadSchema = z
     requestedAt: AuditTimestampSchema,
     expiresAt: AuditTimestampSchema,
   })
-  .strict();
+    .strict();
 
 export const ApprovalDecidedPayloadSchema = z
   .object({
@@ -253,7 +253,7 @@ export const ApprovalDecidedPayloadSchema = z
     decidedByUserId: UuidSchema,
     resolvedAt: AuditTimestampSchema,
   })
-  .strict();
+    .strict();
 
 export const ApprovalLifecyclePayloadSchema = z
   .object({
@@ -262,7 +262,7 @@ export const ApprovalLifecyclePayloadSchema = z
     reason: z.enum(['expired', 'cancelled', 'invalidated']),
     resolvedAt: AuditTimestampSchema,
   })
-  .strict();
+    .strict();
 
 export const RepairRequestedPayloadSchema = z
   .object({
@@ -277,7 +277,7 @@ export const RepairRequestedPayloadSchema = z
     requestedAt: AuditTimestampSchema,
     expiresAt: AuditTimestampSchema,
   })
-  .strict();
+    .strict();
 
 export const RepairDecidedPayloadSchema = z
   .object({
@@ -287,7 +287,7 @@ export const RepairDecidedPayloadSchema = z
     decidedByUserId: UuidSchema,
     resolvedAt: AuditTimestampSchema,
   })
-  .strict();
+    .strict();
 
 export const RepairLifecyclePayloadSchema = z
   .object({
@@ -296,7 +296,7 @@ export const RepairLifecyclePayloadSchema = z
     reason: z.enum(['expired', 'cancelled', 'invalidated']),
     resolvedAt: AuditTimestampSchema,
   })
-  .strict();
+    .strict();
 
 export const LocatorRepairProposalCreatedPayloadSchema = z
   .object({
@@ -307,7 +307,7 @@ export const LocatorRepairProposalCreatedPayloadSchema = z
     failedAttemptNumber: SequenceSchema,
     candidateCount: CountSchema,
   })
-  .strict();
+    .strict();
 
 export const LocatorRepairCandidateTestedPayloadSchema = z
   .object({
@@ -330,7 +330,7 @@ export const LocatorRepairCandidateTestedPayloadSchema = z
     evidenceCodeCount: CountSchema,
     testedAt: AuditTimestampSchema.optional(),
   })
-  .strict();
+    .strict();
 
 export const LocatorRepairAppliedPayloadSchema = z
   .object({
@@ -344,7 +344,7 @@ export const LocatorRepairAppliedPayloadSchema = z
     newRevision: SequenceSchema,
     appliedAt: AuditTimestampSchema,
   })
-  .strict();
+    .strict();
 
 export const LocatorRepairDismissedPayloadSchema = z
   .object({
@@ -353,7 +353,115 @@ export const LocatorRepairDismissedPayloadSchema = z
     reason: z.enum(['expired', 'invalidated']),
     dismissedAt: AuditTimestampSchema,
   })
-  .strict();
+    .strict();
+
+export const ScheduleCreatedPayloadSchema = z
+  .object({
+    scheduleId: UuidSchema,
+    workflowId: StableIdSchema,
+    workflowVersionId: UuidSchema,
+    runnerDeviceId: UuidSchema,
+    scheduleName: z.string().min(1).max(120),
+    scheduleType: z.enum(['one_time', 'daily', 'weekly']),
+    timezone: z.string().min(1).max(64),
+    scheduleDigest: DigestSchema,
+    workflowDigest: DigestSchema,
+    policyVersionId: UuidSchema,
+    policyDigest: DigestSchema,
+    nextOccurrenceAt: AuditTimestampSchema.nullable(),
+    maxStartDelaySeconds: z.number().int().min(30).max(3600),
+  })
+    .strict();
+
+export const SchedulePausedPayloadSchema = z
+  .object({
+    scheduleId: UuidSchema,
+    pausedAt: AuditTimestampSchema,
+  })
+    .strict();
+
+export const ScheduleResumedPayloadSchema = z
+  .object({
+    scheduleId: UuidSchema,
+    resumedAt: AuditTimestampSchema,
+    nextOccurrenceAt: AuditTimestampSchema,
+  })
+    .strict();
+
+export const ScheduleCompletedPayloadSchema = z
+  .object({
+    scheduleId: UuidSchema,
+    completedAt: AuditTimestampSchema,
+  })
+    .strict();
+
+export const ScheduleArchivedPayloadSchema = z
+  .object({
+    scheduleId: UuidSchema,
+    archivedAt: AuditTimestampSchema,
+  })
+    .strict();
+
+export const ScheduleAutoPausedPayloadSchema = z
+  .object({
+    scheduleId: UuidSchema,
+    reason: z.enum([
+      'policy_review_required',
+      'source_version_unavailable',
+      'ambiguous_outcome',
+    ]),
+    autoPausedAt: AuditTimestampSchema,
+    triggeringOccurrenceId: UuidSchema.optional(),
+  })
+    .strict();
+
+export const ScheduleOccurrenceDispatchedPayloadSchema = z
+  .object({
+    scheduleId: UuidSchema,
+    occurrenceId: UuidSchema,
+    workflowRunId: UuidSchema,
+    scheduledFor: AuditTimestampSchema,
+    startDeadlineAt: AuditTimestampSchema,
+  })
+    .strict();
+
+export const ScheduleOccurrenceSkippedPayloadSchema = z
+  .object({
+    scheduleId: UuidSchema,
+    occurrenceId: UuidSchema,
+    scheduledFor: AuditTimestampSchema,
+    skipReason: z.enum([
+      'schedule_overlap',
+      'runner_busy',
+      'runner_unavailable',
+      'policy_denied',
+      'source_version_unavailable',
+      'missed_start_window',
+      'nonexistent_local_time',
+      'repeated_local_time',
+    ]),
+    skippedAt: AuditTimestampSchema,
+  })
+    .strict();
+
+export const ScheduleOccurrenceStartWindowExpiredPayloadSchema = z
+  .object({
+    scheduleId: UuidSchema,
+    occurrenceId: UuidSchema,
+    workflowRunId: UuidSchema,
+    scheduledFor: AuditTimestampSchema,
+    startDeadlineAt: AuditTimestampSchema,
+    expiredAt: AuditTimestampSchema,
+  })
+    .strict();
+
+export const ScheduleOccurrenceSucceededPayloadSchema = z
+  .object({
+    scheduleId: UuidSchema,
+    occurrenceId: UuidSchema,
+    workflowRunId: UuidSchema,
+  })
+    .strict();
 
 export const AUDIT_PAYLOAD_SCHEMAS = {
   'workflow.created': WorkflowCreatedPayloadSchema,
@@ -390,6 +498,17 @@ export const AUDIT_PAYLOAD_SCHEMAS = {
   'locator_repair.candidate_tested': LocatorRepairCandidateTestedPayloadSchema,
   'locator_repair.applied_to_draft': LocatorRepairAppliedPayloadSchema,
   'locator_repair.dismissed': LocatorRepairDismissedPayloadSchema,
+  'schedule.created': ScheduleCreatedPayloadSchema,
+  'schedule.paused': SchedulePausedPayloadSchema,
+  'schedule.resumed': ScheduleResumedPayloadSchema,
+  'schedule.completed': ScheduleCompletedPayloadSchema,
+  'schedule.archived': ScheduleArchivedPayloadSchema,
+  'schedule.auto_paused': ScheduleAutoPausedPayloadSchema,
+  'schedule.occurrence.dispatched': ScheduleOccurrenceDispatchedPayloadSchema,
+  'schedule.occurrence.skipped': ScheduleOccurrenceSkippedPayloadSchema,
+  'schedule.occurrence.start_window_expired':
+    ScheduleOccurrenceStartWindowExpiredPayloadSchema,
+  'schedule.occurrence.succeeded': ScheduleOccurrenceSucceededPayloadSchema,
 } as const satisfies Record<AuditEventType, z.ZodType>;
 
 export function parseAuditPayload<EventType extends AuditEventType>(

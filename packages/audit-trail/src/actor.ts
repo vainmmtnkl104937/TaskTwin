@@ -6,6 +6,8 @@ export const AuditSystemReasonSchema = z.enum([
   'lease_expired',
   'policy_supersede',
   'run_cancelled',
+  'scheduler',
+  'automatic',
 ]);
 
 export const UserAuditActorSchema = z

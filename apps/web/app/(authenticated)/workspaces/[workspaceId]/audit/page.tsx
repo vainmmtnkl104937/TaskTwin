@@ -72,7 +72,6 @@ export default async function AuditListPage({
         <h1>Audit trail</h1>
       </section>
       <AuditListClient
-        accessToken={token}
         workspaceId={workspaceId}
         initialEvents={result.events}
         initialNextCursor={result.nextCursor}

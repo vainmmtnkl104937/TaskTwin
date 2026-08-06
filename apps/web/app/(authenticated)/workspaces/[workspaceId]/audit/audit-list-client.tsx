@@ -3,16 +3,15 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 
+import { listAuditEventsAction } from '@/app/(authenticated)/workspaces/[workspaceId]/audit/actions';
 import { AuditEventFilters } from '@/components/audit-trail/audit-event-filters';
 import { AuditEventRow } from '@/components/audit-trail/audit-event-row';
-import { listAuditEvents } from '@/lib/server/control-plane';
 import type {
   AuditEventListResponse,
   SafeAuditEvent,
 } from '@/lib/control-plane-contracts';
 
 interface AuditListClientProps {
-  accessToken: string;
   workspaceId: string;
   initialEvents: SafeAuditEvent[];
   initialNextCursor: AuditEventListResponse['nextCursor'];
@@ -30,7 +29,6 @@ interface AuditListClientProps {
 }
 
 export function AuditListClient({
-  accessToken,
   workspaceId,
   initialEvents,
   initialNextCursor,
@@ -45,9 +43,16 @@ export function AuditListClient({
     setBusy(true);
     setError(null);
     try {
-      const result = await listAuditEvents(accessToken, workspaceId, filters);
-      setEvents(result.events);
-      setCursor(result.nextCursor);
+      const outcome = await listAuditEventsAction({
+        workspaceId,
+        filters,
+      });
+      if (!outcome.ok) {
+        setError(outcome.message);
+        return;
+      }
+      setEvents(outcome.events);
+      setCursor(outcome.nextCursor);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -62,9 +67,16 @@ export function AuditListClient({
     setBusy(true);
     setError(null);
     try {
-      const result = await listAuditEvents(accessToken, workspaceId, { cursor: cursor.encoded });
-      setEvents((prev) => [...prev, ...result.events]);
-      setCursor(result.nextCursor);
+      const outcome = await listAuditEventsAction({
+        workspaceId,
+        filters: { cursor: cursor.encoded },
+      });
+      if (!outcome.ok) {
+        setError(outcome.message);
+        return;
+      }
+      setEvents((prev) => [...prev, ...outcome.events]);
+      setCursor(outcome.nextCursor);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {

@@ -35,6 +35,16 @@ export const AUDIT_EVENT_TYPES = [
   'locator_repair.candidate_tested',
   'locator_repair.applied_to_draft',
   'locator_repair.dismissed',
+  'schedule.created',
+  'schedule.paused',
+  'schedule.resumed',
+  'schedule.completed',
+  'schedule.archived',
+  'schedule.auto_paused',
+  'schedule.occurrence.dispatched',
+  'schedule.occurrence.skipped',
+  'schedule.occurrence.start_window_expired',
+  'schedule.occurrence.succeeded',
 ] as const;
 
 export const AuditEventTypeSchema = z.enum(AUDIT_EVENT_TYPES);

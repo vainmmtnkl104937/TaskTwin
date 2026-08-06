@@ -10,6 +10,7 @@ import {
   WORKFLOW_EXTRACTION_CAPABILITY,
   WORKFLOW_APPROVAL_CAPABILITY,
   WORKFLOW_MANUAL_REPAIR_CAPABILITY,
+  WORKFLOW_SCHEDULED_EXECUTION_CAPABILITY,
   LOCATOR_REPAIR_PROPOSALS_CAPABILITY,
   type RunnerCapability,
   type RunnerDeviceMetadata,
@@ -258,6 +259,14 @@ export class LocalRunnerService {
       if (this.secretProvider?.isAvailable() === true) {
         capabilities.push(SECURE_INPUT_CAPABILITIES[1]);
       }
+    }
+    if (
+      !this.executionConfiguration.headed &&
+      !capabilities.includes(WORKFLOW_APPROVAL_CAPABILITY) &&
+      !capabilities.includes(WORKFLOW_MANUAL_REPAIR_CAPABILITY) &&
+      !capabilities.includes(LOCATOR_REPAIR_PROPOSALS_CAPABILITY)
+    ) {
+      capabilities.push(WORKFLOW_SCHEDULED_EXECUTION_CAPABILITY);
     }
     return capabilities;
   }

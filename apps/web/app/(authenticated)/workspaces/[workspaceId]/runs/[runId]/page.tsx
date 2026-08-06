@@ -121,7 +121,7 @@ export default async function WorkflowRunDetailPage({
             Open audit trail
           </Link>
         </div>
-        <RunEvidenceList accessToken={token} workflowRunId={runId} />
+        <RunEvidenceList workflowRunId={runId} />
       </section>
     </main>
   );

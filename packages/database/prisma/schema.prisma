@@ -197,6 +197,27 @@ enum WorkspaceExecutionPolicyStatus {
   @@map("workspace_execution_policy_status")
 }
 
+enum WorkflowScheduleStatus {
+  ACTIVE
+  PAUSED
+  AUTO_PAUSED
+  COMPLETED
+  ARCHIVED
+
+  @@map("workflow_schedule_status")
+}
+
+enum WorkflowScheduleOccurrenceStatus {
+  PENDING
+  DISPATCHED
+  SUCCEEDED
+  SKIPPED
+  TIMED_OUT
+  CANCELLED
+
+  @@map("workflow_schedule_occurrence_status")
+}
+
 model User {
   id                         String                        @id @default(uuid()) @db.Uuid
   email                      String                        @unique(map: "users_email_key") @db.VarChar(254)
@@ -221,6 +242,8 @@ model User {
   appliedLocatorRepairs       WorkflowLocatorRepairProposal[]  @relation("LocatorRepairApplier")
   requestedLocatorTests       WorkflowLocatorRepairCandidate[] @relation("LocatorRepairTestRequester")
   createdExecutionPolicies    WorkspaceExecutionPolicyVersion[] @relation("WorkspaceExecutionPolicyCreator")
+  createdSchedules         WorkflowSchedule[]                   @relation("WorkflowScheduleCreator")
+  archivedSchedules        WorkflowSchedule[]                   @relation("WorkflowScheduleArchiver")
 
   @@map("users")
 }
@@ -270,6 +293,7 @@ model Workspace {
   executionPolicyVersions WorkspaceExecutionPolicyVersion[]
   auditChainHead         WorkspaceAuditChainHead?
   auditEvents            WorkspaceAuditEvent[]
+  schedules              WorkflowSchedule[]
 
   @@unique([organizationId, slug], map: "workspaces_organization_id_slug_key")
   @@map("workspaces")
@@ -335,6 +359,7 @@ model RunnerDevice {
   approvalRequests WorkflowApprovalRequest[]
   repairRequests   WorkflowRepairRequest[]
   locatorRepairProposals WorkflowLocatorRepairProposal[]
+  schedules            WorkflowSchedule[]
 
   @@index([workspaceId, revokedAt, lastSeenAt], map: "runner_devices_workspace_id_revoked_at_last_seen_at_idx")
   @@index([revokedById], map: "runner_devices_revoked_by_id_idx")
@@ -366,6 +391,7 @@ model Workflow {
   versions             WorkflowVersion[]
   recordingConversions RecordingWorkflowConversion[]
   runs                 WorkflowRun[]
+  schedules            WorkflowSchedule[]
 
   @@index([workspaceId], map: "workflows_workspace_id_idx")
   @@map("workflows")
@@ -397,6 +423,7 @@ model WorkflowVersion {
   runInputPreparations WorkflowRunInputPreparation[]
   sourceLocatorRepairProposals WorkflowLocatorRepairProposal[] @relation("LocatorRepairSourceVersion")
   appliedLocatorRepairProposals WorkflowLocatorRepairProposal[] @relation("LocatorRepairDraftVersion")
+  schedules            WorkflowSchedule[]
 
   @@unique([workflowId, version], map: "workflow_versions_workflow_id_version_key")
   @@unique([workflowId, clientCreationId], map: "workflow_versions_workflow_id_client_creation_id_key")
@@ -422,6 +449,11 @@ model WorkflowRun {
   definitionDigest        String            @map("definition_digest") @db.Char(64)
   allowedOrigins          Json              @map("allowed_origins") @db.JsonB
   executionOptions        Json              @map("execution_options") @db.JsonB
+  trigger                String            @default("manual") @map("trigger") @db.VarChar(16)
+  scheduleId            String?           @map("schedule_id") @db.Uuid
+  occurrenceId          String?           @map("occurrence_id") @db.Uuid
+  scheduledFor          DateTime?         @map("scheduled_for") @db.Timestamptz(3)
+  scheduledStartDeadlineAt DateTime?       @map("scheduled_start_deadline_at") @db.Timestamptz(3)
   claimAttemptId          String?           @map("claim_attempt_id") @db.Uuid
   leaseTokenHash          String?           @map("lease_token_hash") @db.Char(64)
   leaseExpiresAt          DateTime?         @map("lease_expires_at") @db.Timestamptz(3)
@@ -456,9 +488,12 @@ model WorkflowRun {
   stepAttempts            WorkflowRunStepAttempt[]
   locatorRepairProposals  WorkflowLocatorRepairProposal[]
   policyVersion           WorkspaceExecutionPolicyVersion? @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
+  schedule               WorkflowSchedule?             @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  scheduleOccurrences     WorkflowScheduleOccurrence[]
 
   @@unique([workspaceId, clientRunId], map: "workflow_runs_workspace_id_client_run_id_key")
   @@unique([runnerDeviceId, claimAttemptId], map: "workflow_runs_runner_device_id_claim_attempt_id_key")
+  @@unique([scheduleId], map: "workflow_runs_schedule_active_scheduled_key")
   @@index([runnerDeviceId, status, createdAt], map: "workflow_runs_runner_device_id_status_created_at_idx")
   @@index([workspaceId, createdAt], map: "workflow_runs_workspace_id_created_at_idx")
   @@index([workflowId, createdAt], map: "workflow_runs_workflow_id_created_at_idx")
@@ -467,6 +502,7 @@ model WorkflowRun {
   @@index([createdByUserId, createdAt], map: "workflow_runs_created_by_user_id_created_at_idx")
   @@index([cancelRequestedByUserId], map: "workflow_runs_cancel_requested_by_user_id_idx")
   @@index([policyVersionId, createdAt], map: "workflow_runs_policy_version_id_created_at_idx")
+  @@index([scheduleId], map: "workflow_runs_schedule_idx")
   @@map("workflow_runs")
 }
 
@@ -907,6 +943,75 @@ model WorkspaceAuditChainHead {
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
 
   @@map("workspace_audit_chain_heads")
+}
+
+model WorkflowSchedule {
+  id                      String                            @id @default(uuid()) @db.Uuid
+  workspaceId             String                            @map("workspace_id") @db.Uuid
+  workflowId              String                            @map("workflow_id")
+  workflowVersionId       String                            @map("workflow_version_id") @db.Uuid
+  runnerDeviceId         String                            @map("runner_device_id") @db.Uuid
+  createdByUserId        String                            @map("created_by_user_id") @db.Uuid
+  clientScheduleId       String                            @map("client_schedule_id") @db.Uuid
+  name                   String                            @db.VarChar(120)
+  definition             Json                              @map("definition") @db.JsonB
+  definitionDigest       String                            @map("definition_digest") @db.Char(64)
+  workflowDigest         String                            @map("workflow_digest") @db.Char(64)
+  status                 WorkflowScheduleStatus            @default(ACTIVE)
+  overlapPolicy          String                            @default("skip")     @map("overlap_policy") @db.VarChar(16)
+  misfirePolicy          String                            @default("skip")     @map("misfire_policy") @db.VarChar(16)
+  maxStartDelaySeconds   Int                               @default(300)       @map("max_start_delay_seconds")
+  nextOccurrenceAt       DateTime?                         @map("next_occurrence_at") @db.Timestamptz(3)
+  lastOccurrenceAt       DateTime?                         @map("last_occurrence_at") @db.Timestamptz(3)
+  autoPauseReason        String?                           @map("auto_pause_reason") @db.VarChar(80)
+  autoPausedAt           DateTime?                         @map("auto_paused_at") @db.Timestamptz(3)
+  autoPausedByOccurrenceId String?                          @map("auto_paused_by_occurrence_id") @db.Uuid
+  completedAt            DateTime?                         @map("completed_at") @db.Timestamptz(3)
+  archivedAt             DateTime?                         @map("archived_at") @db.Timestamptz(3)
+  archivedByUserId       String?                           @map("archived_by_user_id") @db.Uuid
+  createdAt              DateTime                          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace              Workspace                         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  workflow               Workflow                          @relation(fields: [workflowId], references: [id], onDelete: Restrict)
+  workflowVersion        WorkflowVersion                   @relation(fields: [workflowVersionId], references: [id], onDelete: Restrict)
+  runnerDevice          RunnerDevice                      @relation(fields: [runnerDeviceId], references: [id], onDelete: Restrict)
+  createdBy              User                              @relation("WorkflowScheduleCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  archivedBy             User?                             @relation("WorkflowScheduleArchiver", fields: [archivedByUserId], references: [id], onDelete: SetNull)
+  autoPausedByOccurrence WorkflowScheduleOccurrence?       @relation("ScheduleAutoPausedBy", fields: [autoPausedByOccurrenceId], references: [id], onDelete: SetNull)
+  occurrences            WorkflowScheduleOccurrence[]
+  workflowRuns           WorkflowRun[]
+
+  @@unique([workspaceId, clientScheduleId], map: "workflow_schedules_workspace_client_sched_id_key")
+  @@index([status, nextOccurrenceAt], map: "workflow_schedules_status_next_idx")
+  @@index([workspaceId, status, createdAt], map: "workflow_schedules_workspace_status_created_idx")
+  @@index([runnerDeviceId], map: "workflow_schedules_runner_idx")
+  @@map("workflow_schedules")
+}
+
+model WorkflowScheduleOccurrence {
+  id                    String                              @id @default(uuid()) @db.Uuid
+  scheduleId            String                              @map("schedule_id") @db.Uuid
+  workflowRunId         String?                             @unique(map: "workflow_schedule_occurrences_run_id_key") @map("workflow_run_id") @db.Uuid
+  scheduledFor          DateTime                            @map("scheduled_for") @db.Timestamptz(3)
+  startDeadlineAt       DateTime                            @map("start_deadline_at") @db.Timestamptz(3)
+  status                WorkflowScheduleOccurrenceStatus     @default(PENDING)
+  skipReason            String?                             @map("skip_reason") @db.VarChar(80)
+  skippedAt             DateTime?                           @map("skipped_at") @db.Timestamptz(3)
+  dispatchedAt          DateTime?                           @map("dispatched_at") @db.Timestamptz(3)
+  completedAt           DateTime?                           @map("completed_at") @db.Timestamptz(3)
+  terminationCause       String?                             @map("termination_cause") @db.VarChar(80)
+  createdAt             DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  schedule              WorkflowSchedule                    @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  workflowRun           WorkflowRun?                        @relation(fields: [workflowRunId], references: [id], onDelete: SetNull)
+  pausedSchedules       WorkflowSchedule[]                  @relation("ScheduleAutoPausedBy")
+
+  @@unique([scheduleId, scheduledFor], map: "workflow_schedule_occurrences_sched_time_key")
+  @@index([status, startDeadlineAt], map: "workflow_schedule_occurrences_deadline_idx")
+  @@index([scheduleId, createdAt], map: "workflow_schedule_occurrences_schedule_created_idx")
+  @@map("workflow_schedule_occurrences")
 }
 
 model WorkspaceAuditEvent {

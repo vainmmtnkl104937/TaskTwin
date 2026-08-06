@@ -15,6 +15,7 @@ import {
   WorkflowRunRepository,
   WorkflowApprovalRepository,
   WorkflowRepairRepository,
+  WorkflowScheduleRepository,
 } from '@tasktwin/database';
 
 import {
@@ -50,6 +51,7 @@ export class OrganizationResourceContextGuard implements CanActivate {
     private readonly workflowRunRepository: WorkflowRunRepository,
     private readonly workflowApprovalRepository: WorkflowApprovalRepository,
     private readonly workflowRepairRepository: WorkflowRepairRepository,
+    private readonly workflowScheduleRepository: WorkflowScheduleRepository,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -128,6 +130,12 @@ export class OrganizationResourceContextGuard implements CanActivate {
         break;
       case 'repairRequest':
         access = await this.workflowRepairRepository.resolveRepairAccess(
+          user.id,
+          resourceId,
+        );
+        break;
+      case 'schedule':
+        access = await this.workflowScheduleRepository.resolveScheduleAccess(
           user.id,
           resourceId,
         );
