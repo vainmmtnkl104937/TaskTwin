@@ -35,6 +35,10 @@ import { validateEditorWorkflow } from '@tasktwin/workflow-editor-core';
 import { analyzePublishReadiness } from '@tasktwin/workflow-lifecycle';
 import { WorkspaceExecutionPolicyDefinitionSchema } from '@tasktwin/workflow-policy';
 import { z } from 'zod';
+import {
+  createAuditSourceId,
+  type AuditEventInput,
+} from '@tasktwin/audit-trail';
 
 import {
   OrganizationRole,
@@ -45,6 +49,11 @@ import {
   WorkflowRunStatus,
   type PrismaClient,
 } from '../generated/prisma/client.js';
+import {
+  appendAuditEventTransactional,
+  auditHasherForTrail,
+} from '../audit-trail/audit-appender.repository.js';
+import { WorkspaceAuditTrailRepository } from '../audit-trail/audit-trail.repository.js';
 import { createCanonicalJsonDigest } from '../recording/canonical-json.js';
 import { WorkflowLocatorRepairRepositoryError } from './workflow-locator-repair-errors.js';
 import type {
@@ -52,6 +61,177 @@ import type {
   WorkflowLocatorRepairCandidateRecord,
   WorkflowLocatorRepairProposalRecord,
 } from './workflow-locator-repair-records.js';
+
+const LOCATOR_REPAIR_NAMESPACES = {
+  proposalCreated: 'locator_repair_proposal_created',
+  candidateTested: 'locator_repair_candidate_tested',
+  applied: 'locator_repair_applied',
+  dismissed: 'locator_repair_dismissed',
+} as const;
+
+function buildLocatorRepairProposalCreatedInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner'; runnerDeviceId: string };
+  proposalId: string;
+  workflowRunId: string;
+  stepId: string;
+  stepIndex: number;
+  failedAttemptNumber: number;
+  candidateCount: number;
+  occurredAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'locator_repair.proposal_created',
+    actor: input.actor,
+    primaryEntity: {
+      kind: 'locator_repair_proposal',
+      id: input.proposalId,
+    },
+    relatedEntities: [{ kind: 'workflow_run', id: input.workflowRunId }],
+    occurredAt: input.occurredAt,
+    sourceId: createAuditSourceId(
+      LOCATOR_REPAIR_NAMESPACES.proposalCreated,
+      [input.proposalId],
+      auditHasherForTrail,
+    ),
+    payload: {
+      proposalId: input.proposalId,
+      workflowRunId: input.workflowRunId,
+      stepId: input.stepId,
+      stepIndex: input.stepIndex,
+      failedAttemptNumber: input.failedAttemptNumber,
+      candidateCount: input.candidateCount,
+    },
+  };
+}
+
+function buildLocatorRepairCandidateTestedInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner'; runnerDeviceId: string };
+  proposalId: string;
+  candidateId: string;
+  candidateRank: number;
+  candidateStrategy: string;
+  candidateConfidence: 'low' | 'medium' | 'high';
+  testStatus:
+    | 'pending'
+    | 'passed'
+    | 'not_found'
+    | 'not_unique'
+    | 'not_actionable'
+    | 'incompatible_element'
+    | 'stale_page_context'
+    | 'cancelled'
+    | 'error';
+  evidenceCodeCount: number;
+  testedAt?: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'locator_repair.candidate_tested',
+    actor: input.actor,
+    primaryEntity: {
+      kind: 'locator_repair_candidate',
+      id: input.candidateId,
+    },
+    relatedEntities: [
+      { kind: 'locator_repair_proposal', id: input.proposalId },
+    ],
+    occurredAt: input.testedAt ?? new Date(),
+    sourceId: createAuditSourceId(
+      LOCATOR_REPAIR_NAMESPACES.candidateTested,
+      [input.candidateId, input.testStatus, input.testedAt?.toISOString() ?? ''],
+      auditHasherForTrail,
+    ),
+    payload: {
+      proposalId: input.proposalId,
+      candidateId: input.candidateId,
+      candidateRank: input.candidateRank,
+      candidateStrategy: input.candidateStrategy,
+      candidateConfidence: input.candidateConfidence,
+      testStatus: input.testStatus,
+      evidenceCodeCount: input.evidenceCodeCount,
+      ...(input.testedAt === undefined
+        ? {}
+        : { testedAt: input.testedAt.toISOString() }),
+    },
+  };
+}
+
+function buildLocatorRepairAppliedInput(input: {
+  workspaceId: string;
+  actor: { type: 'user'; userId: string };
+  proposalId: string;
+  candidateId: string;
+  workflowRunId: string;
+  stepId: string;
+  stepIndex: number;
+  targetDraftVersionId: string;
+  previousRevision: number;
+  newRevision: number;
+  appliedAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'locator_repair.applied_to_draft',
+    actor: input.actor,
+    primaryEntity: {
+      kind: 'locator_repair_proposal',
+      id: input.proposalId,
+    },
+    relatedEntities: [{ kind: 'workflow_run', id: input.workflowRunId }],
+    occurredAt: input.appliedAt,
+    sourceId: createAuditSourceId(
+      LOCATOR_REPAIR_NAMESPACES.applied,
+      [input.proposalId, input.appliedAt.toISOString()],
+      auditHasherForTrail,
+    ),
+    payload: {
+      proposalId: input.proposalId,
+      candidateId: input.candidateId,
+      workflowRunId: input.workflowRunId,
+      stepId: input.stepId,
+      stepIndex: input.stepIndex,
+      targetDraftVersionId: input.targetDraftVersionId,
+      previousRevision: input.previousRevision,
+      newRevision: input.newRevision,
+      appliedAt: input.appliedAt.toISOString(),
+    },
+  };
+}
+
+function buildLocatorRepairDismissedInput(input: {
+  workspaceId: string;
+  actor: { type: 'system'; reason: 'automatic_expiry' };
+  proposalId: string;
+  workflowRunId: string;
+  reason: 'expired' | 'invalidated';
+  dismissedAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'locator_repair.dismissed',
+    actor: input.actor,
+    primaryEntity: {
+      kind: 'locator_repair_proposal',
+      id: input.proposalId,
+    },
+    relatedEntities: [{ kind: 'workflow_run', id: input.workflowRunId }],
+    occurredAt: input.dismissedAt,
+    sourceId: createAuditSourceId(
+      LOCATOR_REPAIR_NAMESPACES.dismissed,
+      [input.proposalId, input.reason, input.dismissedAt.toISOString()],
+      auditHasherForTrail,
+    ),
+    payload: {
+      proposalId: input.proposalId,
+      workflowRunId: input.workflowRunId,
+      reason: input.reason,
+      dismissedAt: input.dismissedAt.toISOString(),
+    },
+  };
+}
 
 const WRITERS = [
   OrganizationRole.OWNER,
@@ -273,7 +453,12 @@ function deriveBinding(input: {
 }
 
 export class WorkflowLocatorRepairRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly auditTrail: WorkspaceAuditTrailRepository = new WorkspaceAuditTrailRepository(
+      prisma,
+    ),
+  ) {}
 
   async resolveProposalAccess(
     userId: string,
@@ -564,6 +749,24 @@ export class WorkflowLocatorRepairRepository {
         },
         include: proposalInclude,
       });
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildLocatorRepairProposalCreatedInput({
+          workspaceId: run.workspaceId,
+          actor: {
+            type: 'runner',
+            runnerDeviceId: input.runnerDeviceId,
+          },
+          proposalId: created.id,
+          workflowRunId: run.id,
+          stepId: binding.step.id,
+          stepIndex: binding.stepIndex,
+          failedAttemptNumber: repair.attemptNumber,
+          candidateCount: request.candidates.length,
+          occurredAt: input.now,
+        }),
+      );
       return { idempotent: false, record: toProposalRecord(created) };
     });
   }
@@ -777,7 +980,11 @@ export class WorkflowLocatorRepairRepository {
         await transaction.workflowLocatorRepairCandidate.findUnique({
           where: { id: input.candidateId },
           include: {
-            proposal: { include: { workflowRun: true } },
+            proposal: {
+              include: {
+                workflowRun: true,
+              },
+            },
           },
         });
       if (
@@ -834,6 +1041,34 @@ export class WorkflowLocatorRepairRepository {
           testedAt: input.now,
         },
       });
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildLocatorRepairCandidateTestedInput({
+          workspaceId: candidate.proposal.workspaceId,
+          actor: {
+            type: 'runner',
+            runnerDeviceId: input.runnerDeviceId,
+          },
+          proposalId: candidate.proposalId,
+          candidateId: candidate.id,
+          candidateRank: candidate.rank,
+          candidateStrategy: candidate.strategy,
+          candidateConfidence: candidate.confidence as 'low' | 'medium' | 'high',
+          testStatus: result.status.toLowerCase() as
+            | 'pending'
+            | 'passed'
+            | 'not_found'
+            | 'not_unique'
+            | 'not_actionable'
+            | 'incompatible_element'
+            | 'stale_page_context'
+            | 'cancelled'
+            | 'error',
+          evidenceCodeCount: jsonStringArray(candidate.evidenceCodes).length,
+          testedAt: input.now,
+        }),
+      );
       if (result.status === 'PASSED') {
         await transaction.workflowLocatorRepairProposal.updateMany({
           where: {
@@ -1088,6 +1323,23 @@ export class WorkflowLocatorRepairRepository {
           appliedAt: input.now,
         },
       });
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildLocatorRepairAppliedInput({
+          workspaceId: proposal.workspaceId,
+          actor: { type: 'user', userId: input.userId },
+          proposalId: proposal.id,
+          candidateId: candidate.id,
+          workflowRunId: proposal.workflowRunId,
+          stepId: proposal.stepId,
+          stepIndex: proposal.stepIndex,
+          targetDraftVersionId: target.id,
+          previousRevision: request.expectedRevision,
+          newRevision: revision,
+          appliedAt: input.now,
+        }),
+      );
       return {
         idempotent: false,
         proposalId: proposal.id,
@@ -1153,5 +1405,40 @@ export class WorkflowLocatorRepairRepository {
       }
     }
     throw new WorkflowLocatorRepairRepositoryError('SERIALIZATION_FAILURE');
+  }
+
+  async dismissProposal(
+    transaction: Prisma.TransactionClient,
+    proposalId: string,
+    now: Date,
+    reason: 'expired' | 'invalidated',
+  ): Promise<void> {
+    const proposal =
+      await transaction.workflowLocatorRepairProposal.findUnique({
+        where: { id: proposalId },
+        select: {
+          workspaceId: true,
+          workflowRunId: true,
+          status: true,
+        },
+      });
+    if (
+      proposal === null ||
+      proposal.status === WorkflowLocatorRepairProposalStatus.APPLIED
+    ) {
+      return;
+    }
+    await appendAuditEventTransactional(
+      transaction,
+      this.auditTrail,
+      buildLocatorRepairDismissedInput({
+        workspaceId: proposal.workspaceId,
+        actor: { type: 'system', reason: 'automatic_expiry' },
+        proposalId,
+        workflowRunId: proposal.workflowRunId,
+        reason,
+        dismissedAt: now,
+      }),
+    );
   }
 }

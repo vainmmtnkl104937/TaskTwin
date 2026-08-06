@@ -27,7 +27,10 @@ Session 17 adds persisted run dispatch and Session 18 adds end-to-end encrypted
 runtime variables plus local-only secret resolution for an assigned Runner.
 Session 19 adds deterministic verification, and Session 20 adds ephemeral
 Runner-only extraction outputs with metadata-only Control Plane tracking.
-It still does not transfer files, rotate Runner keys, reuse browser profiles,
+Session 24 introduces a deterministic Workspace execution policy with
+immutable versions, origin/action/risk evaluation and pinned runs.
+Session 25 adds an append-only, hash-chained audit trail with API and web
+surfaces. It still does not transfer files, rotate Runner keys, reuse browser profiles,
 persist secrets, or capture screenshots.
 
 ## Browser-first MVP
@@ -60,6 +63,7 @@ general-purpose operating-system control are not part of the browser-first MVP.
 | `packages/config`               | Shared strict TypeScript and ESLint configuration       |
 | `packages/runner-protocol`      | Local Runner pairing and heartbeat contracts            |
 | `packages/run-protocol`         | Persisted run, lease, progress and completion contracts |
+| `packages/audit-trail`         | Append-only, hash-chained audit events and verification |
 
 The architectural direction is documented in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).

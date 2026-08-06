@@ -311,6 +311,26 @@ screenshots, XPath, AI repair, automatic Draft creation and publishing.
 Session 24 excludes policy scripts, OPA/Rego, AI classification, automatic
 workflow edits, live policy mutation and an emergency kill switch.
 
+## Session 25: append-only audit trail
+
+- Hash-chained, workspace-scoped audit events with PostgreSQL trigger
+  immutability
+- Same-transaction appender invoked from workflow, policy, run, approval,
+  repair and locator-repair mutations
+- Canonical JSON + SHA-256 chain verification with typed `ok`, `sequence_gap`
+  and `tampered` results
+- Typed payload schemas enforcing a shared forbidden-key list at every
+  boundary
+- Safe run-evidence endpoint that returns only typed workflow-run lifecycle
+  events
+- API endpoints for list, detail, verify and run evidence with strict
+  role-based authorization
+- Web audit pages (list, detail, verify) and a typed Evidence tab on the
+  run detail page
+
+Session 25 excludes external SIEM forwarding, long-term archival, granular
+per-actor retention, HSM-backed signing and compression of large payloads.
+
 ## Browser-first MVP direction
 
 Later sessions may address these capabilities individually after their

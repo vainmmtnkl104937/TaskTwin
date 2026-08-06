@@ -3,6 +3,7 @@ import {
   WorkspaceExecutionPolicyDefinitionSchema,
   type WorkspaceExecutionPolicyDefinition,
 } from '@tasktwin/workflow-policy';
+import { createAuditSourceId, type AuditEventInput } from '@tasktwin/audit-trail';
 
 import {
   OrganizationRole,
@@ -10,6 +11,11 @@ import {
   WorkspaceExecutionPolicyStatus,
   type PrismaClient,
 } from '../generated/prisma/client.js';
+import {
+  appendAuditEventTransactional,
+  auditHasherForTrail,
+} from '../audit-trail/audit-appender.repository.js';
+import { WorkspaceAuditTrailRepository } from '../audit-trail/audit-trail.repository.js';
 import { createCanonicalJsonDigest } from '../recording/canonical-json.js';
 import { ExecutionPolicyRepositoryError } from './execution-policy-errors.js';
 import type {
@@ -20,6 +26,72 @@ import type {
 
 const WRITER_ROLES = [OrganizationRole.OWNER, OrganizationRole.ADMIN] as const;
 const SERIALIZATION_RETRY_COUNT = 3;
+
+function buildPolicyArchivedInput(input: {
+  workspaceId: string;
+  actor: { type: 'user'; userId: string };
+  policyVersionId: string;
+  revision: number;
+  policyDigest: string;
+  occurredAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'policy_version.archived',
+    actor: input.actor,
+    primaryEntity: { kind: 'policy_version', id: input.policyVersionId },
+    occurredAt: input.occurredAt,
+    sourceId: createAuditSourceId(
+      'policy_version_archived',
+      [input.policyVersionId, input.revision, 'superseded'],
+      auditHasherForTrail,
+    ),
+    payload: {
+      policyVersionId: input.policyVersionId,
+      revision: input.revision,
+      policyDigest: input.policyDigest,
+      reason: 'superseded',
+    },
+  };
+}
+
+function buildPolicyActivatedInput(input: {
+  workspaceId: string;
+  actor: { type: 'user'; userId: string };
+  policyVersionId: string;
+  revision: number;
+  policyDigest: string;
+  previousPolicyVersionId: string | null;
+  occurredAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'policy_version.activated',
+    actor: input.actor,
+    primaryEntity: { kind: 'policy_version', id: input.policyVersionId },
+    ...(input.previousPolicyVersionId === null
+      ? {}
+      : {
+          relatedEntities: [
+            { kind: 'policy_version' as const, id: input.previousPolicyVersionId },
+          ],
+        }),
+    occurredAt: input.occurredAt,
+    sourceId: createAuditSourceId(
+      'policy_version_activated',
+      [input.policyVersionId, input.revision],
+      auditHasherForTrail,
+    ),
+    payload: {
+      policyVersionId: input.policyVersionId,
+      revision: input.revision,
+      policyDigest: input.policyDigest,
+      ...(input.previousPolicyVersionId === null
+        ? {}
+        : { previousPolicyVersionId: input.previousPolicyVersionId }),
+    },
+  };
+}
 
 function toRecord(row: {
   id: string;
@@ -49,7 +121,12 @@ function serializationError(error: unknown): boolean {
 }
 
 export class ExecutionPolicyRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly auditTrail: WorkspaceAuditTrailRepository = new WorkspaceAuditTrailRepository(
+      prisma,
+    ),
+  ) {}
 
   async getActive(
     userId: string,
@@ -171,6 +248,31 @@ export class ExecutionPolicyRepository {
           activatedAt: input.now,
         },
       });
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildPolicyArchivedInput({
+          workspaceId: input.workspaceId,
+          actor: { type: 'user', userId: input.userId },
+          policyVersionId: active.id,
+          revision: active.revision,
+          policyDigest: active.digest,
+          occurredAt: input.now,
+        }),
+      );
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildPolicyActivatedInput({
+          workspaceId: input.workspaceId,
+          actor: { type: 'user', userId: input.userId },
+          policyVersionId: created.id,
+          revision: created.revision,
+          policyDigest: digest,
+          previousPolicyVersionId: active.id,
+          occurredAt: input.now,
+        }),
+      );
       return {
         idempotent: false,
         record: { ...access, active: toRecord(created) },

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import { RunDetailControls } from '@/components/workflow-runs/run-detail-controls';
+import { RunEvidenceList } from '@/components/workflow-runs/run-evidence-list';
 import { WorkflowRunStatusBadge } from '@/components/workflow-runs/workflow-run-status-badge';
 import { getAccessToken } from '@/lib/server/auth-session';
 import { ControlPlaneError, getWorkflowRun } from '@/lib/server/control-plane';
@@ -108,6 +109,19 @@ export default async function WorkflowRunDetailPage({
             </article>
           ))
         )}
+      </section>
+      <section className="workflow-list" aria-label="Run evidence">
+        <div className="section-heading">
+          <p className="eyebrow">Typed execution events</p>
+          <h2>Run evidence</h2>
+          <Link
+            className="button-link"
+            href={`/workspaces/${workspaceId}/audit`}
+          >
+            Open audit trail
+          </Link>
+        </div>
+        <RunEvidenceList accessToken={token} workflowRunId={runId} />
       </section>
     </main>
   );

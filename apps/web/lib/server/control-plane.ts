@@ -33,6 +33,15 @@ import {
   ActiveExecutionPolicyResponseSchema,
   ExecutionPolicyVersionListResponseSchema,
   CreateExecutionPolicyVersionResponseSchema,
+  AuditEventListResponseSchema,
+  AuditEventDetailResponseSchema,
+  AuditVerifyResponseSchema,
+  RunEvidenceResponseSchema,
+  type AuditEventListResponse,
+  type AuditEventDetailResponse,
+  type AuditVerifyRequest,
+  type AuditVerifyResponse,
+  type RunEvidenceResponse,
 } from '../control-plane-contracts';
 import type { WorkspaceExecutionPolicyDefinition } from '@tasktwin/workflow-policy';
 import { getControlPlaneOrigin } from './environment';
@@ -552,6 +561,135 @@ export function applyLocatorRepairCandidate(
       method: 'POST',
       headers: { authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ schemaVersion: 1, ...input }),
+    },
+  );
+}
+
+function buildAuditQueryString(
+  filters: {
+    eventTypes?: string[];
+    actorKinds?: ('user' | 'runner' | 'system')[];
+    primaryEntityKind?: string;
+    primaryEntityId?: string;
+    correlationId?: string;
+    fromOccurredAt?: string;
+    toOccurredAt?: string;
+    fromSequence?: number;
+    toSequence?: number;
+    limit?: number;
+    cursor?: string;
+  },
+): string {
+  const params = new URLSearchParams();
+  if (filters.eventTypes) {
+    for (const value of filters.eventTypes) {
+      params.append('eventTypes', value);
+    }
+  }
+  if (filters.actorKinds) {
+    for (const value of filters.actorKinds) {
+      params.append('actorKinds', value);
+    }
+  }
+  if (filters.primaryEntityKind) {
+    params.set('primaryEntityKind', filters.primaryEntityKind);
+  }
+  if (filters.primaryEntityId) {
+    params.set('primaryEntityId', filters.primaryEntityId);
+  }
+  if (filters.correlationId) {
+    params.set('correlationId', filters.correlationId);
+  }
+  if (filters.fromOccurredAt) {
+    params.set('fromOccurredAt', filters.fromOccurredAt);
+  }
+  if (filters.toOccurredAt) {
+    params.set('toOccurredAt', filters.toOccurredAt);
+  }
+  if (filters.fromSequence !== undefined) {
+    params.set('fromSequence', String(filters.fromSequence));
+  }
+  if (filters.toSequence !== undefined) {
+    params.set('toSequence', String(filters.toSequence));
+  }
+  if (filters.limit !== undefined) {
+    params.set('limit', String(filters.limit));
+  }
+  if (filters.cursor) {
+    params.set('cursor', filters.cursor);
+  }
+  const query = params.toString();
+  return query.length === 0 ? '' : `?${query}`;
+}
+
+export function listAuditEvents(
+  accessToken: string,
+  workspaceId: string,
+  filters: {
+    eventTypes?: string[];
+    actorKinds?: ('user' | 'runner' | 'system')[];
+    primaryEntityKind?: string;
+    primaryEntityId?: string;
+    correlationId?: string;
+    fromOccurredAt?: string;
+    toOccurredAt?: string;
+    fromSequence?: number;
+    toSequence?: number;
+    limit?: number;
+    cursor?: string;
+  } = {},
+): Promise<AuditEventListResponse> {
+  const query = buildAuditQueryString(filters);
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/audit-events${query}`,
+    AuditEventListResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function getAuditEvent(
+  accessToken: string,
+  auditEventId: string,
+): Promise<AuditEventDetailResponse> {
+  return request(
+    `/audit-events/${encodeURIComponent(auditEventId)}`,
+    AuditEventDetailResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function verifyAuditTrail(
+  accessToken: string,
+  workspaceId: string,
+  input: AuditVerifyRequest,
+): Promise<AuditVerifyResponse> {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/audit-trail/verify`,
+    AuditVerifyResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ schemaVersion: 1, ...input }),
+    },
+  );
+}
+
+export function getRunEvidence(
+  accessToken: string,
+  workflowRunId: string,
+): Promise<RunEvidenceResponse> {
+  return request(
+    `/workflow-runs/${encodeURIComponent(workflowRunId)}/evidence`,
+    RunEvidenceResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
     },
   );
 }

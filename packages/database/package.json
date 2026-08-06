@@ -34,6 +34,7 @@
     "@tasktwin/runner-protocol": "workspace:*",
     "@tasktwin/secure-run-inputs": "workspace:*",
     "@tasktwin/workflow-engine": "workspace:*",
+    "@tasktwin/audit-trail": "workspace:*",
     "@tasktwin/workflow-editor-core": "workspace:*",
     "@tasktwin/workflow-lifecycle": "workspace:*",
     "@tasktwin/workflow-locator-repair": "workspace:*",

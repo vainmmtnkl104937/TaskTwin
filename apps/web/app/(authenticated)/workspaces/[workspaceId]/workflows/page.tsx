@@ -40,6 +40,10 @@ export default async function WorkflowsPage({
         <Link className="button-link" href={`/workspaces/${workspaceId}/runs`}>
           Workflow runs
         </Link>
+        {' · '}
+        <Link className="button-link" href={`/workspaces/${workspaceId}/audit`}>
+          Audit trail
+        </Link>
       </section>
       <section className="workflow-list" aria-label="Available workflows">
         {result.workflows.map((workflow) => (

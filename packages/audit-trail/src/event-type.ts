@@ -1,0 +1,41 @@
+import { z } from 'zod';
+
+export const AUDIT_EVENT_TYPES = [
+  'workflow.created',
+  'workflow_version.created',
+  'workflow_draft.updated',
+  'workflow_version.submitted_for_testing',
+  'workflow_version.returned_to_draft',
+  'workflow_version.published',
+  'workflow_version.archived',
+  'policy_version.archived',
+  'policy_version.activated',
+  'workflow_run.created',
+  'workflow_run.claimed',
+  'workflow_run.started',
+  'workflow_run.waiting_for_approval',
+  'workflow_run.waiting_for_repair',
+  'workflow_run.cancel_requested',
+  'workflow_run.succeeded',
+  'workflow_run.failed',
+  'workflow_run.cancelled',
+  'workflow_run.timed_out',
+  'workflow_run.interrupted',
+  'execution.attempt_started',
+  'execution.attempt_terminal',
+  'execution.verification_completed',
+  'execution.output_produced',
+  'approval.requested',
+  'approval.decided',
+  'approval.lifecycle',
+  'repair.requested',
+  'repair.decided',
+  'repair.lifecycle',
+  'locator_repair.proposal_created',
+  'locator_repair.candidate_tested',
+  'locator_repair.applied_to_draft',
+  'locator_repair.dismissed',
+] as const;
+
+export const AuditEventTypeSchema = z.enum(AUDIT_EVENT_TYPES);
+export type AuditEventType = z.infer<typeof AuditEventTypeSchema>;
