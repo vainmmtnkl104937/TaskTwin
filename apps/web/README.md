@@ -65,3 +65,12 @@ Workspace Repair Center. Retry appears only for an eligible request and an
 OWNER/ADMIN; MEMBER may Abort. The UI never renders runtime inputs, secrets,
 outputs, raw errors, locators, full URLs or screenshots, and warns that manual
 browser changes are not fully audited.
+
+Session 25 adds an Audit Trail page (`/workspaces/:workspaceId/audit`),
+typed detail and verification pages, a typed Evidence tab on the run
+detail page, and an audit link in workspace navigation. All audit
+components are rendered from typed zod-validated DTOs; no
+`dangerouslySetInnerHTML` or JSON blob dumps are used. Forbidden payload
+keys (secrets, tokens, URLs, screenshots, observed/expected values, …) are
+rejected at the API boundary and re-validated on the web boundary before
+rendering.

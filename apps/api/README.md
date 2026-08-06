@@ -103,3 +103,20 @@ device and current run lease. The server derives retry eligibility from the
 Published workflow and deterministic recovery policy; it never accepts a
 client-provided permission. OWNER/ADMIN may Retry, MEMBER may Abort, and exact
 request/decision retries are idempotent.
+
+Session 25 adds the append-only audit trail module. Every state-mutating
+domain action appends one typed, hash-chained event inside the same Prisma
+transaction. Endpoints:
+
+- `GET /workspaces/:workspaceId/audit-events` (OWNER/ADMIN/MEMBER/VIEWER)
+- `GET /audit-events/:auditEventId` (all roles)
+- `POST /workspaces/:workspaceId/audit-trail/verify` (OWNER/ADMIN only)
+- `GET /workflow-runs/:workflowRunId/evidence` (all roles)
+
+Strict zod schemas reject a shared forbidden-key list (`value`, `secret`,
+`token`, `url`, `screenshot`, …) at every boundary. Run evidence returns
+only typed workflow-run lifecycle events. PostgreSQL triggers refuse
+`UPDATE`/`DELETE` on `workspace_audit_events`. Verification re-hashes the
+chain and returns `ok`, `sequence_gap` or `tampered` with the first failure
+sequence and kind. Source identifiers are server-derived; collisions return
+HTTP 409 `AUDIT_SOURCE_CONFLICT`.

@@ -5,12 +5,18 @@ import {
   WorkflowDefinitionSchema,
   type WorkflowDefinition,
 } from '@tasktwin/workflow-schema';
+import { createAuditSourceId, type AuditEventInput } from '@tasktwin/audit-trail';
 
 import {
   OrganizationRole,
   Prisma,
   type PrismaClient,
 } from '../generated/prisma/client.js';
+import {
+  appendAuditEventTransactional,
+  auditHasherForTrail,
+} from '../audit-trail/audit-appender.repository.js';
+import { WorkspaceAuditTrailRepository } from '../audit-trail/audit-trail.repository.js';
 import { WorkflowDraftRepositoryError } from './workflow-draft-errors.js';
 import type {
   UpdateWorkflowDraftResult,
@@ -25,6 +31,44 @@ const WRITER_ROLES = [
   OrganizationRole.ADMIN,
   OrganizationRole.MEMBER,
 ] as const;
+
+function buildWorkflowDraftUpdatedInput(input: {
+  workspaceId: string;
+  actor: { type: 'user'; userId: string };
+  version: WorkflowVersionDetailRecord;
+  occurredAt: Date;
+}): AuditEventInput {
+  const definition = WorkflowDefinitionSchema.safeParse(
+    input.version.definition,
+  );
+  const stepCount = definition.success ? definition.data.steps.length : 0;
+  const sourceId = createAuditSourceId(
+    'workflow_draft_updated',
+    [input.version.id, input.version.revision],
+    auditHasherForTrail,
+  );
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'workflow_draft.updated',
+    actor: input.actor,
+    primaryEntity: {
+      kind: 'workflow_version',
+      id: input.version.id,
+    },
+    relatedEntities: [
+      { kind: 'workflow', id: input.version.workflowId },
+    ],
+    occurredAt: input.occurredAt,
+    sourceId,
+    payload: {
+      workflowId: input.version.workflowId,
+      workflowVersionId: input.version.id,
+      version: input.version.version,
+      revision: input.version.revision,
+      stepCount,
+    },
+  };
+}
 
 function isPrismaErrorCode(error: unknown, code: string): boolean {
   return (
@@ -155,7 +199,12 @@ function toDetailRecord(
 }
 
 export class WorkflowDraftRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly auditTrail: WorkspaceAuditTrailRepository = new WorkspaceAuditTrailRepository(
+      prisma,
+    ),
+  ) {}
 
   async resolveWorkflowVersionAccess(
     actorUserId: string,
@@ -485,7 +534,19 @@ export class WorkflowDraftRepository {
         },
       });
 
-      return { workflowVersion: toDetailRecord(result, actorUserId) };
+      const detail = toDetailRecord(result, actorUserId);
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildWorkflowDraftUpdatedInput({
+          workspaceId: detail.workspaceId,
+          actor: { type: 'user', userId: actorUserId },
+          version: detail,
+          occurredAt: new Date(),
+        }),
+      );
+
+      return { workflowVersion: detail };
     });
   }
 

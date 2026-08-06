@@ -32,6 +32,10 @@ import {
   SecureRunInputEnvelopeSchema,
   SecureRunInputManifestSchema,
 } from '@tasktwin/secure-run-inputs';
+import {
+  createAuditSourceId,
+  type AuditEventInput,
+} from '@tasktwin/audit-trail';
 
 import {
   OrganizationRole,
@@ -47,6 +51,11 @@ import {
   WorkflowRunStepAttemptTrigger,
   type PrismaClient,
 } from '../generated/prisma/client.js';
+import {
+  appendAuditEventTransactional,
+  auditHasherForTrail,
+} from '../audit-trail/audit-appender.repository.js';
+import { WorkspaceAuditTrailRepository } from '../audit-trail/audit-trail.repository.js';
 import { createCanonicalJsonDigest } from '../recording/canonical-json.js';
 import { WorkflowRunRepositoryError } from './workflow-run-errors.js';
 import type {
@@ -80,6 +89,529 @@ const WRITER_ROLES = [
   OrganizationRole.MEMBER,
 ] as const;
 const SERIALIZATION_RETRY_COUNT = 3;
+
+const RUN_EVENT_NAMESPACES = {
+  created: 'workflow_run_created',
+  claimed: 'workflow_run_claimed',
+  started: 'workflow_run_started',
+  waitingForApproval: 'workflow_run_waiting_for_approval',
+  waitingForRepair: 'workflow_run_waiting_for_repair',
+  cancelRequested: 'workflow_run_cancel_requested',
+  terminal: 'workflow_run_terminal',
+  interrupted: 'workflow_run_interrupted',
+  attemptStarted: 'execution_attempt_started',
+  attemptTerminal: 'execution_attempt_terminal',
+  verificationCompleted: 'execution_verification_completed',
+  outputProduced: 'execution_output_produced',
+} as const;
+
+const APPROVAL_LIFECYCLE_NAMESPACE = 'approval_lifecycle';
+const REPAIR_LIFECYCLE_NAMESPACE = 'repair_lifecycle';
+
+function buildApprovalLifecycleInput(input: {
+  workspaceId: string;
+  actor: { type: 'system'; reason: 'automatic_expiry' };
+  approvalRequestId: string;
+  workflowRunId: string;
+  reason: 'cancelled' | 'invalidated';
+  resolvedAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'approval.lifecycle',
+    actor: input.actor,
+    primaryEntity: { kind: 'approval_request', id: input.approvalRequestId },
+    relatedEntities: [{ kind: 'workflow_run', id: input.workflowRunId }],
+    occurredAt: input.resolvedAt,
+    sourceId: createAuditSourceId(
+      APPROVAL_LIFECYCLE_NAMESPACE,
+      [input.approvalRequestId, input.reason, input.resolvedAt.toISOString()],
+      auditHasherForTrail,
+    ),
+    payload: {
+      approvalRequestId: input.approvalRequestId,
+      workflowRunId: input.workflowRunId,
+      reason: input.reason,
+      resolvedAt: input.resolvedAt.toISOString(),
+    },
+  };
+}
+
+function buildRepairLifecycleInput(input: {
+  workspaceId: string;
+  actor: { type: 'system'; reason: 'automatic_expiry' };
+  repairRequestId: string;
+  workflowRunId: string;
+  reason: 'cancelled' | 'invalidated';
+  resolvedAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'repair.lifecycle',
+    actor: input.actor,
+    primaryEntity: { kind: 'repair_request', id: input.repairRequestId },
+    relatedEntities: [{ kind: 'workflow_run', id: input.workflowRunId }],
+    occurredAt: input.resolvedAt,
+    sourceId: createAuditSourceId(
+      REPAIR_LIFECYCLE_NAMESPACE,
+      [input.repairRequestId, input.reason, input.resolvedAt.toISOString()],
+      auditHasherForTrail,
+    ),
+    payload: {
+      repairRequestId: input.repairRequestId,
+      workflowRunId: input.workflowRunId,
+      reason: input.reason,
+      resolvedAt: input.resolvedAt.toISOString(),
+    },
+  };
+}
+
+function buildRunCreatedInput(input: {
+  workspaceId: string;
+  actor: { type: 'user'; userId: string };
+  runId: string;
+  workflowId: string;
+  workflowVersionId: string;
+  runnerDeviceId: string;
+  workflowDigest: string;
+  policyVersionId: string;
+  policyDigest: string;
+  occurredAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'workflow_run.created',
+    actor: input.actor,
+    primaryEntity: { kind: 'workflow_run', id: input.runId },
+    relatedEntities: [
+      { kind: 'workflow', id: input.workflowId },
+      { kind: 'workflow_version', id: input.workflowVersionId },
+      { kind: 'policy_version', id: input.policyVersionId },
+    ],
+    occurredAt: input.occurredAt,
+    sourceId: createAuditSourceId(
+      RUN_EVENT_NAMESPACES.created,
+      [input.runId],
+      auditHasherForTrail,
+    ),
+    payload: {
+      workflowRunId: input.runId,
+      workflowId: input.workflowId,
+      workflowVersionId: input.workflowVersionId,
+      runnerDeviceId: input.runnerDeviceId,
+      workflowDigest: input.workflowDigest,
+      policyVersionId: input.policyVersionId,
+      policyDigest: input.policyDigest,
+    },
+  };
+}
+
+function buildRunClaimedInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner'; runnerDeviceId: string };
+  runId: string;
+  claimAttemptId: string;
+  leaseExpiresAt: Date;
+  occurredAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'workflow_run.claimed',
+    actor: input.actor,
+    primaryEntity: { kind: 'workflow_run', id: input.runId },
+    occurredAt: input.occurredAt,
+    sourceId: createAuditSourceId(
+      RUN_EVENT_NAMESPACES.claimed,
+      [input.runId, input.claimAttemptId],
+      auditHasherForTrail,
+    ),
+    payload: {
+      workflowRunId: input.runId,
+      runnerDeviceId: input.actor.runnerDeviceId,
+      claimAttemptId: input.claimAttemptId,
+      leaseExpiresAt: input.leaseExpiresAt.toISOString(),
+    },
+  };
+}
+
+function buildRunStartedInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner'; runnerDeviceId: string };
+  runId: string;
+  startedAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'workflow_run.started',
+    actor: input.actor,
+    primaryEntity: { kind: 'workflow_run', id: input.runId },
+    occurredAt: input.startedAt,
+    sourceId: createAuditSourceId(
+      RUN_EVENT_NAMESPACES.started,
+      [input.runId, input.startedAt.toISOString()],
+      auditHasherForTrail,
+    ),
+    payload: {
+      workflowRunId: input.runId,
+      startedAt: input.startedAt.toISOString(),
+    },
+  };
+}
+
+function buildWaitingForApprovalInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner'; runnerDeviceId: string };
+  runId: string;
+  stepId: string;
+  stepIndex: number;
+  occurredAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'workflow_run.waiting_for_approval',
+    actor: input.actor,
+    primaryEntity: { kind: 'workflow_run', id: input.runId },
+    occurredAt: input.occurredAt,
+    sourceId: createAuditSourceId(
+      RUN_EVENT_NAMESPACES.waitingForApproval,
+      [input.runId, input.stepId, input.stepIndex],
+      auditHasherForTrail,
+    ),
+    payload: {
+      workflowRunId: input.runId,
+      stepId: input.stepId,
+      stepIndex: input.stepIndex,
+    },
+  };
+}
+
+function buildWaitingForRepairInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner'; runnerDeviceId: string };
+  runId: string;
+  stepId: string;
+  stepIndex: number;
+  attemptNumber: number;
+  occurredAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'workflow_run.waiting_for_repair',
+    actor: input.actor,
+    primaryEntity: { kind: 'workflow_run', id: input.runId },
+    occurredAt: input.occurredAt,
+    sourceId: createAuditSourceId(
+      RUN_EVENT_NAMESPACES.waitingForRepair,
+      [input.runId, input.stepId, input.attemptNumber],
+      auditHasherForTrail,
+    ),
+    payload: {
+      workflowRunId: input.runId,
+      stepId: input.stepId,
+      stepIndex: input.stepIndex,
+      attemptNumber: input.attemptNumber,
+    },
+  };
+}
+
+function buildRunCancelRequestedInput(input: {
+  workspaceId: string;
+  actor: { type: 'user'; userId: string };
+  runId: string;
+  requestedAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'workflow_run.cancel_requested',
+    actor: input.actor,
+    primaryEntity: { kind: 'workflow_run', id: input.runId },
+    occurredAt: input.requestedAt,
+    sourceId: createAuditSourceId(
+      RUN_EVENT_NAMESPACES.cancelRequested,
+      [input.runId, input.requestedAt.toISOString()],
+      auditHasherForTrail,
+    ),
+    payload: {
+      workflowRunId: input.runId,
+      requestedAt: input.requestedAt.toISOString(),
+    },
+  };
+}
+
+function buildRunTerminalInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner' | 'user' | 'system'; userId?: string; runnerDeviceId?: string; reason?: 'automatic_expiry' | 'lease_expired' | 'completion_reconciliation' | 'policy_supersede' | 'run_cancelled' };
+  runId: string;
+  terminalStatus: 'succeeded' | 'failed' | 'cancelled' | 'timed_out' | 'interrupted';
+  terminationCause?: string;
+  finishedAt: Date;
+  engineResultDigest?: string;
+  durationMs?: number;
+  stepCount: number;
+  producedOutputCount: number;
+}): AuditEventInput {
+  const actor: AuditEventInput['actor'] =
+    input.actor.type === 'user' && input.actor.userId !== undefined
+      ? { type: 'user', userId: input.actor.userId }
+      : input.actor.type === 'runner' && input.actor.runnerDeviceId !== undefined
+        ? { type: 'runner', runnerDeviceId: input.actor.runnerDeviceId }
+        : {
+            type: 'system',
+            reason: input.actor.reason ?? 'automatic_expiry',
+          };
+  const eventType =
+    input.terminalStatus === 'succeeded'
+      ? 'workflow_run.succeeded'
+      : input.terminalStatus === 'failed'
+        ? 'workflow_run.failed'
+        : input.terminalStatus === 'cancelled'
+          ? 'workflow_run.cancelled'
+          : input.terminalStatus === 'timed_out'
+            ? 'workflow_run.timed_out'
+            : 'workflow_run.interrupted';
+  return {
+    workspaceId: input.workspaceId,
+    eventType,
+    actor,
+    primaryEntity: { kind: 'workflow_run', id: input.runId },
+    occurredAt: input.finishedAt,
+    sourceId: createAuditSourceId(
+      RUN_EVENT_NAMESPACES.terminal,
+      [input.runId, eventType, input.finishedAt.toISOString()],
+      auditHasherForTrail,
+    ),
+    payload: {
+      workflowRunId: input.runId,
+      terminalStatus: input.terminalStatus,
+      ...(input.terminationCause === undefined
+        ? {}
+        : { terminationCause: input.terminationCause }),
+      finishedAt: input.finishedAt.toISOString(),
+      ...(input.engineResultDigest === undefined
+        ? {}
+        : { engineResultDigest: input.engineResultDigest }),
+      ...(input.durationMs === undefined
+        ? {}
+        : { durationMs: input.durationMs }),
+      stepCount: input.stepCount,
+      producedOutputCount: input.producedOutputCount,
+    },
+  };
+}
+
+function buildRunInterruptedInput(input: {
+  workspaceId: string;
+  runId: string;
+  finishedAt: Date;
+  stepCount: number;
+  producedOutputCount: number;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'workflow_run.interrupted',
+    actor: { type: 'system', reason: 'lease_expired' },
+    primaryEntity: { kind: 'workflow_run', id: input.runId },
+    occurredAt: input.finishedAt,
+    sourceId: createAuditSourceId(
+      RUN_EVENT_NAMESPACES.interrupted,
+      [input.runId, input.finishedAt.toISOString()],
+      auditHasherForTrail,
+    ),
+    payload: {
+      workflowRunId: input.runId,
+      terminalStatus: 'interrupted',
+      terminationCause: 'LEASE_EXPIRED',
+      finishedAt: input.finishedAt.toISOString(),
+      stepCount: input.stepCount,
+      producedOutputCount: input.producedOutputCount,
+    },
+  };
+}
+
+function buildAttemptStartedInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner'; runnerDeviceId: string };
+  runId: string;
+  attemptId: string;
+  stepId: string;
+  stepIndex: number;
+  stepType: string;
+  attemptNumber: number;
+  trigger: 'initial' | 'automatic_retry' | 'manual_retry';
+  effectCertainty:
+    | 'not_started'
+    | 'read_only'
+    | 'side_effect_possible'
+    | 'completed'
+    | 'unknown';
+  authorizedByRepairRequestId: string | null;
+  occurredAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'execution.attempt_started',
+    actor: input.actor,
+    primaryEntity: {
+      kind: 'workflow_run_step_attempt',
+      id: input.attemptId,
+    },
+    relatedEntities: [
+      { kind: 'workflow_run', id: input.runId },
+    ],
+    occurredAt: input.occurredAt,
+    sourceId: createAuditSourceId(
+      RUN_EVENT_NAMESPACES.attemptStarted,
+      [input.attemptId],
+      auditHasherForTrail,
+    ),
+    payload: {
+      workflowRunId: input.runId,
+      runStepAttemptId: input.attemptId,
+      stepId: input.stepId,
+      stepIndex: input.stepIndex,
+      stepType: input.stepType as Parameters<typeof createAuditSourceId>[1][0] extends string
+        ? Parameters<typeof createAuditSourceId>[1][0]
+        : never,
+      attemptNumber: input.attemptNumber,
+      trigger: input.trigger,
+      effectCertainty: input.effectCertainty,
+      ...(input.authorizedByRepairRequestId === null
+        ? {}
+        : { authorizedByRepairRequestId: input.authorizedByRepairRequestId }),
+    },
+  };
+}
+
+function buildAttemptTerminalInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner'; runnerDeviceId: string };
+  runId: string;
+  attemptId: string;
+  stepId: string;
+  stepIndex: number;
+  stepType: string;
+  attemptNumber: number;
+  trigger: 'initial' | 'automatic_retry' | 'manual_retry';
+  attemptStatus:
+    | 'succeeded'
+    | 'failed'
+    | 'cancelled'
+    | 'timed_out'
+    | 'interrupted';
+  effectCertainty:
+    | 'not_started'
+    | 'read_only'
+    | 'side_effect_possible'
+    | 'completed'
+    | 'unknown';
+  safeErrorCode?: string;
+  durationMs?: number;
+  occurredAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'execution.attempt_terminal',
+    actor: input.actor,
+    primaryEntity: {
+      kind: 'workflow_run_step_attempt',
+      id: input.attemptId,
+    },
+    relatedEntities: [{ kind: 'workflow_run', id: input.runId }],
+    occurredAt: input.occurredAt,
+    sourceId: createAuditSourceId(
+      RUN_EVENT_NAMESPACES.attemptTerminal,
+      [input.attemptId],
+      auditHasherForTrail,
+    ),
+    payload: {
+      workflowRunId: input.runId,
+      runStepAttemptId: input.attemptId,
+      stepId: input.stepId,
+      stepIndex: input.stepIndex,
+      stepType: input.stepType as never,
+      attemptNumber: input.attemptNumber,
+      trigger: input.trigger,
+      attemptStatus: input.attemptStatus,
+      effectCertainty: input.effectCertainty,
+      ...(input.safeErrorCode === undefined
+        ? {}
+        : { safeErrorCode: input.safeErrorCode }),
+      ...(input.durationMs === undefined
+        ? {}
+        : { durationMs: input.durationMs }),
+    },
+  };
+}
+
+function buildVerificationCompletedInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner'; runnerDeviceId: string };
+  runId: string;
+  stepId: string;
+  stepIndex: number;
+  verificationSequence: number;
+  verificationKind: string;
+  outcome: 'passed' | 'failed';
+  attemptCount: number;
+  occurredAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'execution.verification_completed',
+    actor: input.actor,
+    primaryEntity: { kind: 'workflow_run', id: input.runId },
+    occurredAt: input.occurredAt,
+    sourceId: createAuditSourceId(
+      RUN_EVENT_NAMESPACES.verificationCompleted,
+      [input.runId, input.stepId, input.verificationSequence],
+      auditHasherForTrail,
+    ),
+    payload: {
+      workflowRunId: input.runId,
+      stepId: input.stepId,
+      stepIndex: input.stepIndex,
+      verificationSequence: input.verificationSequence,
+      verificationKind: input.verificationKind as never,
+      outcome: input.outcome,
+      attemptCount: input.attemptCount,
+    },
+  };
+}
+
+function buildOutputProducedInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner'; runnerDeviceId: string };
+  runId: string;
+  outputName: string;
+  outputType: 'string' | 'boolean';
+  producerStepId: string;
+  producerStepIndex: number;
+  occurredAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'execution.output_produced',
+    actor: input.actor,
+    primaryEntity: {
+      kind: 'workflow_run_output',
+      id: `${input.runId}:${input.outputName}`,
+    },
+    relatedEntities: [{ kind: 'workflow_run', id: input.runId }],
+    occurredAt: input.occurredAt,
+    sourceId: createAuditSourceId(
+      RUN_EVENT_NAMESPACES.outputProduced,
+      [input.runId, input.outputName],
+      auditHasherForTrail,
+    ),
+    payload: {
+      workflowRunId: input.runId,
+      outputName: input.outputName,
+      outputType: input.outputType,
+      producerStepId: input.producerStepId,
+      producerStepIndex: input.producerStepIndex,
+    },
+  };
+}
 
 const runInclude = {
   workflowVersion: { select: { version: true } },
@@ -356,7 +888,12 @@ function parseOptions(input: Prisma.JsonValue): {
 }
 
 export class WorkflowRunRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly auditTrail: WorkspaceAuditTrailRepository = new WorkspaceAuditTrailRepository(
+      prisma,
+    ),
+  ) {}
 
   async resolveWorkflowRunAccess(
     userId: string,
@@ -648,6 +1185,22 @@ export class WorkflowRunRepository {
         },
         include: runInclude,
       });
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildRunCreatedInput({
+          workspaceId: version.workflow.workspaceId,
+          actor: { type: 'user', userId: input.actorUserId },
+          runId: created.id,
+          workflowId: version.workflowId,
+          workflowVersionId: version.id,
+          runnerDeviceId: input.runnerDeviceId,
+          workflowDigest: definitionDigest,
+          policyVersionId: activePolicy.id,
+          policyDigest: activePolicy.digest,
+          occurredAt: new Date(),
+        }),
+      );
       return { run: toRecord(created), idempotent: false, readiness };
     });
   }
@@ -802,6 +1355,7 @@ export class WorkflowRunRepository {
         },
         select: {
           id: true,
+          workspaceId: true,
           status: true,
           leaseTokenHash: true,
           leaseExpiresAt: true,
@@ -827,6 +1381,18 @@ export class WorkflowRunRepository {
           },
         },
       });
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildRunClaimedInput({
+          workspaceId: row.workspaceId,
+          actor: { type: 'runner', runnerDeviceId: input.runnerDeviceId },
+          runId: row.id,
+          claimAttemptId: input.claimAttemptId,
+          leaseExpiresAt: input.leaseExpiresAt,
+          occurredAt: input.now,
+        }),
+      );
       return this.claimedRecord(row, false);
     });
   }
@@ -921,6 +1487,9 @@ export class WorkflowRunRepository {
       const outputByName = new Map(
         run.outputs.map((output) => [output.outputName, output]),
       );
+      let startedAt = run.startedAt;
+      let waitingApprovalEmittedFor: string | null = null;
+      let waitingRepairEmittedFor: string | null = null;
       for (const item of input.batch.events) {
         const event = item.event;
         if (event.executionId !== run.id) {
@@ -931,6 +1500,7 @@ export class WorkflowRunRepository {
             throw new WorkflowRunRepositoryError('PROGRESS_TRANSITION_INVALID');
           }
           lastEngineStatus = event.status;
+          const timestamp = new Date(event.timestamp);
           if (
             event.status === 'running' &&
             (run.status === WorkflowRunStatus.CLAIMED ||
@@ -938,19 +1508,93 @@ export class WorkflowRunRepository {
               run.status === WorkflowRunStatus.WAITING_FOR_REPAIR)
           ) {
             run.status = WorkflowRunStatus.RUNNING;
-            run.startedAt ??= new Date(event.timestamp);
+            if (startedAt === null) {
+              startedAt = timestamp;
+              run.startedAt = timestamp;
+              await appendAuditEventTransactional(
+                transaction,
+                this.auditTrail,
+                buildRunStartedInput({
+                  workspaceId: run.workspaceId,
+                  actor: {
+                    type: 'runner',
+                    runnerDeviceId: input.runnerDeviceId,
+                  },
+                  runId: run.id,
+                  startedAt: timestamp,
+                }),
+              );
+            }
           }
           if (
             event.status === 'waiting_for_approval' &&
             run.status === WorkflowRunStatus.RUNNING
           ) {
             run.status = WorkflowRunStatus.WAITING_FOR_APPROVAL;
+            if (waitingApprovalEmittedFor === null) {
+              waitingApprovalEmittedFor = `${run.id}:${timestamp.toISOString()}`;
+              const approvalStep = [...stepById.values()]
+                .reverse()
+                .find((step) => step.stepType === 'approval');
+              if (approvalStep !== undefined) {
+                await appendAuditEventTransactional(
+                  transaction,
+                  this.auditTrail,
+                  buildWaitingForApprovalInput({
+                    workspaceId: run.workspaceId,
+                    actor: {
+                      type: 'runner',
+                      runnerDeviceId: input.runnerDeviceId,
+                    },
+                    runId: run.id,
+                    stepId: approvalStep.sourceStepId,
+                    stepIndex: approvalStep.sourceStepIndex,
+                    occurredAt: timestamp,
+                  }),
+                );
+              }
+            }
           }
           if (
             event.status === 'waiting_for_repair' &&
             run.status === WorkflowRunStatus.RUNNING
           ) {
             run.status = WorkflowRunStatus.WAITING_FOR_REPAIR;
+            if (waitingRepairEmittedFor === null) {
+              waitingRepairEmittedFor = `${run.id}:${timestamp.toISOString()}`;
+              const repairStep = [...stepById.values()]
+                .reverse()
+                .find((step) =>
+                  run.repairRequests.some(
+                    (request) => request.stepId === step.sourceStepId,
+                  ),
+                );
+              const latestRepair = [...run.repairRequests]
+                .reverse()
+                .find((request) =>
+                  repairStep !== undefined
+                    ? request.stepId === repairStep.sourceStepId
+                    : false,
+                );
+              if (repairStep !== undefined && latestRepair !== undefined) {
+                await appendAuditEventTransactional(
+                  transaction,
+                  this.auditTrail,
+                  buildWaitingForRepairInput({
+                    workspaceId: run.workspaceId,
+                    actor: {
+                      type: 'runner',
+                      runnerDeviceId: input.runnerDeviceId,
+                    },
+                    runId: run.id,
+                    stepId: repairStep.sourceStepId,
+                    stepIndex: repairStep.sourceStepIndex,
+                    attemptNumber: latestRepair.attemptNumber,
+                    occurredAt: timestamp,
+                  }),
+                );
+              }
+            }
           }
           continue;
         }
@@ -963,18 +1607,35 @@ export class WorkflowRunRepository {
             event.outputType === 'string'
               ? WorkflowRunOutputType.STRING
               : WorkflowRunOutputType.BOOLEAN;
+          const producerStep = stepById.get(event.producerStepId);
           if (
             output === undefined ||
             output.producerStepId !== event.producerStepId ||
             output.outputType !== expectedType ||
             output.status !== WorkflowRunOutputStatus.NOT_PRODUCED ||
-            stepById.get(event.producerStepId)?.status !==
-              WorkflowRunStepStatus.RUNNING
+            producerStep?.status !== WorkflowRunStepStatus.RUNNING
           ) {
             throw new WorkflowRunRepositoryError('PROGRESS_TRANSITION_INVALID');
           }
           output.status = WorkflowRunOutputStatus.PRODUCED;
           output.producedAt = new Date(event.timestamp);
+          await appendAuditEventTransactional(
+            transaction,
+            this.auditTrail,
+            buildOutputProducedInput({
+              workspaceId: run.workspaceId,
+              actor: {
+                type: 'runner',
+                runnerDeviceId: input.runnerDeviceId,
+              },
+              runId: run.id,
+              outputName: event.outputName,
+              outputType: event.outputType,
+              producerStepId: event.producerStepId,
+              producerStepIndex: producerStep.sourceStepIndex,
+              occurredAt: new Date(event.timestamp),
+            }),
+          );
           continue;
         }
         if (event.kind === 'approval_status_changed') {
@@ -1060,6 +1721,27 @@ export class WorkflowRunRepository {
               },
             });
             step.attempts.push(created);
+            await appendAuditEventTransactional(
+              transaction,
+              this.auditTrail,
+              buildAttemptStartedInput({
+                workspaceId: run.workspaceId,
+                actor: {
+                  type: 'runner',
+                  runnerDeviceId: input.runnerDeviceId,
+                },
+                runId: run.id,
+                attemptId: created.id,
+                stepId: event.stepId,
+                stepIndex: step.sourceStepIndex,
+                stepType: step.stepType,
+                attemptNumber: event.attemptNumber,
+                trigger: event.trigger,
+                effectCertainty: event.effectCertainty,
+                authorizedByRepairRequestId: repairRequestId,
+                occurredAt: new Date(event.timestamp),
+              }),
+            );
           } else {
             const attempt = step.attempts.find(
               (candidate) => candidate.attemptNumber === event.attemptNumber,
@@ -1090,6 +1772,34 @@ export class WorkflowRunRepository {
               },
             });
             Object.assign(attempt, updated);
+            await appendAuditEventTransactional(
+              transaction,
+              this.auditTrail,
+              buildAttemptTerminalInput({
+                workspaceId: run.workspaceId,
+                actor: {
+                  type: 'runner',
+                  runnerDeviceId: input.runnerDeviceId,
+                },
+                runId: run.id,
+                attemptId: attempt.id,
+                stepId: event.stepId,
+                stepIndex: step.sourceStepIndex,
+                stepType: step.stepType,
+                attemptNumber: event.attemptNumber,
+                trigger: event.trigger,
+                attemptStatus: event.status,
+                effectCertainty: event.effectCertainty,
+                ...(event.errorCode === undefined
+                  ? {}
+                  : { safeErrorCode: event.errorCode }),
+                durationMs: Math.max(
+                  0,
+                  finishedAt.getTime() - attempt.startedAt.getTime(),
+                ),
+                occurredAt: finishedAt,
+              }),
+            );
           }
           continue;
         }
@@ -1365,6 +2075,29 @@ export class WorkflowRunRepository {
             skippedReason: step.skippedReason ?? null,
           },
         });
+        const verification = step.verification;
+        if (verification !== undefined) {
+          await appendAuditEventTransactional(
+            transaction,
+            this.auditTrail,
+            buildVerificationCompletedInput({
+              workspaceId: run.workspaceId,
+              actor: {
+                type: 'runner',
+                runnerDeviceId: input.runnerDeviceId,
+              },
+              runId: run.id,
+              stepId: step.stepId,
+              stepIndex: source.sourceStepIndex,
+              verificationSequence: 1,
+              verificationKind: verification.kind,
+              outcome:
+                verification.outcome === 'matched' ? 'passed' : 'failed',
+              attemptCount: verification.attemptCount,
+              occurredAt: new Date(step.finishedAt),
+            }),
+          );
+        }
       }
       for (const [index, output] of result.outputs.entries()) {
         const source = run.outputs[index]!;
@@ -1397,6 +2130,36 @@ export class WorkflowRunRepository {
         },
         include: runInclude,
       });
+      const engineResultDigest = createCanonicalJsonDigest(
+        WorkflowExecutionResultSchema.parse(input.completion.result),
+      );
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildRunTerminalInput({
+          workspaceId: run.workspaceId,
+          actor: {
+            type: 'runner',
+            runnerDeviceId: input.runnerDeviceId,
+          },
+          runId: run.id,
+          terminalStatus: result.status,
+          ...(result.terminationCause === undefined
+            ? {}
+            : { terminationCause: result.terminationCause }),
+          finishedAt: new Date(result.finishedAt),
+          engineResultDigest,
+          durationMs: Math.max(
+            0,
+            new Date(result.finishedAt).getTime() -
+              new Date(result.startedAt).getTime(),
+          ),
+          stepCount: run.steps.length,
+          producedOutputCount: result.outputs.filter(
+            (output) => output.status === 'produced',
+          ).length,
+        }),
+      );
       return { run: toRecord(updated), idempotent: false };
     });
   }
@@ -1437,6 +2200,18 @@ export class WorkflowRunRepository {
       if (terminal(run.status)) {
         return { run: toRecord(run), idempotent: true };
       }
+      const cancelledApprovals =
+        await transaction.workflowApprovalRequest.findMany({
+          where: {
+            workflowRunId,
+            status: WorkflowApprovalRequestStatus.PENDING,
+          },
+          select: {
+            id: true,
+            workflowRunId: true,
+            workflowRun: { select: { workspaceId: true } },
+          },
+        });
       await transaction.workflowApprovalRequest.updateMany({
         where: {
           workflowRunId,
@@ -1447,6 +2222,28 @@ export class WorkflowRunRepository {
           resolvedAt: now,
         },
       });
+      for (const approval of cancelledApprovals) {
+        await appendAuditEventTransactional(
+          transaction,
+          this.auditTrail,
+          buildApprovalLifecycleInput({
+            workspaceId: approval.workflowRun.workspaceId,
+            actor: { type: 'system', reason: 'automatic_expiry' },
+            approvalRequestId: approval.id,
+            workflowRunId: approval.workflowRunId,
+            reason: 'cancelled',
+            resolvedAt: now,
+          }),
+        );
+      }
+      const cancelledRepairs =
+        await transaction.workflowRepairRequest.findMany({
+          where: {
+            workflowRunId,
+            status: WorkflowRepairRequestStatus.PENDING,
+          },
+          select: { id: true, workflowRunId: true, workspaceId: true },
+        });
       await transaction.workflowRepairRequest.updateMany({
         where: {
           workflowRunId,
@@ -1457,6 +2254,20 @@ export class WorkflowRunRepository {
           resolvedAt: now,
         },
       });
+      for (const repair of cancelledRepairs) {
+        await appendAuditEventTransactional(
+          transaction,
+          this.auditTrail,
+          buildRepairLifecycleInput({
+            workspaceId: repair.workspaceId,
+            actor: { type: 'system', reason: 'automatic_expiry' },
+            repairRequestId: repair.id,
+            workflowRunId: repair.workflowRunId,
+            reason: 'cancelled',
+            resolvedAt: now,
+          }),
+        );
+      }
       if (run.status === WorkflowRunStatus.QUEUED) {
         await transaction.workflowRunStep.updateMany({
           where: { workflowRunId, status: WorkflowRunStepStatus.PENDING },
@@ -1477,6 +2288,23 @@ export class WorkflowRunRepository {
           },
           include: runInclude,
         });
+        await appendAuditEventTransactional(
+          transaction,
+          this.auditTrail,
+          buildRunTerminalInput({
+            workspaceId: cancelled.workspaceId,
+            actor: { type: 'user', userId: actorUserId },
+            runId: cancelled.id,
+            terminalStatus: 'cancelled',
+            terminationCause: 'run_cancelled',
+            finishedAt: now,
+            stepCount: cancelled.steps.length,
+            producedOutputCount: cancelled.outputs.filter(
+              (output) =>
+                output.status === WorkflowRunOutputStatus.PRODUCED,
+            ).length,
+          }),
+        );
         return { run: toRecord(cancelled), idempotent: false };
       }
       const alreadyRequested =
@@ -1490,6 +2318,16 @@ export class WorkflowRunRepository {
         },
         include: runInclude,
       });
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildRunCancelRequestedInput({
+          workspaceId: updated.workspaceId,
+          actor: { type: 'user', userId: actorUserId },
+          runId: updated.id,
+          requestedAt: updated.cancelRequestedAt ?? now,
+        }),
+      );
       return { run: toRecord(updated), idempotent: alreadyRequested };
     });
   }
@@ -1756,6 +2594,18 @@ export class WorkflowRunRepository {
         finishedAt: now,
       },
     });
+    const invalidatedApprovals =
+      await transaction.workflowApprovalRequest.findMany({
+        where: {
+          workflowRunId: runId,
+          status: WorkflowApprovalRequestStatus.PENDING,
+        },
+        select: {
+          id: true,
+          workflowRunId: true,
+          workflowRun: { select: { workspaceId: true } },
+        },
+      });
     await transaction.workflowApprovalRequest.updateMany({
       where: {
         workflowRunId: runId,
@@ -1765,6 +2615,27 @@ export class WorkflowRunRepository {
         status: WorkflowApprovalRequestStatus.INVALIDATED,
         resolvedAt: now,
       },
+    });
+    for (const approval of invalidatedApprovals) {
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildApprovalLifecycleInput({
+          workspaceId: approval.workflowRun.workspaceId,
+          actor: { type: 'system', reason: 'automatic_expiry' },
+          approvalRequestId: approval.id,
+          workflowRunId: approval.workflowRunId,
+          reason: 'invalidated',
+          resolvedAt: now,
+        }),
+      );
+    }
+    const invalidatedRepairs = await transaction.workflowRepairRequest.findMany({
+      where: {
+        workflowRunId: runId,
+        status: WorkflowRepairRequestStatus.PENDING,
+      },
+      select: { id: true, workflowRunId: true, workspaceId: true },
     });
     await transaction.workflowRepairRequest.updateMany({
       where: {
@@ -1776,6 +2647,20 @@ export class WorkflowRunRepository {
         resolvedAt: now,
       },
     });
+    for (const repair of invalidatedRepairs) {
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildRepairLifecycleInput({
+          workspaceId: repair.workspaceId,
+          actor: { type: 'system', reason: 'automatic_expiry' },
+          repairRequestId: repair.id,
+          workflowRunId: repair.workflowRunId,
+          reason: 'invalidated',
+          resolvedAt: now,
+        }),
+      );
+    }
     await transaction.workflowRunStepAttempt.updateMany({
       where: {
         workflowRunId: runId,
@@ -1796,7 +2681,7 @@ export class WorkflowRunRepository {
         finishedAt: now,
       },
     });
-    await transaction.workflowRun.update({
+    const updatedRun = await transaction.workflowRun.update({
       where: { id: runId },
       data: {
         status: WorkflowRunStatus.INTERRUPTED,
@@ -1805,7 +2690,24 @@ export class WorkflowRunRepository {
         leaseTokenHash: null,
         leaseExpiresAt: null,
       },
+      include: {
+        steps: { select: { id: true } },
+        outputs: { select: { status: true } },
+      },
     });
+    await appendAuditEventTransactional(
+      transaction,
+      this.auditTrail,
+      buildRunInterruptedInput({
+        workspaceId: updatedRun.workspaceId,
+        runId: updatedRun.id,
+        finishedAt: now,
+        stepCount: updatedRun.steps.length,
+        producedOutputCount: updatedRun.outputs.filter(
+          (output) => output.status === WorkflowRunOutputStatus.PRODUCED,
+        ).length,
+      }),
+    );
   }
 
   private async lockRun(

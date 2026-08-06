@@ -1,5 +1,12 @@
 import { PublishReadinessReportSchema } from '@tasktwin/workflow-lifecycle';
 import { WorkspaceExecutionPolicyDefinitionSchema } from '@tasktwin/workflow-policy';
+import {
+  AUDIT_PAYLOAD_SCHEMAS,
+  AUDIT_EVENT_TYPES,
+  type AuditEventType,
+  type AuditActor,
+  type AuditEntityRef,
+} from '@tasktwin/audit-trail';
 export {
   ApprovalDecisionResponseSchema,
   ApprovalRequestDetailResponseSchema,
@@ -244,3 +251,219 @@ export type {
   RunnerDeviceListResponse,
   RunnerDeviceRevokeResponse,
 } from '@tasktwin/runner-protocol';
+
+export const AuditActorDtoSchema = z.union([
+  z.strictObject({ type: z.literal('user'), userId: UuidSchema }),
+  z.strictObject({ type: z.literal('runner'), runnerDeviceId: UuidSchema }),
+  z.strictObject({
+    type: z.literal('system'),
+    reason: z.enum([
+      'automatic_expiry',
+      'completion_reconciliation',
+      'lease_expired',
+      'policy_supersede',
+      'run_cancelled',
+    ]),
+  }),
+]) satisfies z.ZodType<AuditActor>;
+
+export const AuditEntityRefDtoSchema = z.strictObject({
+  kind: z.enum([
+    'workflow',
+    'workflow_version',
+    'policy_version',
+    'workflow_run',
+    'workflow_run_step',
+    'workflow_run_step_attempt',
+    'workflow_run_output',
+    'approval_request',
+    'repair_request',
+    'locator_repair_proposal',
+    'locator_repair_candidate',
+  ]),
+  id: z.string().min(1).max(256),
+}) satisfies z.ZodType<AuditEntityRef>;
+
+const FORBIDDEN_AUDIT_KEYS = [
+  'value',
+  'text',
+  'input',
+  'secret',
+  'token',
+  'password',
+  'ciphertext',
+  'wrappedKey',
+  'iv',
+  'aad',
+  'locator',
+  'selector',
+  'url',
+  'href',
+  'query',
+  'fragment',
+  'dom',
+  'html',
+  'screenshot',
+  'stackTrace',
+  'expectedValue',
+  'observedValue',
+  'expected',
+  'observed',
+  'rawError',
+  'stack',
+  'email',
+  'userAgent',
+  'ip',
+  'username',
+  'hostname',
+  'outputLength',
+  'outputHash',
+] as const;
+
+function makeTypedPayloadSchemas(): {
+  [EventType in AuditEventType]: z.ZodType<
+    z.infer<(typeof AUDIT_PAYLOAD_SCHEMAS)[EventType]>
+  >;
+} {
+  const entries: Record<string, z.ZodType<unknown>> = {};
+  for (const eventType of AUDIT_EVENT_TYPES) {
+    entries[eventType] = AUDIT_PAYLOAD_SCHEMAS[eventType];
+  }
+  return entries as never;
+}
+
+const TYPED_PAYLOAD_SCHEMAS = makeTypedPayloadSchemas();
+
+const TypedPayloadUnion = z.union(
+  AUDIT_EVENT_TYPES.map((eventType) =>
+    TYPED_PAYLOAD_SCHEMAS[eventType],
+  ) as unknown as readonly [z.ZodType, ...z.ZodType[]],
+);
+
+const StrictTypedPayloadUnion = TypedPayloadUnion.superRefine((value, ctx) => {
+  const inspect = (input: unknown, path: (string | number)[]): void => {
+    if (input === null || typeof input !== 'object') {
+      return;
+    }
+    if (Array.isArray(input)) {
+      input.forEach((entry, index) => inspect(entry, [...path, index]));
+      return;
+    }
+    for (const key of Object.keys(input as Record<string, unknown>)) {
+      if (
+        (FORBIDDEN_AUDIT_KEYS as readonly string[]).includes(key)
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [...path, key],
+          message: `Audit payload key '${key}' is forbidden in safe UI responses.`,
+        });
+      }
+      inspect((input as Record<string, unknown>)[key], [...path, key]);
+    }
+  };
+  inspect(value, []);
+});
+
+export const SafeAuditPayloadSchema = StrictTypedPayloadUnion;
+
+export const SafeAuditEventDtoSchema = z.strictObject({
+  id: UuidSchema,
+  workspaceId: UuidSchema,
+  sequence: z.number().int().positive(),
+  eventType: z.enum(AUDIT_EVENT_TYPES),
+  actor: AuditActorDtoSchema,
+  primaryEntity: AuditEntityRefDtoSchema,
+  relatedEntities: z.array(AuditEntityRefDtoSchema).max(8),
+  occurredAt: IsoDateSchema,
+  sourceId: z.string().min(1).max(160),
+  correlationId: z.string().min(1).max(80).optional(),
+  payload: SafeAuditPayloadSchema,
+});
+
+export const SafeAuditEventDetailDtoSchema = SafeAuditEventDtoSchema.extend({
+  payloadDigest: z.string().regex(/^[0-9a-f]{64}$/),
+  previousHash: z.string().regex(/^[0-9a-f]{64}$/),
+  eventHash: z.string().regex(/^[0-9a-f]{64}$/),
+  createdAt: IsoDateSchema,
+});
+
+export const AuditEventListResponseSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  workspaceId: UuidSchema,
+  access: z.strictObject({
+    role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']),
+    canVerify: z.boolean(),
+  }),
+  events: z.array(SafeAuditEventDtoSchema).max(100),
+  nextCursor: z
+    .strictObject({
+      sequence: z.number().int().positive(),
+      id: UuidSchema,
+      encoded: z.string().min(1).max(200),
+    })
+    .nullable(),
+});
+
+export const AuditEventDetailResponseSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  workspaceId: UuidSchema,
+  event: SafeAuditEventDetailDtoSchema,
+});
+
+export const AuditVerifyRequestSchema = z.strictObject({
+  fromSequence: z.number().int().positive().optional(),
+  toSequence: z.number().int().positive().optional(),
+  sampleLimit: z.number().int().min(1).max(200).default(100),
+});
+
+export const AuditVerifyResponseSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  workspaceId: UuidSchema,
+  status: z.enum(['ok', 'tampered', 'sequence_gap']),
+  checkedCount: z.number().int().min(0),
+  firstSequence: z.number().int().positive().nullable(),
+  lastSequence: z.number().int().positive().nullable(),
+  headHash: z.string().regex(/^[0-9a-f]{64}$/),
+  firstFailure: z
+    .strictObject({
+      sequence: z.number().int().positive(),
+      kind: z.enum([
+        'SEQUENCE_GAP',
+        'PREVIOUS_HASH_MISMATCH',
+        'PAYLOAD_DIGEST_MISMATCH',
+        'EVENT_HASH_MISMATCH',
+        'HEAD_HASH_MISMATCH',
+      ]),
+    })
+    .optional(),
+});
+
+export const RunEvidenceResponseSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  workspaceId: UuidSchema,
+  workflowRunId: UuidSchema,
+  events: z.array(
+    z.strictObject({
+      id: UuidSchema,
+      sequence: z.number().int().positive(),
+      eventType: z.enum(AUDIT_EVENT_TYPES),
+      actor: AuditActorDtoSchema,
+      primaryEntity: AuditEntityRefDtoSchema,
+      occurredAt: IsoDateSchema,
+      payload: SafeAuditPayloadSchema,
+    }),
+  ),
+});
+
+export type SafeAuditEvent = z.infer<typeof SafeAuditEventDtoSchema>;
+export type SafeAuditEventDetail = z.infer<typeof SafeAuditEventDetailDtoSchema>;
+export type AuditEventListResponse = z.infer<
+  typeof AuditEventListResponseSchema
+>;
+export type AuditEventDetailResponse = z.infer<
+  typeof AuditEventDetailResponseSchema
+>;
+export type AuditVerifyRequest = z.infer<typeof AuditVerifyRequestSchema>;
+export type AuditVerifyResponse = z.infer<typeof AuditVerifyResponseSchema>;
+export type RunEvidenceResponse = z.infer<typeof RunEvidenceResponseSchema>;

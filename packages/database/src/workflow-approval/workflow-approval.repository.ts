@@ -4,6 +4,10 @@ import {
   type RunnerApprovalRequestCreate,
 } from '@tasktwin/workflow-approval';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import {
+  createAuditSourceId,
+  type AuditEventInput,
+} from '@tasktwin/audit-trail';
 
 import {
   OrganizationRole,
@@ -14,6 +18,11 @@ import {
   WorkflowRunStepStatus,
   type PrismaClient,
 } from '../generated/prisma/client.js';
+import {
+  appendAuditEventTransactional,
+  auditHasherForTrail,
+} from '../audit-trail/audit-appender.repository.js';
+import { WorkspaceAuditTrailRepository } from '../audit-trail/audit-trail.repository.js';
 import { createCanonicalJsonDigest } from '../recording/canonical-json.js';
 import { WorkflowApprovalRepositoryError } from './workflow-approval-errors.js';
 import type {
@@ -21,6 +30,106 @@ import type {
   WorkflowApprovalDecisionResult,
   WorkflowApprovalRecord,
 } from './workflow-approval-records.js';
+
+const APPROVAL_EVENT_NAMESPACES = {
+  requested: 'approval_requested',
+  decided: 'approval_decided',
+  lifecycle: 'approval_lifecycle',
+} as const;
+
+function buildApprovalRequestedInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner'; runnerDeviceId: string };
+  approvalRequestId: string;
+  workflowRunId: string;
+  approvalStepId: string;
+  gatedStepId: string;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  requestedAt: Date;
+  expiresAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'approval.requested',
+    actor: input.actor,
+    primaryEntity: { kind: 'approval_request', id: input.approvalRequestId },
+    relatedEntities: [{ kind: 'workflow_run', id: input.workflowRunId }],
+    occurredAt: input.requestedAt,
+    sourceId: createAuditSourceId(
+      APPROVAL_EVENT_NAMESPACES.requested,
+      [input.approvalRequestId],
+      auditHasherForTrail,
+    ),
+    payload: {
+      approvalRequestId: input.approvalRequestId,
+      workflowRunId: input.workflowRunId,
+      approvalStepId: input.approvalStepId,
+      gatedStepId: input.gatedStepId,
+      riskLevel: input.riskLevel,
+      requestedAt: input.requestedAt.toISOString(),
+      expiresAt: input.expiresAt.toISOString(),
+    },
+  };
+}
+
+function buildApprovalDecidedInput(input: {
+  workspaceId: string;
+  actor: { type: 'user'; userId: string };
+  approvalRequestId: string;
+  workflowRunId: string;
+  decision: 'approved' | 'rejected';
+  resolvedAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'approval.decided',
+    actor: input.actor,
+    primaryEntity: { kind: 'approval_request', id: input.approvalRequestId },
+    relatedEntities: [{ kind: 'workflow_run', id: input.workflowRunId }],
+    occurredAt: input.resolvedAt,
+    sourceId: createAuditSourceId(
+      APPROVAL_EVENT_NAMESPACES.decided,
+      [input.approvalRequestId, input.decision, input.resolvedAt.toISOString()],
+      auditHasherForTrail,
+    ),
+    payload: {
+      approvalRequestId: input.approvalRequestId,
+      workflowRunId: input.workflowRunId,
+      decision: input.decision,
+      decidedByUserId: input.actor.userId,
+      resolvedAt: input.resolvedAt.toISOString(),
+    },
+  };
+}
+
+function buildApprovalLifecycleInput(input: {
+  workspaceId: string;
+  actor: { type: 'system'; reason: 'automatic_expiry' };
+  approvalRequestId: string;
+  workflowRunId: string;
+  reason: 'expired' | 'cancelled' | 'invalidated';
+  resolvedAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'approval.lifecycle',
+    actor: input.actor,
+    primaryEntity: { kind: 'approval_request', id: input.approvalRequestId },
+    relatedEntities: [{ kind: 'workflow_run', id: input.workflowRunId }],
+    occurredAt: input.resolvedAt,
+    sourceId: createAuditSourceId(
+      APPROVAL_EVENT_NAMESPACES.lifecycle,
+      [input.approvalRequestId, input.reason, input.resolvedAt.toISOString()],
+      auditHasherForTrail,
+    ),
+    payload: {
+      approvalRequestId: input.approvalRequestId,
+      workflowRunId: input.workflowRunId,
+      reason: input.reason,
+      resolvedAt: input.resolvedAt.toISOString(),
+    },
+  };
+}
 
 const approvalInclude = {
   workflowRun: {
@@ -86,7 +195,12 @@ function toRecord(row: ApprovalRow): WorkflowApprovalRecord {
 }
 
 export class WorkflowApprovalRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly auditTrail: WorkspaceAuditTrailRepository = new WorkspaceAuditTrailRepository(
+      prisma,
+    ),
+  ) {}
 
   async resolveApprovalAccess(
     userId: string,
@@ -227,6 +341,24 @@ export class WorkflowApprovalRepository {
           },
           data: { status: WorkflowRunStepStatus.WAITING_FOR_APPROVAL },
         });
+        await appendAuditEventTransactional(
+          transaction,
+          this.auditTrail,
+          buildApprovalRequestedInput({
+            workspaceId: run.workspaceId,
+            actor: {
+              type: 'runner',
+              runnerDeviceId: input.runnerDeviceId,
+            },
+            approvalRequestId: created.id,
+            workflowRunId: run.id,
+            approvalStepId: binding.approvalStepId,
+            gatedStepId: binding.gatedStepId,
+            riskLevel: binding.riskLevel,
+            requestedAt: input.now,
+            expiresAt,
+          }),
+        );
         return { idempotent: false, record: toRecord(created) };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -417,6 +549,19 @@ export class WorkflowApprovalRepository {
           where: { id: row.id },
           include: approvalInclude,
         });
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildApprovalDecidedInput({
+          workspaceId: row.workflowRun.workspaceId,
+          actor: { type: 'user', userId: input.userId },
+          approvalRequestId: row.id,
+          workflowRunId: row.workflowRunId,
+          decision:
+            input.decision === 'APPROVED' ? 'approved' : 'rejected',
+          resolvedAt: input.now,
+        }),
+      );
       return { idempotent: false, record: toRecord(finalRow) };
     });
   }
@@ -433,7 +578,12 @@ export class WorkflowApprovalRepository {
           status: WorkflowApprovalRequestStatus.PENDING,
           expiresAt: { lte: now },
         },
-        select: { id: true, workflowRunId: true, approvalStepId: true },
+        select: {
+          id: true,
+          workflowRunId: true,
+          approvalStepId: true,
+          workflowRun: { select: { workspaceId: true } },
+        },
       });
       if (request === null) return;
       await transaction.workflowApprovalRequest.update({
@@ -443,6 +593,18 @@ export class WorkflowApprovalRepository {
           resolvedAt: now,
         },
       });
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildApprovalLifecycleInput({
+          workspaceId: request.workflowRun.workspaceId,
+          actor: { type: 'system', reason: 'automatic_expiry' },
+          approvalRequestId: request.id,
+          workflowRunId: request.workflowRunId,
+          reason: 'expired',
+          resolvedAt: now,
+        }),
+      );
       if (!terminateRun) return;
       await transaction.workflowRun.updateMany({
         where: {
@@ -477,5 +639,29 @@ export class WorkflowApprovalRepository {
         },
       });
     });
+  }
+
+  async recordCancellationLifecycle(
+    transaction: Prisma.TransactionClient,
+    input: {
+      approvalRequestId: string;
+      workflowRunId: string;
+      workspaceId: string;
+      reason: 'cancelled' | 'invalidated';
+      resolvedAt: Date;
+    },
+  ): Promise<void> {
+    await appendAuditEventTransactional(
+      transaction,
+      this.auditTrail,
+      buildApprovalLifecycleInput({
+        workspaceId: input.workspaceId,
+        actor: { type: 'system', reason: 'automatic_expiry' },
+        approvalRequestId: input.approvalRequestId,
+        workflowRunId: input.workflowRunId,
+        reason: input.reason,
+        resolvedAt: input.resolvedAt,
+      }),
+    );
   }
 }

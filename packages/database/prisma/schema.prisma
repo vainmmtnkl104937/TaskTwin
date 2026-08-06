@@ -268,6 +268,8 @@ model Workspace {
   workflowRepairRequests WorkflowRepairRequest[]
   locatorRepairProposals WorkflowLocatorRepairProposal[]
   executionPolicyVersions WorkspaceExecutionPolicyVersion[]
+  auditChainHead         WorkspaceAuditChainHead?
+  auditEvents            WorkspaceAuditEvent[]
 
   @@unique([organizationId, slug], map: "workspaces_organization_id_slug_key")
   @@map("workspaces")
@@ -893,4 +895,47 @@ model RecordingWorkflowConversion {
   @@index([workflowId], map: "recording_workflow_conversions_workflow_id_idx")
   @@index([createdById, createdAt], map: "recording_workflow_conversions_created_by_id_created_at_idx")
   @@map("recording_workflow_conversions")
+}
+
+model WorkspaceAuditChainHead {
+  workspaceId   String   @id @map("workspace_id") @db.Uuid
+  lastSequence  Int      @default(0) @map("last_sequence")
+  lastEventHash String   @default("0000000000000000000000000000000000000000000000000000000000000000") @map("last_event_hash") @db.Char(64)
+  lastEventType String?  @map("last_event_type") @db.VarChar(80)
+  lastEventAt   DateTime? @map("last_event_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@map("workspace_audit_chain_heads")
+}
+
+model WorkspaceAuditEvent {
+  id                String   @id @default(uuid()) @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  sequence          Int      @map("sequence")
+  schemaVersion     Int      @map("schema_version")
+  eventType         String   @map("event_type") @db.VarChar(80)
+  actorType         String   @map("actor_type") @db.VarChar(16)
+  actorId           String   @map("actor_id") @db.VarChar(64)
+  actorReason       String?  @map("actor_reason") @db.VarChar(48)
+  primaryEntityKind String   @map("primary_entity_kind") @db.VarChar(48)
+  primaryEntityId   String   @map("primary_entity_id") @db.VarChar(256)
+  relatedEntities   Json     @map("related_entities") @db.JsonB
+  occurredAt        DateTime @map("occurred_at") @db.Timestamptz(3)
+  sourceId          String   @map("source_id") @db.VarChar(160)
+  correlationId     String?  @map("correlation_id") @db.VarChar(80)
+  payload           Json     @map("payload") @db.JsonB
+  payloadDigest     String   @map("payload_digest") @db.Char(64)
+  previousHash      String   @map("previous_hash") @db.Char(64)
+  eventHash         String   @map("event_hash") @db.Char(64)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, sequence], map: "workspace_audit_events_workspace_sequence_key")
+  @@unique([workspaceId, sourceId], map: "workspace_audit_events_workspace_source_id_key")
+  @@index([workspaceId, createdAt], map: "workspace_audit_events_workspace_created_at_idx")
+  @@index([workspaceId, eventType], map: "workspace_audit_events_workspace_event_type_idx")
+  @@index([primaryEntityKind, primaryEntityId], map: "workspace_audit_events_entity_idx")
+  @@index([correlationId], map: "workspace_audit_events_correlation_id_idx")
+  @@map("workspace_audit_events")
 }

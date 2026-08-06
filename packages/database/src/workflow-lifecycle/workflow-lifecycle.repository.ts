@@ -11,10 +11,21 @@ import {
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
 
 import {
+  createAuditSourceId,
+  type AuditEventInput,
+} from '@tasktwin/audit-trail';
+
+import {
   OrganizationRole,
   Prisma,
   type PrismaClient,
 } from '../generated/prisma/client.js';
+import {
+  appendAuditEventTransactional,
+  auditHasherForTrail,
+} from '../audit-trail/audit-appender.repository.js';
+import { WorkspaceAuditTrailRepository } from '../audit-trail/audit-trail.repository.js';
+import { createCanonicalJsonDigest } from '../recording/canonical-json.js';
 import type {
   WorkflowAccessRecord,
   WorkflowVersionDetailRecord,
@@ -38,6 +49,174 @@ const PUBLISHER_ROLES = [
   OrganizationRole.OWNER,
   OrganizationRole.ADMIN,
 ] as const;
+
+function buildTransitionSourceId(
+  eventType: string,
+  workflowVersionId: string,
+  revision: number,
+): string {
+  return createAuditSourceId(
+    'workflow_version_transition',
+    [eventType, workflowVersionId, revision],
+    auditHasherForTrail,
+  );
+}
+
+function buildDraftCreatedSourceId(
+  workflowVersionId: string,
+  version: number,
+  clientCreationId: string,
+): string {
+  return createAuditSourceId(
+    'workflow_version_created',
+    [workflowVersionId, version, clientCreationId],
+    auditHasherForTrail,
+  );
+}
+
+function buildPublishedSourceId(
+  workflowVersionId: string,
+  revision: number,
+): string {
+  return createAuditSourceId(
+    'workflow_version_published',
+    [workflowVersionId, revision],
+    auditHasherForTrail,
+  );
+}
+
+function buildArchivedSourceId(
+  eventType: 'workflow_version.archived',
+  workflowVersionId: string,
+  revision: number,
+  reason: 'manual' | 'replaced_by_publish',
+): string {
+  return createAuditSourceId(
+    'workflow_version_archived',
+    [workflowVersionId, revision, reason],
+    auditHasherForTrail,
+  );
+}
+
+function buildWorkflowVersionTransitionInput(input: {
+  eventType:
+    | 'workflow_version.submitted_for_testing'
+    | 'workflow_version.returned_to_draft';
+  workspaceId: string;
+  actor: { type: 'user'; userId: string };
+  version: WorkflowVersionDetailRecord;
+  occurredAt: Date;
+  sourceId: string;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: input.eventType,
+    actor: input.actor,
+    primaryEntity: {
+      kind: 'workflow_version',
+      id: input.version.id,
+    },
+    relatedEntities: [
+      { kind: 'workflow', id: input.version.workflowId },
+    ],
+    occurredAt: input.occurredAt,
+    sourceId: input.sourceId,
+    payload: {
+      workflowId: input.version.workflowId,
+      workflowVersionId: input.version.id,
+      version: input.version.version,
+      revision: input.version.revision,
+    },
+  };
+}
+
+function buildWorkflowVersionCreatedInput(input: {
+  workspaceId: string;
+  actor: { type: 'user'; userId: string };
+  version: WorkflowVersionDetailRecord;
+  sourceVersionId: string;
+  occurredAt: Date;
+  sourceId: string;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'workflow_version.created',
+    actor: input.actor,
+    primaryEntity: { kind: 'workflow_version', id: input.version.id },
+    relatedEntities: [{ kind: 'workflow', id: input.version.workflowId }],
+    occurredAt: input.occurredAt,
+    sourceId: input.sourceId,
+    payload: {
+      workflowId: input.version.workflowId,
+      workflowVersionId: input.version.id,
+      version: input.version.version,
+      revision: input.version.revision,
+      sourceVersionId: input.sourceVersionId,
+      schemaVersion: input.version.schemaVersion,
+    },
+  };
+}
+
+function buildWorkflowVersionPublishedInput(input: {
+  workspaceId: string;
+  actor: { type: 'user'; userId: string };
+  version: WorkflowVersionDetailRecord;
+  workflowDigest: string;
+  replacedVersionId: string | null;
+  occurredAt: Date;
+  sourceId: string;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'workflow_version.published',
+    actor: input.actor,
+    primaryEntity: { kind: 'workflow_version', id: input.version.id },
+    relatedEntities: [
+      { kind: 'workflow', id: input.version.workflowId },
+      ...(input.replacedVersionId === null
+        ? []
+        : [{ kind: 'workflow_version' as const, id: input.replacedVersionId }]),
+    ],
+    occurredAt: input.occurredAt,
+    sourceId: input.sourceId,
+    payload: {
+      workflowId: input.version.workflowId,
+      workflowVersionId: input.version.id,
+      version: input.version.version,
+      revision: input.version.revision,
+      workflowDigest: input.workflowDigest,
+      ...(input.replacedVersionId === null
+        ? {}
+        : { replacedVersionId: input.replacedVersionId }),
+    },
+  };
+}
+
+function buildWorkflowVersionArchivedInput(input: {
+  workspaceId: string;
+  actor: { type: 'user'; userId: string };
+  version: WorkflowVersionDetailRecord;
+  reason: 'manual' | 'replaced_by_publish';
+  occurredAt: Date;
+  sourceId: string;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'workflow_version.archived',
+    actor: input.actor,
+    primaryEntity: { kind: 'workflow_version', id: input.version.id },
+    relatedEntities: [{ kind: 'workflow', id: input.version.workflowId }],
+    occurredAt: input.occurredAt,
+    sourceId: input.sourceId,
+    payload: {
+      workflowId: input.version.workflowId,
+      workflowVersionId: input.version.id,
+      version: input.version.version,
+      revision: input.version.revision,
+      reason: input.reason,
+    },
+  };
+}
 
 function isSerializationConflict(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) {
@@ -190,7 +369,12 @@ function hasRole(
 }
 
 export class WorkflowLifecycleRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly auditTrail: WorkspaceAuditTrailRepository = new WorkspaceAuditTrailRepository(
+      prisma,
+    ),
+  ) {}
 
   async resolveWorkflowAccess(
     actorUserId: string,
@@ -338,12 +522,30 @@ export class WorkflowLifecycleRepository {
         );
       }
 
+      const finalVersion = await this.getRequiredVersion(
+        transaction,
+        actorUserId,
+        workflowVersionId,
+      );
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildWorkflowVersionTransitionInput({
+          eventType: 'workflow_version.returned_to_draft',
+          occurredAt: new Date(),
+          workspaceId: finalVersion.workspaceId,
+          actor: { type: 'user', userId: actorUserId },
+          version: finalVersion,
+          sourceId: buildTransitionSourceId(
+            'workflow_version.returned_to_draft',
+            finalVersion.id,
+            finalVersion.revision,
+          ),
+        }),
+      );
+
       return {
-        workflowVersion: await this.getRequiredVersion(
-          transaction,
-          actorUserId,
-          workflowVersionId,
-        ),
+        workflowVersion: finalVersion,
         readiness: null,
         idempotent: false,
       };
@@ -394,6 +596,15 @@ export class WorkflowLifecycleRepository {
         current.definition,
       );
 
+      const previousPublished = await transaction.workflowVersion.findMany({
+        where: {
+          workflowId: current.workflowId,
+          status: 'published',
+          id: { not: workflowVersionId },
+        },
+        select: { id: true, workflowId: true, version: true, revision: true },
+      });
+
       await transaction.workflowVersion.updateMany({
         where: {
           workflowId: current.workflowId,
@@ -425,12 +636,60 @@ export class WorkflowLifecycleRepository {
         );
       }
 
-      return {
-        workflowVersion: await this.getRequiredVersion(
+      const finalVersion = await this.getRequiredVersion(
+        transaction,
+        actorUserId,
+        workflowVersionId,
+      );
+
+      const workflowDigest = createCanonicalJsonDigest(current.definition);
+      for (const archived of previousPublished) {
+        await appendAuditEventTransactional(
           transaction,
-          actorUserId,
-          workflowVersionId,
-        ),
+          this.auditTrail,
+          buildWorkflowVersionArchivedInput({
+            workspaceId: current.workspaceId,
+            actor: { type: 'user', userId: actorUserId },
+            version: {
+              id: archived.id,
+              workflowId: current.workflowId,
+              workspaceId: current.workspaceId,
+              version: archived.version,
+              revision: archived.revision,
+            } as WorkflowVersionDetailRecord,
+            reason: 'replaced_by_publish',
+            occurredAt,
+            sourceId: buildArchivedSourceId(
+              'workflow_version.archived',
+              archived.id,
+              archived.revision,
+              'replaced_by_publish',
+            ),
+          }),
+        );
+      }
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildWorkflowVersionPublishedInput({
+          workspaceId: finalVersion.workspaceId,
+          actor: { type: 'user', userId: actorUserId },
+          version: finalVersion,
+          workflowDigest,
+          replacedVersionId:
+            previousPublished.length === 1
+              ? (previousPublished[0]?.id ?? null)
+              : null,
+          occurredAt,
+          sourceId: buildPublishedSourceId(
+            finalVersion.id,
+            finalVersion.revision,
+          ),
+        }),
+      );
+
+      return {
+        workflowVersion: finalVersion,
         readiness,
         idempotent: false,
       };
@@ -473,12 +732,31 @@ export class WorkflowLifecycleRepository {
         );
       }
 
+      const finalVersion = await this.getRequiredVersion(
+        transaction,
+        actorUserId,
+        workflowVersionId,
+      );
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildWorkflowVersionArchivedInput({
+          workspaceId: finalVersion.workspaceId,
+          actor: { type: 'user', userId: actorUserId },
+          version: finalVersion,
+          reason: 'manual',
+          occurredAt,
+          sourceId: buildArchivedSourceId(
+            'workflow_version.archived',
+            finalVersion.id,
+            finalVersion.revision,
+            'manual',
+          ),
+        }),
+      );
+
       return {
-        workflowVersion: await this.getRequiredVersion(
-          transaction,
-          actorUserId,
-          workflowVersionId,
-        ),
+        workflowVersion: finalVersion,
         readiness: null,
         idempotent: false,
       };
@@ -628,6 +906,38 @@ export class WorkflowLifecycleRepository {
         },
       });
 
+      const workflowRow = await transaction.workflow.findFirst({
+        where: { id: workflowId },
+        select: { workspaceId: true },
+      });
+      const workspaceId = workflowRow?.workspaceId;
+      if (workspaceId === undefined) {
+        throw new WorkflowLifecycleRepositoryError('WORKFLOW_NOT_FOUND');
+      }
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildWorkflowVersionCreatedInput({
+          workspaceId,
+          actor: { type: 'user', userId: actorUserId },
+          version: {
+            id: created.id,
+            workflowId,
+            workspaceId,
+            version: clone.metadata.version,
+            revision: clone.metadata.revision,
+            schemaVersion: clone.definition.schemaVersion,
+          } as WorkflowVersionDetailRecord,
+          sourceVersionId,
+          occurredAt: createdAt,
+          sourceId: buildDraftCreatedSourceId(
+            created.id,
+            clone.metadata.version,
+            clientCreationId,
+          ),
+        }),
+      );
+
       return {
         workflowVersion: await this.getRequiredVersion(
           transaction,
@@ -675,12 +985,30 @@ export class WorkflowLifecycleRepository {
         );
       }
 
+      const finalVersion = await this.getRequiredVersion(
+        transaction,
+        actorUserId,
+        workflowVersionId,
+      );
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildWorkflowVersionTransitionInput({
+          eventType: 'workflow_version.submitted_for_testing',
+          occurredAt: new Date(),
+          workspaceId: finalVersion.workspaceId,
+          actor: { type: 'user', userId: actorUserId },
+          version: finalVersion,
+          sourceId: buildTransitionSourceId(
+            'workflow_version.submitted_for_testing',
+            finalVersion.id,
+            finalVersion.revision,
+          ),
+        }),
+      );
+
       return {
-        workflowVersion: await this.getRequiredVersion(
-          transaction,
-          actorUserId,
-          workflowVersionId,
-        ),
+        workflowVersion: finalVersion,
         readiness,
         idempotent: false,
       };

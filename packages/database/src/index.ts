@@ -152,3 +152,14 @@ export type {
   WorkspaceExecutionPolicyRecord,
 } from './execution-policy/execution-policy-records.js';
 export { ExecutionPolicyRepository } from './execution-policy/execution-policy.repository.js';
+export { WorkspaceAuditTrailRepository } from './audit-trail/audit-trail.repository.js';
+export {
+  appendAuditEventTransactional,
+  createAuditAppenderDriver,
+  PrismaAuditAppenderDriver,
+  auditHasherForTrail,
+  type CreateAuditAppenderDriverOptions,
+} from './audit-trail/audit-appender.repository.js';
+export type { AuditEventRecord, ListAuditEventsFilters, ListAuditEventsResult, WorkspaceAuditChainHeadRecord, AuditChainHeadSnapshot, VerifyAuditTrailRange } from './audit-trail/audit-trail-records.js';
+export { AuditTrailRepositoryError, AUDIT_TRAIL_ERROR_CODES } from './audit-trail/audit-trail-errors.js';
+export type { AuditTrailErrorCode } from './audit-trail/audit-trail-errors.js';

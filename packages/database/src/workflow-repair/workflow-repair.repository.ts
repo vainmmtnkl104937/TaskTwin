@@ -6,6 +6,10 @@ import {
   type RunnerRepairRequestCreate,
 } from '@tasktwin/workflow-recovery';
 import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import {
+  createAuditSourceId,
+  type AuditEventInput,
+} from '@tasktwin/audit-trail';
 
 import {
   OrganizationRole,
@@ -16,6 +20,11 @@ import {
   WorkflowRunStepStatus,
   type PrismaClient,
 } from '../generated/prisma/client.js';
+import {
+  appendAuditEventTransactional,
+  auditHasherForTrail,
+} from '../audit-trail/audit-appender.repository.js';
+import { WorkspaceAuditTrailRepository } from '../audit-trail/audit-trail.repository.js';
 import { createCanonicalJsonDigest } from '../recording/canonical-json.js';
 import { WorkflowRepairRepositoryError } from './workflow-repair-errors.js';
 import type {
@@ -23,6 +32,117 @@ import type {
   WorkflowRepairDecisionResult,
   WorkflowRepairRecord,
 } from './workflow-repair-records.js';
+
+const REPAIR_EVENT_NAMESPACES = {
+  requested: 'repair_requested',
+  decided: 'repair_decided',
+  lifecycle: 'repair_lifecycle',
+} as const;
+
+function buildRepairRequestedInput(input: {
+  workspaceId: string;
+  actor: { type: 'runner'; runnerDeviceId: string };
+  repairRequestId: string;
+  workflowRunId: string;
+  stepId: string;
+  stepIndex: number;
+  attemptNumber: number;
+  safeErrorCode: string;
+  effectCertainty:
+    | 'not_started'
+    | 'read_only'
+    | 'side_effect_possible'
+    | 'completed'
+    | 'unknown';
+  retryAllowed: boolean;
+  requestedAt: Date;
+  expiresAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'repair.requested',
+    actor: input.actor,
+    primaryEntity: { kind: 'repair_request', id: input.repairRequestId },
+    relatedEntities: [{ kind: 'workflow_run', id: input.workflowRunId }],
+    occurredAt: input.requestedAt,
+    sourceId: createAuditSourceId(
+      REPAIR_EVENT_NAMESPACES.requested,
+      [input.repairRequestId],
+      auditHasherForTrail,
+    ),
+    payload: {
+      repairRequestId: input.repairRequestId,
+      workflowRunId: input.workflowRunId,
+      stepId: input.stepId,
+      stepIndex: input.stepIndex,
+      attemptNumber: input.attemptNumber,
+      safeErrorCode: input.safeErrorCode,
+      effectCertainty: input.effectCertainty,
+      retryAllowed: input.retryAllowed,
+      requestedAt: input.requestedAt.toISOString(),
+      expiresAt: input.expiresAt.toISOString(),
+    },
+  };
+}
+
+function buildRepairDecidedInput(input: {
+  workspaceId: string;
+  actor: { type: 'user'; userId: string };
+  repairRequestId: string;
+  workflowRunId: string;
+  decision: 'retry_approved' | 'aborted';
+  resolvedAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'repair.decided',
+    actor: input.actor,
+    primaryEntity: { kind: 'repair_request', id: input.repairRequestId },
+    relatedEntities: [{ kind: 'workflow_run', id: input.workflowRunId }],
+    occurredAt: input.resolvedAt,
+    sourceId: createAuditSourceId(
+      REPAIR_EVENT_NAMESPACES.decided,
+      [input.repairRequestId, input.decision, input.resolvedAt.toISOString()],
+      auditHasherForTrail,
+    ),
+    payload: {
+      repairRequestId: input.repairRequestId,
+      workflowRunId: input.workflowRunId,
+      decision: input.decision,
+      decidedByUserId: input.actor.userId,
+      resolvedAt: input.resolvedAt.toISOString(),
+    },
+  };
+}
+
+function buildRepairLifecycleInput(input: {
+  workspaceId: string;
+  actor: { type: 'system'; reason: 'automatic_expiry' };
+  repairRequestId: string;
+  workflowRunId: string;
+  reason: 'expired' | 'cancelled' | 'invalidated';
+  resolvedAt: Date;
+}): AuditEventInput {
+  return {
+    workspaceId: input.workspaceId,
+    eventType: 'repair.lifecycle',
+    actor: input.actor,
+    primaryEntity: { kind: 'repair_request', id: input.repairRequestId },
+    relatedEntities: [{ kind: 'workflow_run', id: input.workflowRunId }],
+    occurredAt: input.resolvedAt,
+    sourceId: createAuditSourceId(
+      REPAIR_EVENT_NAMESPACES.lifecycle,
+      [input.repairRequestId, input.reason, input.resolvedAt.toISOString()],
+      auditHasherForTrail,
+    ),
+    payload: {
+      repairRequestId: input.repairRequestId,
+      workflowRunId: input.workflowRunId,
+      reason: input.reason,
+      resolvedAt: input.resolvedAt.toISOString(),
+    },
+  };
+}
 
 const DECIDERS = [OrganizationRole.OWNER, OrganizationRole.ADMIN] as const;
 const ABORTERS = [
@@ -125,7 +245,12 @@ function readRecoveryMode(options: Prisma.JsonValue) {
 }
 
 export class WorkflowRepairRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly auditTrail: WorkspaceAuditTrailRepository = new WorkspaceAuditTrailRepository(
+      prisma,
+    ),
+  ) {}
 
   async resolveRepairAccess(
     userId: string,
@@ -305,6 +430,27 @@ export class WorkflowRepairRepository {
           where: { id: storedStep.id },
           data: { status: WorkflowRunStepStatus.WAITING_FOR_REPAIR },
         });
+        await appendAuditEventTransactional(
+          transaction,
+          this.auditTrail,
+          buildRepairRequestedInput({
+            workspaceId: run.workspaceId,
+            actor: {
+              type: 'runner',
+              runnerDeviceId: input.runnerDeviceId,
+            },
+            repairRequestId: created.id,
+            workflowRunId: run.id,
+            stepId: step.id,
+            stepIndex,
+            attemptNumber: input.request.attemptNumber,
+            safeErrorCode: input.request.safeErrorCode,
+            effectCertainty: input.request.effectCertainty,
+            retryAllowed: decision.retryAllowed,
+            requestedAt: input.now,
+            expiresAt,
+          }),
+        );
         return { idempotent: false, record: toRecord(created) };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -490,6 +636,21 @@ export class WorkflowRepairRepository {
             where: { id: row.id },
             include: repairInclude,
           });
+        await appendAuditEventTransactional(
+          transaction,
+          this.auditTrail,
+          buildRepairDecidedInput({
+            workspaceId: row.workspaceId,
+            actor: { type: 'user', userId: input.userId },
+            repairRequestId: row.id,
+            workflowRunId: row.workflowRunId,
+            decision:
+              input.decision === 'RETRY_APPROVED'
+                ? 'retry_approved'
+                : 'aborted',
+            resolvedAt: input.now,
+          }),
+        );
         return { idempotent: false, record: toRecord(finalRow) };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -508,12 +669,30 @@ export class WorkflowRepairRepository {
           status: WorkflowRepairRequestStatus.PENDING,
           expiresAt: { lte: now },
         },
+        select: {
+          id: true,
+          workflowRunId: true,
+          workspaceId: true,
+          stepId: true,
+        },
       });
       if (request === null) return;
       await transaction.workflowRepairRequest.update({
         where: { id: request.id },
         data: { status: WorkflowRepairRequestStatus.EXPIRED, resolvedAt: now },
       });
+      await appendAuditEventTransactional(
+        transaction,
+        this.auditTrail,
+        buildRepairLifecycleInput({
+          workspaceId: request.workspaceId,
+          actor: { type: 'system', reason: 'automatic_expiry' },
+          repairRequestId: request.id,
+          workflowRunId: request.workflowRunId,
+          reason: 'expired',
+          resolvedAt: now,
+        }),
+      );
       if (!terminateRun) return;
       await transaction.workflowRun.updateMany({
         where: {

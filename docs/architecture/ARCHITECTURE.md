@@ -740,3 +740,25 @@ pinned semantics. The Local Runner recomputes both digests and evaluation,
 checks navigation destinations and redirects, and checks current page origin
 before browser actions. Neither Web, Runner payloads nor AI output can supply an
 override.
+
+## Append-only audit trail boundary
+
+`@tasktwin/audit-trail` owns the canonical event taxonomy, payload schemas,
+canonical JSON, hash-chain construction, the appender and the
+`verifyAuditChain` helper without framework or database dependencies. It
+exposes a `WorkspaceAuditTrailReader` interface that the API's
+`WorkspaceAuditTrailRepository` implements against PostgreSQL.
+
+The Control Plane appends one typed audit event inside the same Prisma
+transaction as the domain mutation. Append-only enforcement is dual: the
+application refuses updates/deletes through repository wrappers and a
+PostgreSQL trigger raises an exception for any `UPDATE` or `DELETE` against
+`workspace_audit_events`. The hash chain uses SHA-256 over canonical JSON,
+linking each event to its predecessor. Verification re-hashes the chain from
+the first recorded event through the latest head and returns `ok`,
+`sequence_gap` or `tampered` with the first failure sequence and kind.
+
+Payloads are validated by per-event-family zod schemas and never contain
+observed/expected values, secrets, tokens, locators, URLs, screenshots or
+runtime outputs. Run evidence is a typed subset of safe execution events
+that omits attempt-level and output-level events.
