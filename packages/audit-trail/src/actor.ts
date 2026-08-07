@@ -8,6 +8,7 @@ export const AuditSystemReasonSchema = z.enum([
   'run_cancelled',
   'scheduler',
   'automatic',
+  'notification_worker',
 ]);
 
 export const UserAuditActorSchema = z

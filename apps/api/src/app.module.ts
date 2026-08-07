@@ -17,6 +17,7 @@ import { WorkflowRunsModule } from './workflow-runs/workflow-runs.module.js';
 import { ExecutionPolicyModule } from './execution-policy/execution-policy.module.js';
 import { AuditTrailModule } from './audit-trail/audit-trail.module.js';
 import { WorkflowScheduleModule } from './workflow-schedule/workflow-schedule.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { WorkflowScheduleModule } from './workflow-schedule/workflow-schedule.mo
     AuditTrailModule,
     WorkflowScheduleModule,
     SchedulerModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
   providers: [HealthService],

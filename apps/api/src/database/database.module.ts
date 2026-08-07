@@ -23,6 +23,7 @@ import { DATABASE_CLIENT } from './database.constants.js';
 import { DatabaseHealthController } from './database-health.controller.js';
 import { DatabaseHealthService } from './database-health.service.js';
 import { PrismaService } from './prisma.service.js';
+import { OperationalAlertAppender } from '../operational-alerts/operational-alert.appender.js';
 
 @Module({
   controllers: [DatabaseHealthController],
@@ -33,6 +34,7 @@ import { PrismaService } from './prisma.service.js';
     },
     PrismaService,
     DatabaseHealthService,
+    OperationalAlertAppender,
     {
       provide: IdentityRepository,
       inject: [DATABASE_CLIENT],
@@ -62,13 +64,15 @@ import { PrismaService } from './prisma.service.js';
     },
     {
       provide: RunnerRepository,
-      inject: [DATABASE_CLIENT],
-      useFactory: (client: PrismaClient) => new RunnerRepository(client),
+      inject: [DATABASE_CLIENT, OperationalAlertAppender],
+      useFactory: (client: PrismaClient, alerts: OperationalAlertAppender) =>
+        new RunnerRepository(client, alerts),
     },
     {
       provide: WorkflowRunRepository,
-      inject: [DATABASE_CLIENT],
-      useFactory: (client: PrismaClient) => new WorkflowRunRepository(client),
+      inject: [DATABASE_CLIENT, OperationalAlertAppender],
+      useFactory: (client: PrismaClient, alerts: OperationalAlertAppender) =>
+        new WorkflowRunRepository(client, undefined, alerts),
     },
     {
       provide: SecureRunInputRepository,
@@ -78,15 +82,15 @@ import { PrismaService } from './prisma.service.js';
     },
     {
       provide: WorkflowApprovalRepository,
-      inject: [DATABASE_CLIENT],
-      useFactory: (client: PrismaClient) =>
-        new WorkflowApprovalRepository(client),
+      inject: [DATABASE_CLIENT, OperationalAlertAppender],
+      useFactory: (client: PrismaClient, alerts: OperationalAlertAppender) =>
+        new WorkflowApprovalRepository(client, undefined, alerts),
     },
     {
       provide: WorkflowRepairRepository,
-      inject: [DATABASE_CLIENT],
-      useFactory: (client: PrismaClient) =>
-        new WorkflowRepairRepository(client),
+      inject: [DATABASE_CLIENT, OperationalAlertAppender],
+      useFactory: (client: PrismaClient, alerts: OperationalAlertAppender) =>
+        new WorkflowRepairRepository(client, undefined, alerts),
     },
     {
       provide: WorkflowLocatorRepairRepository,
@@ -102,9 +106,9 @@ import { PrismaService } from './prisma.service.js';
     },
     {
       provide: WorkflowScheduleRepository,
-      inject: [DATABASE_CLIENT],
-      useFactory: (client: PrismaClient) =>
-        new WorkflowScheduleRepository(client),
+      inject: [DATABASE_CLIENT, OperationalAlertAppender],
+      useFactory: (client: PrismaClient, alerts: OperationalAlertAppender) =>
+        new WorkflowScheduleRepository(client, undefined, alerts),
     },
     {
       provide: WorkspaceAuditTrailRepository,
@@ -128,6 +132,7 @@ import { PrismaService } from './prisma.service.js';
     ExecutionPolicyRepository,
     WorkflowScheduleRepository,
     WorkspaceAuditTrailRepository,
+    OperationalAlertAppender,
   ],
 })
 export class DatabaseModule {}

@@ -14,6 +14,8 @@ export const AUDIT_ENTITY_KINDS = [
   'locator_repair_candidate',
   'workflow_schedule',
   'workflow_schedule_occurrence',
+  'operational_alert',
+  'notification_outbox_message',
 ] as const;
 
 export const AuditEntityKindSchema = z.enum(AUDIT_ENTITY_KINDS);

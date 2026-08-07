@@ -74,3 +74,6 @@ components are rendered from typed zod-validated DTOs; no
 keys (secrets, tokens, URLs, screenshots, observed/expected values, …) are
 rejected at the API boundary and re-validated on the web boundary before
 rendering.
+# Notification Inbox
+
+The authenticated header contains a server-rendered notification bell with unread badge and five recent safe summaries. `/notifications` groups active action-required alerts, supports unread/severity filters, shows resolved state, and maps typed actions to Approval, Repair, Run, Schedule and Audit routes. It does not render HTML or raw template JSON.

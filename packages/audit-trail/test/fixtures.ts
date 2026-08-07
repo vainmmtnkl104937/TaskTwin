@@ -17,6 +17,7 @@ export const PROPOSAL_ID = '00000000-0000-4000-8000-000000000019';
 export const CANDIDATE_ID = '00000000-0000-4000-8000-000000000020';
 export const SCHEDULE_ID = '00000000-0000-4000-8000-000000000030';
 export const OCCURRENCE_ID = '00000000-0000-4000-8000-000000000031';
+export const ALERT_ID = '00000000-0000-4000-8000-000000000032';
 export const DIGEST = 'a'.repeat(64);
 export const OCCURRED_AT = '2026-08-05T12:00:00.000Z';
 
@@ -329,6 +330,18 @@ export const VALID_PAYLOADS: AuditPayloadByType = {
     scheduleId: SCHEDULE_ID,
     occurrenceId: OCCURRENCE_ID,
     workflowRunId: RUN_ID,
+  },
+  'notification.alert.created': {
+    alertId: ALERT_ID, alertType: 'approval_required', severity: 'warning',
+    sourceType: 'approval_request', sourceId: APPROVAL_ID, recipientCount: 2,
+  },
+  'notification.alert.resolved': {
+    alertId: ALERT_ID, alertType: 'approval_required', severity: 'warning',
+    sourceType: 'approval_request', sourceId: APPROVAL_ID, recipientCount: 2,
+  },
+  'notification.delivery.dead_lettered': {
+    alertId: ALERT_ID, alertType: 'approval_required', severity: 'warning',
+    sourceType: 'approval_request', sourceId: APPROVAL_ID, recipientCount: 1,
   },
 };
 

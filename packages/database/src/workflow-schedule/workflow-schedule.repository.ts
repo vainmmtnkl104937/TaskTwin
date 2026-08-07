@@ -30,6 +30,7 @@ import type {
   ScheduleCreationResult,
   OccurrenceDispatchResult,
 } from './workflow-schedule-records.js';
+import type { OperationalAlertTransactionAppender } from '../operational-alerts/operational-alert-port.js';
 import {
   nextOccurrence,
   ScheduleDefinitionSchema,
@@ -473,6 +474,7 @@ export class WorkflowScheduleRepository {
     private readonly auditTrail: WorkspaceAuditTrailRepository = new WorkspaceAuditTrailRepository(
       prisma,
     ),
+    private readonly operationalAlerts?: OperationalAlertTransactionAppender,
   ) {}
 
   async create(input: {
@@ -795,6 +797,7 @@ export class WorkflowScheduleRepository {
     schedules: WorkflowScheduleRecord[];
     nextCursor: string | null;
   } | null> {
+    void _now;
     const access = await this.resolveWorkspaceAccess(
       this.prisma,
       actorUserId,
@@ -1033,6 +1036,13 @@ export class WorkflowScheduleRepository {
           occurredAt: now,
         }),
       );
+      if (schedule.status === WorkflowScheduleStatus.AUTO_PAUSED) {
+        await this.operationalAlerts?.resolve(transaction, {
+          workspaceId: schedule.workspaceId, type: 'schedule_auto_paused',
+          sourceType: 'workflow_schedule', sourceId: schedule.id,
+          reason: 'resumed', resolvedByUserId: actorUserId,
+        });
+      }
       const record = await transaction.workflowSchedule.findUnique({
         where: { id: scheduleId },
       });
@@ -1106,6 +1116,13 @@ export class WorkflowScheduleRepository {
           occurredAt: now,
         }),
       );
+      if (schedule.status === WorkflowScheduleStatus.AUTO_PAUSED) {
+        await this.operationalAlerts?.resolve(transaction, {
+          workspaceId: schedule.workspaceId, type: 'schedule_auto_paused',
+          sourceType: 'workflow_schedule', sourceId: schedule.id,
+          reason: 'archived', resolvedByUserId: actorUserId,
+        });
+      }
       const record = await transaction.workflowSchedule.findUnique({
         where: { id: scheduleId },
       });
@@ -1143,6 +1160,7 @@ export class WorkflowScheduleRepository {
           maxStartDelaySeconds: true,
           status: true,
           nextOccurrenceAt: true,
+          createdByUserId: true,
         },
       });
       if (schedule === null) {
@@ -1281,6 +1299,19 @@ export class WorkflowScheduleRepository {
             occurredAt: input.now,
           }),
         );
+        await this.operationalAlerts?.append(transaction, {
+          schemaVersion: 1, workspaceId: schedule.workspaceId,
+          type: 'schedule_auto_paused',
+          source: { type: 'workflow_schedule', id: schedule.id },
+          primaryEntity: { type: 'workflow_schedule', id: schedule.id },
+          relatedEntities: [{ type: 'workflow_schedule_occurrence', id: occurrenceId }],
+          template: { schemaVersion: 1, templateKey: 'schedule_auto_paused.v1',
+            workflowScheduleId: schedule.id, reason: 'policy_review_required',
+            autoPausedAt: input.now.toISOString(), occurrenceId },
+          actionTarget: { schemaVersion: 1, kind: 'schedule', workspaceId: schedule.workspaceId,
+            workflowScheduleId: schedule.id },
+          creatorUserId: schedule.createdByUserId,
+        });
         const occ = await transaction.workflowScheduleOccurrence.findUnique({
           where: { id: occurrenceId },
         });
@@ -1447,13 +1478,40 @@ export class WorkflowScheduleRepository {
         });
 
         if (occ.workflowRunId !== null) {
-          await transaction.workflowRun.update({
+          const timedOutRun = await transaction.workflowRun.update({
             where: { id: occ.workflowRunId },
             data: {
               status: WorkflowRunStatus.TIMED_OUT,
               terminationCause: 'schedule_start_window_expired',
               finishedAt: now,
             },
+            select: { id: true, workspaceId: true, createdByUserId: true,
+              steps: { select: { id: true } }, outputs: { select: { status: true } } },
+          });
+          await appendAuditEventTransactional(transaction, this.auditTrail, {
+            workspaceId: timedOutRun.workspaceId,
+            eventType: 'workflow_run.timed_out',
+            actor: { type: 'system', reason: 'scheduler' },
+            primaryEntity: { kind: 'workflow_run', id: timedOutRun.id },
+            relatedEntities: [{ kind: 'workflow_schedule_occurrence', id: occ.id }],
+            occurredAt: now,
+            sourceId: createAuditSourceId('workflow_run_terminal',
+              [timedOutRun.id, 'workflow_run.timed_out', now.toISOString()], auditHasherForTrail),
+            payload: { workflowRunId: timedOutRun.id, terminalStatus: 'timed_out',
+              terminationCause: 'schedule_start_window_expired', finishedAt: now.toISOString(),
+              stepCount: timedOutRun.steps.length,
+              producedOutputCount: timedOutRun.outputs.filter((output) => output.status === 'PRODUCED').length },
+          });
+          await this.operationalAlerts?.append(transaction, {
+            schemaVersion: 1, workspaceId: timedOutRun.workspaceId, type: 'run_timed_out',
+            source: { type: 'workflow_run', id: timedOutRun.id },
+            primaryEntity: { type: 'workflow_run', id: timedOutRun.id },
+            relatedEntities: [{ type: 'workflow_schedule_occurrence', id: occ.id }],
+            template: { schemaVersion: 1, templateKey: 'run_timed_out.v1',
+              workflowRunId: timedOutRun.id, timedOutAt: now.toISOString() },
+            actionTarget: { schemaVersion: 1, kind: 'run', workspaceId: timedOutRun.workspaceId,
+              workflowRunId: timedOutRun.id },
+            creatorUserId: timedOutRun.createdByUserId,
           });
         }
 
@@ -1558,22 +1616,11 @@ export class WorkflowScheduleRepository {
 
       if (run !== null && run.status === WorkflowRunStatus.SUCCEEDED) {
         status = WorkflowScheduleOccurrenceStatus.SUCCEEDED;
-      } else if (
-        run !== null &&
-        (run.status === WorkflowRunStatus.FAILED ||
-          run.status === WorkflowRunStatus.CANCELLED ||
-          run.status === WorkflowRunStatus.TIMED_OUT)
-      ) {
-        status = WorkflowScheduleOccurrenceStatus.SKIPPED;
       } else if (run !== null && run.status === WorkflowRunStatus.INTERRUPTED) {
         status = WorkflowScheduleOccurrenceStatus.CANCELLED;
         autoPause = true;
         autoPauseReason = 'ambiguous_outcome';
-      } else if (
-        run !== null &&
-        run.status === WorkflowRunStatus.FAILED &&
-        input.terminationCause !== null
-      ) {
+      } else if (run !== null && run.status === WorkflowRunStatus.FAILED) {
         const sideEffectUnknown =
           input.terminationCause === 'ambiguous_outcome' ||
           input.terminationCause === 'runner_crash' ||
@@ -1582,6 +1629,12 @@ export class WorkflowScheduleRepository {
           autoPause = true;
           autoPauseReason = 'ambiguous_outcome';
         }
+        status = WorkflowScheduleOccurrenceStatus.SKIPPED;
+      } else if (
+        run !== null &&
+        (run.status === WorkflowRunStatus.CANCELLED ||
+          run.status === WorkflowRunStatus.TIMED_OUT)
+      ) {
         status = WorkflowScheduleOccurrenceStatus.SKIPPED;
       } else {
         status = WorkflowScheduleOccurrenceStatus.CANCELLED;
@@ -1605,6 +1658,7 @@ export class WorkflowScheduleRepository {
           definition: true,
           maxStartDelaySeconds: true,
           autoPausedByOccurrenceId: true,
+          createdByUserId: true,
         },
       });
       if (schedule === null) {
@@ -1671,6 +1725,19 @@ export class WorkflowScheduleRepository {
             occurredAt: input.now,
           }),
         );
+        await this.operationalAlerts?.append(transaction, {
+          schemaVersion: 1, workspaceId: schedule.workspaceId,
+          type: 'schedule_auto_paused',
+          source: { type: 'workflow_schedule', id: occurrence.scheduleId },
+          primaryEntity: { type: 'workflow_schedule', id: occurrence.scheduleId },
+          relatedEntities: [{ type: 'workflow_schedule_occurrence', id: occurrence.id }],
+          template: { schemaVersion: 1, templateKey: 'schedule_auto_paused.v1',
+            workflowScheduleId: occurrence.scheduleId, reason: autoPauseReason,
+            autoPausedAt: input.now.toISOString(), occurrenceId: occurrence.id },
+          actionTarget: { schemaVersion: 1, kind: 'schedule', workspaceId: schedule.workspaceId,
+            workflowScheduleId: occurrence.scheduleId },
+          creatorUserId: schedule.createdByUserId,
+        });
       }
 
       const updatedOcc = await transaction.workflowScheduleOccurrence.findUnique({
@@ -1685,6 +1752,27 @@ export class WorkflowScheduleRepository {
         idempotent: false,
       };
     });
+  }
+
+  async reconcileTerminalOccurrences(now: Date): Promise<number> {
+    const occurrences = await this.prisma.workflowScheduleOccurrence.findMany({
+      where: {
+        status: WorkflowScheduleOccurrenceStatus.DISPATCHED,
+        workflowRun: {
+          status: { in: [WorkflowRunStatus.SUCCEEDED, WorkflowRunStatus.FAILED,
+            WorkflowRunStatus.CANCELLED, WorkflowRunStatus.TIMED_OUT,
+            WorkflowRunStatus.INTERRUPTED] },
+        },
+      },
+      select: { id: true, workflowRun: { select: { terminationCause: true } } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: 100,
+    });
+    for (const occurrence of occurrences) {
+      await this.handleRunCompletion({ occurrenceId: occurrence.id,
+        terminationCause: occurrence.workflowRun?.terminationCause ?? null, now });
+    }
+    return occurrences.length;
   }
 
   /**

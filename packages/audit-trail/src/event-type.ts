@@ -45,6 +45,9 @@ export const AUDIT_EVENT_TYPES = [
   'schedule.occurrence.skipped',
   'schedule.occurrence.start_window_expired',
   'schedule.occurrence.succeeded',
+  'notification.alert.created',
+  'notification.alert.resolved',
+  'notification.delivery.dead_lettered',
 ] as const;
 
 export const AuditEventTypeSchema = z.enum(AUDIT_EVENT_TYPES);

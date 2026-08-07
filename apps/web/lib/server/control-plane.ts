@@ -46,6 +46,10 @@ import {
   WorkflowScheduleResponseSchema,
   OccurrenceListResponseSchema,
   CreateWorkflowScheduleResponseSchema,
+  NotificationListResponseSchema,
+  NotificationUnreadCountSchema,
+  NotificationReadResponseSchema,
+  NotificationReadAllResponseSchema,
 } from '../control-plane-contracts';
 import type { WorkspaceExecutionPolicyDefinition } from '@tasktwin/workflow-policy';
 import { getControlPlaneOrigin } from './environment';
@@ -89,6 +93,27 @@ export function login(email: string, password: string) {
   return request('/auth/login', LoginResponseSchema, {
     method: 'POST',
     body: JSON.stringify({ email, password }),
+  });
+}
+
+export function listNotifications(accessToken: string, query = '') {
+  return request(`/me/notifications${query.length === 0 ? '' : `?${query}`}`, NotificationListResponseSchema, {
+    method: 'GET', headers: { authorization: `Bearer ${accessToken}` },
+  });
+}
+export function getNotificationUnreadCount(accessToken: string) {
+  return request('/me/notifications/unread-count', NotificationUnreadCountSchema, {
+    method: 'GET', headers: { authorization: `Bearer ${accessToken}` },
+  });
+}
+export function markNotificationRead(accessToken: string, notificationId: string) {
+  return request(`/me/notifications/${encodeURIComponent(notificationId)}/read`, NotificationReadResponseSchema, {
+    method: 'POST', headers: { authorization: `Bearer ${accessToken}` }, body: '{}',
+  });
+}
+export function markAllNotificationsRead(accessToken: string, cutoff: string) {
+  return request('/me/notifications/read-all', NotificationReadAllResponseSchema, {
+    method: 'POST', headers: { authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ cutoff }),
   });
 }
 

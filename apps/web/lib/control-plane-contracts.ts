@@ -607,3 +607,28 @@ export const CreateWorkflowScheduleResponseSchema = z.strictObject({
 export type CreateWorkflowScheduleResponse = z.infer<
   typeof CreateWorkflowScheduleResponseSchema
 >;
+
+import { OperationalAlertActionTargetSchema } from '@tasktwin/operational-alerts';
+
+export const NotificationItemSchema = z.strictObject({
+  id: UuidSchema,
+  workspace: z.strictObject({ id: UuidSchema, name: z.string().min(1).max(120) }),
+  alertId: UuidSchema,
+  type: z.enum(['approval_required', 'repair_required', 'run_failed', 'run_timed_out', 'run_interrupted', 'schedule_auto_paused', 'audit_integrity_failed']),
+  severity: z.enum(['info', 'warning', 'error', 'critical']),
+  status: z.enum(['active', 'resolved', 'informational']),
+  deliveredAt: z.string().datetime({ offset: true }), readAt: z.string().datetime({ offset: true }).nullable(),
+  summary: z.strictObject({ title: z.string().max(100), body: z.string().max(240), actionLabel: z.string().max(80) }),
+  actionTarget: OperationalAlertActionTargetSchema,
+});
+export const NotificationListResponseSchema = z.strictObject({
+  items: z.array(NotificationItemSchema).max(100), nextCursor: z.string().nullable(),
+});
+export const NotificationUnreadCountSchema = z.strictObject({ count: z.number().int().min(0) });
+export const NotificationReadResponseSchema = z.strictObject({
+  id: UuidSchema, readAt: z.string().datetime({ offset: true }), idempotent: z.boolean(),
+});
+export const NotificationReadAllResponseSchema = z.strictObject({
+  updatedCount: z.number().int().min(0), cutoff: z.string().datetime({ offset: true }), readAt: z.string().datetime({ offset: true }),
+});
+export type NotificationItem = z.infer<typeof NotificationItemSchema>;

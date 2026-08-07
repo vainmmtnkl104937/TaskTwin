@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@tasktwin/locator-engine": "workspace:*",
+    "@tasktwin/operational-alerts": "workspace:*",
     "@tasktwin/workflow-extraction": "workspace:*",
     "@tasktwin/workflow-approval": "workspace:*",
     "@prisma/adapter-pg": "7.9.1",

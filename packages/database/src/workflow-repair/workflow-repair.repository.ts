@@ -32,6 +32,7 @@ import type {
   WorkflowRepairDecisionResult,
   WorkflowRepairRecord,
 } from './workflow-repair-records.js';
+import type { OperationalAlertTransactionAppender } from '../operational-alerts/operational-alert-port.js';
 
 const REPAIR_EVENT_NAMESPACES = {
   requested: 'repair_requested',
@@ -250,6 +251,7 @@ export class WorkflowRepairRepository {
     private readonly auditTrail: WorkspaceAuditTrailRepository = new WorkspaceAuditTrailRepository(
       prisma,
     ),
+    private readonly operationalAlerts?: OperationalAlertTransactionAppender,
   ) {}
 
   async resolveRepairAccess(
@@ -451,6 +453,20 @@ export class WorkflowRepairRepository {
             expiresAt,
           }),
         );
+        await this.operationalAlerts?.append(transaction, {
+          schemaVersion: 1, workspaceId: run.workspaceId, type: 'repair_required',
+          source: { type: 'repair_request', id: created.id },
+          primaryEntity: { type: 'repair_request', id: created.id },
+          relatedEntities: [{ type: 'workflow_run', id: run.id }],
+          template: {
+            schemaVersion: 1, templateKey: 'repair_required.v1',
+            repairRequestId: created.id, workflowRunId: run.id,
+            stepType: step.type, attemptNumber: input.request.attemptNumber,
+            expiresAt: expiresAt.toISOString(),
+          },
+          actionTarget: { schemaVersion: 1, kind: 'repair',
+            workspaceId: run.workspaceId, repairRequestId: created.id },
+        });
         return { idempotent: false, record: toRecord(created) };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -651,6 +667,12 @@ export class WorkflowRepairRepository {
             resolvedAt: input.now,
           }),
         );
+        await this.operationalAlerts?.resolve(transaction, {
+          workspaceId: row.workspaceId, type: 'repair_required',
+          sourceType: 'repair_request', sourceId: row.id,
+          reason: input.decision === 'RETRY_APPROVED' ? 'retry_approved' : 'aborted',
+          resolvedByUserId: input.userId,
+        });
         return { idempotent: false, record: toRecord(finalRow) };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -674,6 +696,7 @@ export class WorkflowRepairRepository {
           workflowRunId: true,
           workspaceId: true,
           stepId: true,
+          workflowRun: { select: { createdByUserId: true } },
         },
       });
       if (request === null) return;
@@ -693,8 +716,12 @@ export class WorkflowRepairRepository {
           resolvedAt: now,
         }),
       );
+      await this.operationalAlerts?.resolve(transaction, {
+        workspaceId: request.workspaceId, type: 'repair_required',
+        sourceType: 'repair_request', sourceId: request.id, reason: 'expired',
+      });
       if (!terminateRun) return;
-      await transaction.workflowRun.updateMany({
+      const timedOutRun = await transaction.workflowRun.updateMany({
         where: {
           id: request.workflowRunId,
           status: WorkflowRunStatus.WAITING_FOR_REPAIR,
@@ -707,6 +734,19 @@ export class WorkflowRepairRepository {
           leaseExpiresAt: null,
         },
       });
+      if (timedOutRun.count === 1) {
+        await this.operationalAlerts?.append(transaction, {
+          schemaVersion: 1, workspaceId: request.workspaceId, type: 'run_timed_out',
+          source: { type: 'workflow_run', id: request.workflowRunId },
+          primaryEntity: { type: 'workflow_run', id: request.workflowRunId },
+          relatedEntities: [{ type: 'repair_request', id: request.id }],
+          template: { schemaVersion: 1, templateKey: 'run_timed_out.v1',
+            workflowRunId: request.workflowRunId, timedOutAt: now.toISOString() },
+          actionTarget: { schemaVersion: 1, kind: 'run', workspaceId: request.workspaceId,
+            workflowRunId: request.workflowRunId },
+          creatorUserId: request.workflowRun.createdByUserId,
+        });
+      }
       await transaction.workflowRunStep.updateMany({
         where: {
           workflowRunId: request.workflowRunId,

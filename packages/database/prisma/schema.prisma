@@ -218,6 +218,60 @@ enum WorkflowScheduleOccurrenceStatus {
   @@map("workflow_schedule_occurrence_status")
 }
 
+enum OperationalAlertType {
+  approval_required
+  repair_required
+  run_failed
+  run_timed_out
+  run_interrupted
+  schedule_auto_paused
+  audit_integrity_failed
+
+  @@map("operational_alert_type")
+}
+
+enum OperationalAlertSeverity {
+  info
+  warning
+  error
+  critical
+
+  @@map("operational_alert_severity")
+}
+
+enum OperationalAlertStatus {
+  active
+  resolved
+  informational
+
+  @@map("operational_alert_status")
+}
+
+enum OperationalAlertSourceType {
+  approval_request
+  repair_request
+  workflow_run
+  workflow_schedule
+  audit_verification_failure
+
+  @@map("operational_alert_source_type")
+}
+
+enum NotificationChannel {
+  IN_APP
+
+  @@map("notification_channel")
+}
+
+enum NotificationOutboxStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  DEAD_LETTER
+
+  @@map("notification_outbox_status")
+}
+
 model User {
   id                         String                        @id @default(uuid()) @db.Uuid
   email                      String                        @unique(map: "users_email_key") @db.VarChar(254)
@@ -244,6 +298,9 @@ model User {
   createdExecutionPolicies    WorkspaceExecutionPolicyVersion[] @relation("WorkspaceExecutionPolicyCreator")
   createdSchedules         WorkflowSchedule[]                   @relation("WorkflowScheduleCreator")
   archivedSchedules        WorkflowSchedule[]                   @relation("WorkflowScheduleArchiver")
+  resolvedOperationalAlerts OperationalAlert[]                  @relation("OperationalAlertResolver")
+  notificationOutboxMessages NotificationOutboxMessage[]
+  notifications             UserNotification[]
 
   @@map("users")
 }
@@ -294,9 +351,88 @@ model Workspace {
   auditChainHead         WorkspaceAuditChainHead?
   auditEvents            WorkspaceAuditEvent[]
   schedules              WorkflowSchedule[]
+  operationalAlerts      OperationalAlert[]
+  notificationOutboxMessages NotificationOutboxMessage[]
+  userNotifications      UserNotification[]
 
   @@unique([organizationId, slug], map: "workspaces_organization_id_slug_key")
   @@map("workspaces")
+}
+
+model OperationalAlert {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  workspaceId         String                     @map("workspace_id") @db.Uuid
+  type                OperationalAlertType
+  severity            OperationalAlertSeverity
+  status              OperationalAlertStatus
+  sourceType          OperationalAlertSourceType @map("source_type")
+  sourceId            String                     @map("source_id") @db.VarChar(256)
+  contractDigest      String                     @map("contract_digest") @db.Char(64)
+  primaryEntityType   String                     @map("primary_entity_type") @db.VarChar(48)
+  primaryEntityId     String                     @map("primary_entity_id") @db.VarChar(256)
+  relatedEntities     Json                       @map("related_entities") @db.JsonB
+  templateKey         String                     @map("template_key") @db.VarChar(64)
+  templateVersion     Int                        @map("template_version")
+  templateParameters  Json                       @map("template_parameters") @db.JsonB
+  actionTarget        Json                       @map("action_target") @db.JsonB
+  createdAt           DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  resolvedAt          DateTime?                  @map("resolved_at") @db.Timestamptz(3)
+  resolvedByUserId    String?                    @map("resolved_by_user_id") @db.Uuid
+  resolutionReason    String?                    @map("resolution_reason") @db.VarChar(32)
+  workspace           Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  resolvedBy          User?                      @relation("OperationalAlertResolver", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  outboxMessages      NotificationOutboxMessage[]
+  notifications       UserNotification[]
+
+  @@unique([workspaceId, type, sourceType, sourceId], map: "operational_alerts_source_identity_key")
+  @@index([workspaceId, status, createdAt], map: "operational_alerts_workspace_status_created_idx")
+  @@index([primaryEntityType, primaryEntityId], map: "operational_alerts_primary_entity_idx")
+  @@map("operational_alerts")
+}
+
+model NotificationOutboxMessage {
+  id                String                   @id @default(uuid()) @db.Uuid
+  workspaceId       String                   @map("workspace_id") @db.Uuid
+  alertId           String                   @map("alert_id") @db.Uuid
+  recipientUserId   String                   @map("recipient_user_id") @db.Uuid
+  channel           NotificationChannel      @default(IN_APP)
+  deduplicationKey  String                   @unique(map: "notification_outbox_messages_dedup_key") @map("deduplication_key") @db.VarChar(256)
+  status            NotificationOutboxStatus @default(PENDING)
+  attemptCount      Int                      @default(0) @map("attempt_count")
+  availableAt       DateTime                 @default(now()) @map("available_at") @db.Timestamptz(3)
+  lockedBy          String?                  @map("locked_by") @db.VarChar(96)
+  lockedUntil       DateTime?                @map("locked_until") @db.Timestamptz(3)
+  lastErrorCode     String?                  @map("last_error_code") @db.VarChar(80)
+  deliveredAt       DateTime?                @map("delivered_at") @db.Timestamptz(3)
+  deadLetteredAt    DateTime?                @map("dead_lettered_at") @db.Timestamptz(3)
+  createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace         Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  alert             OperationalAlert         @relation(fields: [alertId], references: [id], onDelete: Restrict)
+  recipient         User                     @relation(fields: [recipientUserId], references: [id], onDelete: Restrict)
+
+  @@unique([alertId, recipientUserId, channel], map: "notification_outbox_messages_alert_recipient_channel_key")
+  @@index([status, availableAt], map: "notification_outbox_messages_due_idx")
+  @@index([status, lockedUntil], map: "notification_outbox_messages_lock_idx")
+  @@index([recipientUserId, createdAt], map: "notification_outbox_messages_recipient_idx")
+  @@map("notification_outbox_messages")
+}
+
+model UserNotification {
+  id              String           @id @default(uuid()) @db.Uuid
+  recipientUserId String           @map("recipient_user_id") @db.Uuid
+  workspaceId     String           @map("workspace_id") @db.Uuid
+  alertId         String           @map("alert_id") @db.Uuid
+  deliveredAt     DateTime         @map("delivered_at") @db.Timestamptz(3)
+  readAt          DateTime?        @map("read_at") @db.Timestamptz(3)
+  recipient       User             @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  alert           OperationalAlert @relation(fields: [alertId], references: [id], onDelete: Restrict)
+
+  @@unique([alertId, recipientUserId], map: "user_notifications_alert_recipient_key")
+  @@index([recipientUserId, deliveredAt], map: "user_notifications_recipient_delivered_idx")
+  @@index([recipientUserId, workspaceId, readAt, deliveredAt], map: "user_notifications_inbox_idx")
+  @@map("user_notifications")
 }
 
 model RunnerPairingSession {

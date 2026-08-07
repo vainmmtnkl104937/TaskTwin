@@ -378,3 +378,6 @@ Playwright, browser recording, workflow execution, AI integration, cloud
 deployment, CI/CD, Docker, React Flow, or business database models. Dependencies
 for those capabilities will be evaluated only in the session that implements
 them.
+# Session 27: Operational notifications
+
+Implemented the in-app operational alert foundation: strict safe templates, transactional outbox, membership routing, crash-safe multi-worker delivery, bounded retry/dead letter, unread count, Notification Bell and Inbox. External channels, preferences, recurring reminders, digests, escalation and manual dead-letter replay remain future work.

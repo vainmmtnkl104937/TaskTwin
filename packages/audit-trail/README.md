@@ -54,3 +54,6 @@ level.
   requires implementing the `WorkspaceAuditTrailReader` interface.
 * Hashing is SHA-256. Switching to a stronger algorithm requires a
   migration strategy to preserve chain integrity.
+# Notification events
+
+The strict event registry includes `notification.alert.created`, `notification.alert.resolved` and `notification.delivery.dead_lettered`. Payloads are limited to alert ID/type/severity, source type/ID and recipient count. Polling, retries, bell reads and mark-read operations are intentionally not audited.

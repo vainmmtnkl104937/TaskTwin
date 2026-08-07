@@ -174,3 +174,9 @@ export {
 export type { AuditEventRecord, ListAuditEventsFilters, ListAuditEventsResult, WorkspaceAuditChainHeadRecord, AuditChainHeadSnapshot, VerifyAuditTrailRange } from './audit-trail/audit-trail-records.js';
 export { AuditTrailRepositoryError, AUDIT_TRAIL_ERROR_CODES } from './audit-trail/audit-trail-errors.js';
 export type { AuditTrailErrorCode } from './audit-trail/audit-trail-errors.js';
+export type {
+  DatabaseTransactionClient,
+  OperationalAlertResolutionReason,
+  OperationalAlertTransactionAppender,
+  ResolveOperationalAlertInput,
+} from './operational-alerts/operational-alert-port.js';
