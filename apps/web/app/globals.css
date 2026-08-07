@@ -742,3 +742,20 @@ p {
   background-color: #1c664d;
   color: white;
 }
+
+.header-actions { display: flex; align-items: center; gap: 1rem; }
+.notification-bell { position: relative; }
+.notification-bell > summary { cursor: pointer; list-style: none; position: relative; font-size: 1.35rem; }
+.notification-badge { position: absolute; top: -0.5rem; right: -0.75rem; min-width: 1.25rem; padding: 0.1rem 0.3rem; border-radius: 1rem; background: #a83e3e; color: white; font-size: 0.7rem; text-align: center; }
+.notification-dropdown { position: absolute; z-index: 30; right: 0; width: min(24rem, 90vw); padding: 1rem; border: 1px solid #d7e2de; border-radius: 0.75rem; background: white; box-shadow: 0 1rem 3rem rgb(0 0 0 / 18%); }
+.notification-dropdown h2 { margin-top: 0; }
+.notification-dropdown article { padding: 0.75rem 0; border-bottom: 1px solid #e4ece9; }
+.notification-dropdown p { margin: 0.25rem 0; }
+.notification-unread { border-left: 0.25rem solid #1c664d; padding-left: 0.65rem !important; }
+.notification-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; }
+.notification-list { display: grid; gap: 1rem; margin-bottom: 2rem; }
+.notification-card { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.severity-critical { border-left: 0.35rem solid #8a2424; }
+.severity-error { border-left: 0.35rem solid #c15a38; }
+.severity-warning { border-left: 0.35rem solid #d29a32; }
+.severity-info { border-left: 0.35rem solid #387aa8; }

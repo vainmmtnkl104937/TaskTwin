@@ -463,6 +463,43 @@ export const ScheduleOccurrenceSucceededPayloadSchema = z
   })
     .strict();
 
+const AlertTypeSchema = z.enum([
+  'approval_required', 'repair_required', 'run_failed', 'run_timed_out',
+  'run_interrupted', 'schedule_auto_paused', 'audit_integrity_failed',
+]);
+const AlertSeveritySchema = z.enum(['info', 'warning', 'error', 'critical']);
+const AlertSourceTypeSchema = z.enum([
+  'approval_request', 'repair_request', 'workflow_run', 'workflow_schedule',
+  'audit_verification_failure',
+]);
+
+export const NotificationAlertCreatedPayloadSchema = z.object({
+  alertId: UuidSchema,
+  alertType: AlertTypeSchema,
+  severity: AlertSeveritySchema,
+  sourceType: AlertSourceTypeSchema,
+  sourceId: StableIdSchema,
+  recipientCount: CountSchema,
+}).strict();
+
+export const NotificationAlertResolvedPayloadSchema = z.object({
+  alertId: UuidSchema,
+  alertType: AlertTypeSchema,
+  severity: AlertSeveritySchema,
+  sourceType: AlertSourceTypeSchema,
+  sourceId: StableIdSchema,
+  recipientCount: CountSchema,
+}).strict();
+
+export const NotificationDeliveryDeadLetteredPayloadSchema = z.object({
+  alertId: UuidSchema,
+  alertType: AlertTypeSchema,
+  severity: AlertSeveritySchema,
+  sourceType: AlertSourceTypeSchema,
+  sourceId: StableIdSchema,
+  recipientCount: CountSchema,
+}).strict();
+
 export const AUDIT_PAYLOAD_SCHEMAS = {
   'workflow.created': WorkflowCreatedPayloadSchema,
   'workflow_version.created': WorkflowVersionCreatedPayloadSchema,
@@ -509,6 +546,9 @@ export const AUDIT_PAYLOAD_SCHEMAS = {
   'schedule.occurrence.start_window_expired':
     ScheduleOccurrenceStartWindowExpiredPayloadSchema,
   'schedule.occurrence.succeeded': ScheduleOccurrenceSucceededPayloadSchema,
+  'notification.alert.created': NotificationAlertCreatedPayloadSchema,
+  'notification.alert.resolved': NotificationAlertResolvedPayloadSchema,
+  'notification.delivery.dead_lettered': NotificationDeliveryDeadLetteredPayloadSchema,
 } as const satisfies Record<AuditEventType, z.ZodType>;
 
 export function parseAuditPayload<EventType extends AuditEventType>(

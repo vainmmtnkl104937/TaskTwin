@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { getAccessToken } from '@/lib/server/auth-session';
+import { NotificationBell } from '@/components/notification-bell';
 
 export default async function AuthenticatedLayout({
   children,
@@ -19,11 +20,9 @@ export default async function AuthenticatedLayout({
         <Link href="/workspaces" className="brand">
           TaskTwin
         </Link>
-        <form action="/auth/sign-out" method="post">
-          <button type="submit" className="secondary-button">
-            Sign out
-          </button>
-        </form>
+        <div className="header-actions"><NotificationBell />
+          <form action="/auth/sign-out" method="post"><button type="submit" className="secondary-button">Sign out</button></form>
+        </div>
       </header>
       {children}
     </div>

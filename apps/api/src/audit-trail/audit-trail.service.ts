@@ -8,13 +8,17 @@ import {
 import {
   RecordingRepository,
   WorkspaceAuditTrailRepository,
+  type PrismaClient,
 } from '@tasktwin/database';
+import { Inject } from '@nestjs/common';
 import {
   AuditTrailError,
   verifyAuditEventChain,
   type AuditHasher,
 } from '@tasktwin/audit-trail';
 import { createHash } from 'node:crypto';
+import { DATABASE_CLIENT } from '../database/database.constants.js';
+import { OperationalAlertAppender } from '../operational-alerts/operational-alert.appender.js';
 
 import {
   decodeCursor,
@@ -54,6 +58,8 @@ export class AuditTrailService {
   constructor(
     private readonly repository: WorkspaceAuditTrailRepository,
     private readonly recordingRepository: RecordingRepository,
+    @Inject(DATABASE_CLIENT) private readonly prisma: PrismaClient,
+    private readonly operationalAlerts: OperationalAlertAppender,
   ) {}
 
   async listEvents(input: {
@@ -189,6 +195,26 @@ export class AuditTrailService {
         ? { expectedFirstSequence: input.request.fromSequence }
         : {}),
     });
+    if (!result.valid && result.failureCode !== undefined && result.failureSequence !== undefined) {
+      const failureCode = result.failureCode;
+      const failureSequence = result.failureSequence;
+      const failureTime = events.find((event) => event.sequence === failureSequence)?.occurredAt
+        ?? head.lastEventAt?.toISOString() ?? '1970-01-01T00:00:00.000Z';
+      await this.prisma.$transaction(async (tx) => {
+        await this.operationalAlerts.append(tx, {
+          schemaVersion: 1, workspaceId: input.workspaceId,
+          type: 'audit_integrity_failed',
+          source: { type: 'audit_verification_failure',
+            id: `${failureCode}:${failureSequence}` },
+          primaryEntity: { type: 'workspace_audit_chain', id: input.workspaceId },
+          relatedEntities: [],
+          template: { schemaVersion: 1, templateKey: 'audit_integrity_failed.v1',
+            failureKind: failureCode, failureSequence,
+            verifiedAt: failureTime },
+          actionTarget: { schemaVersion: 1, kind: 'audit', workspaceId: input.workspaceId },
+        });
+      });
+    }
     return verifyResponse({ workspaceId: input.workspaceId, result });
   }
 

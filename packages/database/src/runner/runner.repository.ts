@@ -26,6 +26,7 @@ import type {
   RunnerPairingRecord,
   RunnerPollingResult,
 } from './runner-records.js';
+import type { OperationalAlertTransactionAppender } from '../operational-alerts/operational-alert-port.js';
 
 const MANAGER_ROLES = [OrganizationRole.OWNER, OrganizationRole.ADMIN] as const;
 const SERIALIZATION_RETRY_COUNT = 3;
@@ -109,7 +110,10 @@ function isUniqueError(error: unknown): boolean {
 }
 
 export class RunnerRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly operationalAlerts?: OperationalAlertTransactionAppender,
+  ) {}
 
   async createPairingSession(input: {
     id: string;
@@ -570,6 +574,10 @@ export class RunnerRepository {
           capabilities: true,
         },
       });
+      const invalidatedApprovals = await transaction.workflowApprovalRequest.findMany({
+        where: { runnerDeviceId, status: WorkflowApprovalRequestStatus.PENDING },
+        select: { id: true, workflowRunId: true, workflowRun: { select: { workspaceId: true } } },
+      });
       await transaction.workflowApprovalRequest.updateMany({
         where: {
           runnerDeviceId,
@@ -579,6 +587,16 @@ export class RunnerRepository {
           status: WorkflowApprovalRequestStatus.INVALIDATED,
           resolvedAt: now,
         },
+      });
+      for (const approval of invalidatedApprovals) {
+        await this.operationalAlerts?.resolve(transaction, {
+          workspaceId: approval.workflowRun.workspaceId, type: 'approval_required',
+          sourceType: 'approval_request', sourceId: approval.id, reason: 'invalidated',
+        });
+      }
+      const invalidatedRepairs = await transaction.workflowRepairRequest.findMany({
+        where: { runnerDeviceId, status: WorkflowRepairRequestStatus.PENDING },
+        select: { id: true, workspaceId: true },
       });
       await transaction.workflowRepairRequest.updateMany({
         where: {
@@ -590,6 +608,12 @@ export class RunnerRepository {
           resolvedAt: now,
         },
       });
+      for (const repair of invalidatedRepairs) {
+        await this.operationalAlerts?.resolve(transaction, {
+          workspaceId: repair.workspaceId, type: 'repair_required',
+          sourceType: 'repair_request', sourceId: repair.id, reason: 'invalidated',
+        });
+      }
       await transaction.workflowRunStepAttempt.updateMany({
         where: {
           workflowRun: { runnerDeviceId },
@@ -615,7 +639,7 @@ export class RunnerRepository {
             ],
           },
         },
-        select: { id: true },
+        select: { id: true, workspaceId: true, createdByUserId: true },
       });
       const activeRunIds = activeRuns.map((run) => run.id);
       if (activeRunIds.length > 0) {
@@ -657,6 +681,17 @@ export class RunnerRepository {
             leaseExpiresAt: null,
           },
         });
+        for (const run of activeRuns) {
+          await this.operationalAlerts?.append(transaction, {
+            schemaVersion: 1, workspaceId: run.workspaceId, type: 'run_interrupted',
+            source: { type: 'workflow_run', id: run.id },
+            primaryEntity: { type: 'workflow_run', id: run.id }, relatedEntities: [],
+            template: { schemaVersion: 1, templateKey: 'run_interrupted.v1',
+              workflowRunId: run.id, interruptedAt: now.toISOString() },
+            actionTarget: { schemaVersion: 1, kind: 'run', workspaceId: run.workspaceId, workflowRunId: run.id },
+            creatorUserId: run.createdByUserId,
+          });
+        }
       }
       return toDeviceRecord(revoked);
     });

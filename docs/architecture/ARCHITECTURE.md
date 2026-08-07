@@ -821,3 +821,8 @@ timezone identifiers.
 - INTERRUPTED or side-effect-unknown runs trigger automatic schedule pause.
 - OWNER or ADMIN must review and manually resume.
 - No automatic retry or Run Now for scheduled runs.
+# Operational alerts and notification delivery
+
+Durable domain transitions can call the API `OperationalAlertAppender` with their existing Prisma transaction. The appender validates `@tasktwin/operational-alerts`, resolves recipients from current membership, persists the unique alert and per-user IN_APP outbox rows, and appends a safe audit event before commit. It never performs delivery.
+
+`apps/notification-worker` is a non-HTTP database consumer. PostgreSQL `SKIP LOCKED`, database time, worker fencing and expiring leases allow multiple instances and crash recovery. In-app delivery rechecks membership, creates a unique UserNotification, and completes the outbox message atomically. This is at-least-once processing with idempotent effects, bounded retry and a terminal dead-letter state.

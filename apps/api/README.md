@@ -120,3 +120,6 @@ only typed workflow-run lifecycle events. PostgreSQL triggers refuse
 chain and returns `ok`, `sequence_gap` or `tampered` with the first failure
 sequence and kind. Source identifiers are server-derived; collisions return
 HTTP 409 `AUDIT_SOURCE_CONFLICT`.
+# Notification API
+
+Authenticated users can list only their own delivered notifications at `GET /me/notifications`, read an unread count, mark one notification idempotently, or mark all notifications delivered before a supplied cutoff. List pagination is capped at 100 and supports Workspace, unread, severity and alert-type filters. Responses contain fixed safe summaries and typed entity targets; access to the target is still checked by its normal endpoint.

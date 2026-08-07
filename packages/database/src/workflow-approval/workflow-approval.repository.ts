@@ -30,6 +30,7 @@ import type {
   WorkflowApprovalDecisionResult,
   WorkflowApprovalRecord,
 } from './workflow-approval-records.js';
+import type { OperationalAlertTransactionAppender } from '../operational-alerts/operational-alert-port.js';
 
 const APPROVAL_EVENT_NAMESPACES = {
   requested: 'approval_requested',
@@ -200,6 +201,7 @@ export class WorkflowApprovalRepository {
     private readonly auditTrail: WorkspaceAuditTrailRepository = new WorkspaceAuditTrailRepository(
       prisma,
     ),
+    private readonly operationalAlerts?: OperationalAlertTransactionAppender,
   ) {}
 
   async resolveApprovalAccess(
@@ -359,6 +361,23 @@ export class WorkflowApprovalRepository {
             expiresAt,
           }),
         );
+        await this.operationalAlerts?.append(transaction, {
+          schemaVersion: 1,
+          workspaceId: run.workspaceId,
+          type: 'approval_required',
+          source: { type: 'approval_request', id: created.id },
+          primaryEntity: { type: 'approval_request', id: created.id },
+          relatedEntities: [{ type: 'workflow_run', id: run.id }],
+          template: {
+            schemaVersion: 1, templateKey: 'approval_required.v1',
+            approvalRequestId: created.id, workflowRunId: run.id,
+            riskLevel: binding.riskLevel, expiresAt: expiresAt.toISOString(),
+          },
+          actionTarget: {
+            schemaVersion: 1, kind: 'approval', workspaceId: run.workspaceId,
+            approvalRequestId: created.id,
+          },
+        });
         return { idempotent: false, record: toRecord(created) };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -562,6 +581,12 @@ export class WorkflowApprovalRepository {
           resolvedAt: input.now,
         }),
       );
+      await this.operationalAlerts?.resolve(transaction, {
+        workspaceId: row.workflowRun.workspaceId,
+        type: 'approval_required', sourceType: 'approval_request', sourceId: row.id,
+        reason: input.decision === 'APPROVED' ? 'approved' : 'rejected',
+        resolvedByUserId: input.userId,
+      });
       return { idempotent: false, record: toRecord(finalRow) };
     });
   }
@@ -582,7 +607,7 @@ export class WorkflowApprovalRepository {
           id: true,
           workflowRunId: true,
           approvalStepId: true,
-          workflowRun: { select: { workspaceId: true } },
+          workflowRun: { select: { workspaceId: true, createdByUserId: true } },
         },
       });
       if (request === null) return;
@@ -605,8 +630,13 @@ export class WorkflowApprovalRepository {
           resolvedAt: now,
         }),
       );
+      await this.operationalAlerts?.resolve(transaction, {
+        workspaceId: request.workflowRun.workspaceId,
+        type: 'approval_required', sourceType: 'approval_request', sourceId: request.id,
+        reason: 'expired',
+      });
       if (!terminateRun) return;
-      await transaction.workflowRun.updateMany({
+      const timedOutRun = await transaction.workflowRun.updateMany({
         where: {
           id: request.workflowRunId,
           status: WorkflowRunStatus.WAITING_FOR_APPROVAL,
@@ -619,6 +649,19 @@ export class WorkflowApprovalRepository {
           leaseExpiresAt: null,
         },
       });
+      if (timedOutRun.count === 1) {
+        await this.operationalAlerts?.append(transaction, {
+          schemaVersion: 1, workspaceId: request.workflowRun.workspaceId, type: 'run_timed_out',
+          source: { type: 'workflow_run', id: request.workflowRunId },
+          primaryEntity: { type: 'workflow_run', id: request.workflowRunId },
+          relatedEntities: [{ type: 'approval_request', id: request.id }],
+          template: { schemaVersion: 1, templateKey: 'run_timed_out.v1',
+            workflowRunId: request.workflowRunId, timedOutAt: now.toISOString() },
+          actionTarget: { schemaVersion: 1, kind: 'run', workspaceId: request.workflowRun.workspaceId,
+            workflowRunId: request.workflowRunId },
+          creatorUserId: request.workflowRun.createdByUserId,
+        });
+      }
       await transaction.workflowRunStep.updateMany({
         where: {
           workflowRunId: request.workflowRunId,
@@ -663,5 +706,10 @@ export class WorkflowApprovalRepository {
         resolvedAt: input.resolvedAt,
       }),
     );
+    await this.operationalAlerts?.resolve(transaction, {
+      workspaceId: input.workspaceId,
+      type: 'approval_required', sourceType: 'approval_request',
+      sourceId: input.approvalRequestId, reason: input.reason,
+    });
   }
 }

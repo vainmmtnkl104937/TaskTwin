@@ -19,10 +19,6 @@ const sha256Hex = (value: string): string =>
 
 const auditHasher: AuditHasher = { sha256Hex };
 
-function primaryEntityKind(eventType: string): string {
-  return eventType.split('.')[0] ?? eventType;
-}
-
 function actorIdOf(actor: PendingAuditEvent['actor']): string {
   if (actor.type === 'user') return actor.userId;
   if (actor.type === 'runner') return actor.runnerDeviceId;
@@ -72,7 +68,7 @@ export class PrismaAuditAppenderDriver implements AuditAppenderDriver {
         actorType: event.actor.type,
         actorId: actorIdOf(event.actor),
         actorReason: actorReasonOf(event.actor),
-        primaryEntityKind: primaryEntityKind(event.eventType),
+        primaryEntityKind: event.primaryEntity.kind,
         primaryEntityId: event.primaryEntity.id,
         relatedEntities: event.relatedEntities as unknown as Prisma.InputJsonValue,
         occurredAt: new Date(event.occurredAt),

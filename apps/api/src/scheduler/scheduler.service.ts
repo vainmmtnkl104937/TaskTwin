@@ -51,6 +51,13 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       this.logger.error('Failed to reconcile timed-out occurrences', err);
     }
+
+    try {
+      const count = await this.repository.reconcileTerminalOccurrences(now);
+      if (count > 0) this.logger.log(`Reconciled ${count} terminal occurrence(s)`);
+    } catch (err) {
+      this.logger.error('Failed to reconcile terminal occurrences', err);
+    }
   }
 
   private async processDueSchedules(now: Date): Promise<void> {
