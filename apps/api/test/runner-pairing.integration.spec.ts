@@ -211,10 +211,39 @@ describe('Local Runner pairing integration', () => {
     expect(JSON.stringify(storedCredential)).not.toContain(credential);
 
     const runnerHeader = `TaskTwinRunner ${runnerDeviceId}.${credential}`;
+    const runtime = {
+      schemaVersion: 1,
+      runtimeMode: 'service',
+      autonomyLevel: 'boot_resilient',
+      serviceStatus: 'running',
+      secretUnlockMode: 'os_native',
+      restartResilient: true,
+    };
     await request(app.getHttpServer())
       .post('/runner/heartbeat')
       .set('Authorization', runnerHeader)
-      .send({ schemaVersion: 1, runnerVersion: '0.1.1' })
+      .send({
+        schemaVersion: 1,
+        runnerVersion: '0.1.1',
+        capabilities: [
+          'runner_service_v1',
+          'os_native_secret_unlock_v1',
+        ],
+        runtime,
+      })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/runner/heartbeat')
+      .set('Authorization', runnerHeader)
+      .send({
+        schemaVersion: 1,
+        runnerVersion: '0.1.1',
+        capabilities: [
+          'runner_service_v1',
+          'os_native_secret_unlock_v1',
+        ],
+        runtime,
+      })
       .expect(200);
     const heartbeatDevice = await prisma.runnerDevice.findUniqueOrThrow({
       where: { id: runnerDeviceId },
@@ -222,13 +251,45 @@ describe('Local Runner pairing integration', () => {
     });
     expect(heartbeatDevice.lastSeenAt).not.toBeNull();
     expect(heartbeatDevice.credential?.lastUsedAt).not.toBeNull();
+    expect(heartbeatDevice).toMatchObject({
+      runtimeMode: 'service',
+      autonomyLevel: 'boot_resilient',
+      serviceStatus: 'running',
+      secretUnlockMode: 'os_native',
+      restartResilient: true,
+      runtimeMetadataRevision: 1,
+    });
+    expect(
+      await prisma.auditEvent.count({
+        where: {
+          workspaceId: owner.workspace.id,
+          eventType: 'runner.runtime_mode.changed',
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.auditEvent.count({
+        where: {
+          workspaceId: owner.workspace.id,
+          eventType: 'runner.secret_protector.changed',
+        },
+      }),
+    ).toBe(1);
 
     const list = await request(app.getHttpServer())
       .get(`/workspaces/${owner.workspace.id}/runner-devices`)
       .set('Authorization', `Bearer ${owner.accessToken}`)
       .expect(200);
     expect(list.body.devices).toHaveLength(1);
+    expect(list.body.devices[0].runtime).toMatchObject({
+      runtimeMode: 'service',
+      autonomyLevel: 'boot_resilient',
+      secretUnlockMode: 'os_native',
+      restartResilient: true,
+    });
     expect(JSON.stringify(list.body)).not.toContain(credential);
+    expect(JSON.stringify(list.body)).not.toContain('protectedKey');
+    expect(JSON.stringify(list.body)).not.toContain('serviceAccount');
 
     await request(app.getHttpServer())
       .get(`/workspaces/${owner.workspace.id}/runner-devices`)

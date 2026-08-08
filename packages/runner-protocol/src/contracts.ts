@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import {
+  RunnerRuntimeMetadataSchema,
+  RunnerRuntimeReportSchema,
+} from '@tasktwin/runner-service-runtime';
+import {
   RunnerCapabilitySchema as SecureInputRunnerCapabilitySchema,
   RunnerEncryptionKeyRegistrationRequestSchema,
   RunnerEncryptionKeyRegistrationResponseSchema,
@@ -14,9 +18,11 @@ import {
   DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
   LOCATOR_REPAIR_PROPOSALS_CAPABILITY,
   LOCAL_SECRET_STORE_CAPABILITY,
+  OS_NATIVE_SECRET_UNLOCK_CAPABILITY,
   MAX_POLL_INTERVAL_SECONDS,
   OPAQUE_CODE_PATTERN,
   RUNNER_PROTOCOL_SCHEMA_VERSION,
+  RUNNER_SERVICE_CAPABILITY,
   USER_CODE_PATTERN,
   WORKFLOW_APPROVAL_CAPABILITY,
   WORKFLOW_EXTRACTION_CAPABILITY,
@@ -39,10 +45,12 @@ export const RunnerCapabilitySchema = z.union([
   z.literal(WORKFLOW_SCHEDULED_EXECUTION_CAPABILITY),
   z.literal(LOCATOR_REPAIR_PROPOSALS_CAPABILITY),
   z.literal(LOCAL_SECRET_STORE_CAPABILITY),
+  z.literal(RUNNER_SERVICE_CAPABILITY),
+  z.literal(OS_NATIVE_SECRET_UNLOCK_CAPABILITY),
 ]);
 export const RunnerCapabilitiesSchema = z
   .array(RunnerCapabilitySchema)
-  .max(9)
+  .max(11)
   .superRefine((values, context) => {
     if (new Set(values).size !== values.length) {
       context.addIssue({
@@ -226,6 +234,7 @@ export const SafeRunnerDeviceSchema = z.strictObject({
       secretVersionId: UuidSchema,
     })).max(1_000),
   }).nullable().optional(),
+  runtime: RunnerRuntimeMetadataSchema.nullable().optional(),
 });
 
 export const RunnerDeviceListResponseSchema = z.strictObject({
@@ -247,6 +256,7 @@ export const RunnerHeartbeatRequestSchema = z.strictObject({
   schemaVersion: z.literal(RUNNER_PROTOCOL_SCHEMA_VERSION),
   runnerVersion: RunnerVersionSchema,
   capabilities: RunnerCapabilitiesSchema.default([]),
+  runtime: RunnerRuntimeReportSchema.optional(),
 });
 
 export const RunnerHeartbeatResponseSchema = z.strictObject({
@@ -255,6 +265,7 @@ export const RunnerHeartbeatResponseSchema = z.strictObject({
   workspaceId: UuidSchema,
   connectionStatus: z.literal('online'),
   capabilities: RunnerCapabilitiesSchema,
+  runtime: RunnerRuntimeMetadataSchema.optional(),
   nextHeartbeatInSeconds: z
     .number()
     .int()

@@ -20,6 +20,13 @@ export const LocalSecretStoreErrorCodeSchema = z.enum([
   'SECRET_VAULT_IDENTITY_CONFLICT',
   'SECRET_INVENTORY_SYNC_FAILED',
   'SENSITIVE_STATE_CLEANUP_FAILED',
+  'MASTER_KEY_LEASE_DISPOSED',
+  'MASTER_KEY_PROTECTOR_UNSUPPORTED',
+  'NATIVE_PROTECTOR_UNAVAILABLE',
+  'NATIVE_PROTECTOR_BINDING_INVALID',
+  'NATIVE_PROTECTOR_FAILED',
+  'PROTECTOR_MIGRATION_INVALID',
+  'PROTECTOR_MIGRATION_VERIFICATION_FAILED',
 ]);
 
 export type LocalSecretStoreErrorCode = z.infer<typeof LocalSecretStoreErrorCodeSchema>;
@@ -44,6 +51,13 @@ const MESSAGES: Record<LocalSecretStoreErrorCode, string> = {
   SECRET_VAULT_IDENTITY_CONFLICT: 'The local secret vault identity conflicts with current state.',
   SECRET_INVENTORY_SYNC_FAILED: 'The local secret inventory could not be synchronized.',
   SENSITIVE_STATE_CLEANUP_FAILED: 'Sensitive local state cleanup failed.',
+  MASTER_KEY_LEASE_DISPOSED: 'The local master-key lease is no longer available.',
+  MASTER_KEY_PROTECTOR_UNSUPPORTED: 'The local master-key protector is unsupported.',
+  NATIVE_PROTECTOR_UNAVAILABLE: 'Windows native key protection is unavailable.',
+  NATIVE_PROTECTOR_BINDING_INVALID: 'Windows native key protection binding is invalid.',
+  NATIVE_PROTECTOR_FAILED: 'Windows native key protection failed safely.',
+  PROTECTOR_MIGRATION_INVALID: 'The master-key protector migration is invalid.',
+  PROTECTOR_MIGRATION_VERIFICATION_FAILED: 'The master-key protector migration could not be verified.',
 };
 
 export class LocalSecretStoreError extends Error {

@@ -28,6 +28,13 @@ import type {
 } from './runner-records.js';
 import type { OperationalAlertTransactionAppender } from '../operational-alerts/operational-alert-port.js';
 import type { LocalSecretStoreStatus } from '@tasktwin/local-secret-store';
+import {
+  RunnerRuntimeMetadataSchema,
+  type RunnerRuntimeMetadata,
+  type RunnerRuntimeReport,
+} from '@tasktwin/runner-service-runtime';
+import { appendAuditEventTransactional } from '../audit-trail/audit-appender.repository.js';
+import { WorkspaceAuditTrailRepository } from '../audit-trail/audit-trail.repository.js';
 
 const MANAGER_ROLES = [OrganizationRole.OWNER, OrganizationRole.ADMIN] as const;
 const SERIALIZATION_RETRY_COUNT = 3;
@@ -78,6 +85,12 @@ function toDeviceRecord(row: {
   revokedAt: Date | null;
   createdAt: Date;
   capabilities: string[];
+  runtimeMode?: string | null;
+  autonomyLevel?: string | null;
+  serviceStatus?: string | null;
+  secretUnlockMode?: string | null;
+  restartResilient?: boolean | null;
+  runtimeMetadataRevision?: number;
   secretInventory?: {
     storeStatus: string;
     vaultRevision: number;
@@ -100,6 +113,22 @@ function toDeviceRecord(row: {
     lastSeenAt: row.lastSeenAt,
     revokedAt: row.revokedAt,
     createdAt: row.createdAt,
+    runtime:
+      row.runtimeMode === null || row.runtimeMode === undefined ||
+      row.autonomyLevel === null || row.autonomyLevel === undefined ||
+      row.serviceStatus === null || row.serviceStatus === undefined ||
+      row.secretUnlockMode === null || row.secretUnlockMode === undefined ||
+      row.restartResilient === null || row.restartResilient === undefined
+        ? null
+        : RunnerRuntimeMetadataSchema.parse({
+            schemaVersion: 1,
+            runtimeMode: row.runtimeMode,
+            autonomyLevel: row.autonomyLevel,
+            serviceStatus: row.serviceStatus,
+            secretUnlockMode: row.secretUnlockMode,
+            restartResilient: row.restartResilient,
+            runtimeMetadataRevision: row.runtimeMetadataRevision ?? 0,
+          }),
     localSecretStore:
       row.secretInventory === null || row.secretInventory === undefined
         ? null
@@ -131,10 +160,14 @@ function isUniqueError(error: unknown): boolean {
 }
 
 export class RunnerRepository {
+  private readonly auditTrail: WorkspaceAuditTrailRepository;
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly operationalAlerts?: OperationalAlertTransactionAppender,
-  ) {}
+  ) {
+    this.auditTrail = new WorkspaceAuditTrailRepository(prisma);
+  }
 
   async createPairingSession(input: {
     id: string;
@@ -459,6 +492,12 @@ export class RunnerRepository {
         revokedAt: true,
         createdAt: true,
         capabilities: true,
+        runtimeMode: true,
+        autonomyLevel: true,
+        serviceStatus: true,
+        secretUnlockMode: true,
+        restartResilient: true,
+        runtimeMetadataRevision: true,
         secretInventory: {
           select: {
             storeStatus: true,
@@ -512,13 +551,21 @@ export class RunnerRepository {
     credentialId: string;
     runnerVersion: string;
     capabilities: RunnerCapability[];
+    runtime?: RunnerRuntimeReport;
     now: Date;
-  }): Promise<void> {
+  }): Promise<RunnerRuntimeMetadata | null> {
     return this.runSerializable(async (transaction) => {
       const device = await transaction.runnerDevice.findUnique({
         where: { id: input.runnerDeviceId },
         select: {
           revokedAt: true,
+          workspaceId: true,
+          runtimeMode: true,
+          autonomyLevel: true,
+          serviceStatus: true,
+          secretUnlockMode: true,
+          restartResilient: true,
+          runtimeMetadataRevision: true,
           credential: {
             select: { id: true, revokedAt: true },
           },
@@ -532,19 +579,89 @@ export class RunnerRepository {
       ) {
         throw new RunnerRepositoryError('RUNNER_REVOKED');
       }
+      const databaseNow = (await transaction.$queryRaw<Array<{ now: Date }>>`
+        SELECT clock_timestamp() AS "now"
+      `)[0]?.now;
+      if (databaseNow === undefined) throw new RunnerRepositoryError('RUNNER_REVOKED');
+      const runtimeChanged = input.runtime !== undefined && (
+        device.runtimeMode !== input.runtime.runtimeMode ||
+        device.autonomyLevel !== input.runtime.autonomyLevel ||
+        device.serviceStatus !== input.runtime.serviceStatus ||
+        device.secretUnlockMode !== input.runtime.secretUnlockMode ||
+        device.restartResilient !== input.runtime.restartResilient
+      );
+      const nextRuntimeRevision = runtimeChanged
+        ? device.runtimeMetadataRevision + 1
+        : device.runtimeMetadataRevision;
       await transaction.runnerDevice.update({
         where: { id: input.runnerDeviceId },
         data: {
-          lastSeenAt: input.now,
+          lastSeenAt: databaseNow,
           runnerVersion: input.runnerVersion,
           capabilities: input.capabilities,
-          capabilitiesUpdatedAt: input.now,
+          capabilitiesUpdatedAt: databaseNow,
+          ...(input.runtime === undefined
+            ? {}
+            : {
+                runtimeMode: input.runtime.runtimeMode,
+                autonomyLevel: input.runtime.autonomyLevel,
+                serviceStatus: input.runtime.serviceStatus,
+                secretUnlockMode: input.runtime.secretUnlockMode,
+                restartResilient: input.runtime.restartResilient,
+                runtimeMetadataRevision: nextRuntimeRevision,
+                ...(runtimeChanged ? { runtimeMetadataUpdatedAt: databaseNow } : {}),
+              }),
         },
       });
       await transaction.runnerCredential.update({
         where: { id: input.credentialId },
-        data: { lastUsedAt: input.now },
+        data: { lastUsedAt: databaseNow },
       });
+      if (runtimeChanged && input.runtime !== undefined) {
+        if (
+          device.runtimeMode !== input.runtime.runtimeMode ||
+          device.autonomyLevel !== input.runtime.autonomyLevel ||
+          device.serviceStatus !== input.runtime.serviceStatus
+        ) {
+          await appendAuditEventTransactional(transaction, this.auditTrail, {
+            workspaceId: device.workspaceId,
+            eventType: 'runner.runtime_mode.changed',
+            actor: { type: 'runner', runnerDeviceId: input.runnerDeviceId },
+            primaryEntity: { kind: 'runner_device', id: input.runnerDeviceId },
+            occurredAt: databaseNow,
+            sourceId: `runner-runtime:${input.runnerDeviceId}:${nextRuntimeRevision}`,
+            payload: {
+              runnerDeviceId: input.runnerDeviceId,
+              previousRuntimeMode: device.runtimeMode,
+              runtimeMode: input.runtime.runtimeMode,
+              previousAutonomyLevel: device.autonomyLevel,
+              autonomyLevel: input.runtime.autonomyLevel,
+              serviceStatus: input.runtime.serviceStatus,
+            },
+          });
+        }
+        if (device.secretUnlockMode !== input.runtime.secretUnlockMode) {
+          await appendAuditEventTransactional(transaction, this.auditTrail, {
+            workspaceId: device.workspaceId,
+            eventType: 'runner.secret_protector.changed',
+            actor: { type: 'runner', runnerDeviceId: input.runnerDeviceId },
+            primaryEntity: { kind: 'runner_device', id: input.runnerDeviceId },
+            occurredAt: databaseNow,
+            sourceId: `runner-secret-protector:${input.runnerDeviceId}:${nextRuntimeRevision}`,
+            payload: {
+              runnerDeviceId: input.runnerDeviceId,
+              previousUnlockMode: device.secretUnlockMode,
+              unlockMode: input.runtime.secretUnlockMode,
+            },
+          });
+        }
+      }
+      return input.runtime === undefined
+        ? null
+        : RunnerRuntimeMetadataSchema.parse({
+            ...input.runtime,
+            runtimeMetadataRevision: nextRuntimeRevision,
+          });
     });
   }
 
@@ -568,6 +685,12 @@ export class RunnerRepository {
           revokedAt: true,
           createdAt: true,
           capabilities: true,
+          runtimeMode: true,
+          autonomyLevel: true,
+          serviceStatus: true,
+          secretUnlockMode: true,
+          restartResilient: true,
+          runtimeMetadataRevision: true,
         },
       });
       if (device === null) {
@@ -602,6 +725,12 @@ export class RunnerRepository {
           revokedAt: true,
           createdAt: true,
           capabilities: true,
+          runtimeMode: true,
+          autonomyLevel: true,
+          serviceStatus: true,
+          secretUnlockMode: true,
+          restartResilient: true,
+          runtimeMetadataRevision: true,
         },
       });
       const invalidatedApprovals = await transaction.workflowApprovalRequest.findMany({

@@ -1,4 +1,6 @@
 import { arch, platform } from 'node:process';
+import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import {
   MAX_EXECUTION_TIMEOUT_MS,
@@ -23,6 +25,15 @@ import { NodeScryptMasterKeyProtector } from './secrets/node-secret-crypto.js';
 import { TerminalNoEchoPrompt } from './secrets/no-echo-prompt.js';
 import { RunnerLocalSecretRuntime } from './secrets/local-secret-runtime.js';
 import { runSecretsCli } from './secrets/secrets-cli.js';
+import {
+  WINDOWS_NATIVE_PROTECTION_DESCRIPTOR,
+  WindowsNativeMasterKeyProtector,
+} from './platform/windows/windows-native-master-key-protector.js';
+import { WindowsRunnerServiceManager } from './platform/windows/windows-service-manager.js';
+import { readWindowsRunnerServiceConfig } from './platform/windows/windows-service-manager.js';
+import { runServiceCli } from './service/service-cli.js';
+import { FileRunnerInstanceLock } from './runtime/runner-instance-lock.js';
+import type { RunnerRuntimeMode } from '@tasktwin/runner-service-runtime';
 
 const RUNNER_VERSION = '0.1.0';
 
@@ -81,13 +92,48 @@ export async function runCli(
   },
 ): Promise<number> {
   const command = argv[0] ?? 'start';
+  const serviceBootstrap = command === 'service-run'
+    ? parseArgs({
+        args: argv.slice(1),
+        options: { 'service-config': { type: 'string' } },
+        strict: true,
+      })
+    : null;
+  const serviceConfig = serviceBootstrap === null
+    ? null
+    : await readWindowsRunnerServiceConfig(
+        serviceBootstrap.values['service-config'] ?? '',
+      );
+  if (
+    serviceConfig !== null &&
+    (serviceConfig.nodeExecutable !== process.execPath ||
+      serviceConfig.runnerEntryPoint !==
+        fileURLToPath(new URL('./index.js', import.meta.url)))
+  ) {
+    throw new Error('The Windows service executable binding is invalid.');
+  }
+  const dataRoot = serviceConfig?.dataRoot ?? homedir();
   const transport = new HttpRunnerControlPlaneTransport();
-  const credentialStore = new FileCredentialStore();
+  const credentialStore = new FileCredentialStore(dataRoot);
   const prompt = new TerminalNoEchoPrompt();
-  const vaultService = new LocalSecretVaultService(
-    new FileLocalSecretVaultStore(),
-    new NodeScryptMasterKeyProtector(),
+  const nativeProtector = new WindowsNativeMasterKeyProtector(
+    WINDOWS_NATIVE_PROTECTION_DESCRIPTOR,
   );
+  const vaultService = new LocalSecretVaultService(
+    new FileLocalSecretVaultStore(dataRoot),
+    [new NodeScryptMasterKeyProtector(), nativeProtector],
+  );
+  if (command === 'service') {
+    return runServiceCli({
+      args: argv.slice(1),
+      credentials: credentialStore,
+      manager: new WindowsRunnerServiceManager(
+        fileURLToPath(new URL('./index.js', import.meta.url)),
+        dataRoot,
+      ),
+      output,
+    });
+  }
   if (command === 'secrets') {
     return runSecretsCli({
       args: argv.slice(1),
@@ -107,20 +153,40 @@ export async function runCli(
       attended: { type: 'boolean' },
       'fixture-wait-ms': { type: 'string' },
       'total-timeout-ms': { type: 'string' },
+      'runtime-mode': { type: 'string' },
+      'service-config': { type: 'string' },
     },
     strict: true,
   });
+  const runtimeMode = determineRuntimeMode({
+    command,
+    requested: parsed.values['runtime-mode'],
+    headed: parsed.values.headed ?? false,
+    attended: parsed.values.attended ?? false,
+  });
+  const serviceManager = serviceConfig === null
+    ? null
+    : new WindowsRunnerServiceManager(
+        serviceConfig.runnerEntryPoint,
+        serviceConfig.dataRoot,
+      );
+  const serviceVerified = serviceConfig === null
+    ? false
+    : await serviceManager!.verifyRunning(serviceConfig);
   const keyManager = new RunnerKeyManager(
-    new FileRunnerEncryptionKeyStore(),
+    new FileRunnerEncryptionKeyStore(dataRoot),
     transport,
   );
-  const secretProvider = new InteractiveSecretProvider();
+  const secretProvider = runtimeMode === 'service'
+    ? undefined
+    : new InteractiveSecretProvider();
   const localVaultProvider = new LocalVaultSecretProvider(vaultService);
   const localSecretRuntime = new RunnerLocalSecretRuntime(
     vaultService,
     prompt,
     transport,
     output,
+    runtimeMode,
   );
   const service = new LocalRunnerService(
     credentialStore,
@@ -138,6 +204,12 @@ export async function runCli(
     },
     localSecretRuntime,
     localVaultProvider,
+    {
+      runtimeMode,
+      serviceVerified,
+      nativeProtectorAvailable: await nativeProtector.isAvailable(),
+      drainTimeoutMilliseconds: 60_000,
+    },
   );
   switch (command) {
     case 'execute-fixture': {
@@ -173,7 +245,21 @@ export async function runCli(
     case 'status':
       await service.status();
       return 0;
-    case 'start': {
+    case 'start':
+    case 'service-run': {
+      const credential = await credentialStore.load();
+      if (credential === null) throw new Error('The Local Runner is not paired.');
+      if (
+        serviceConfig !== null &&
+        serviceConfig.runnerDeviceId !== credential.runnerDeviceId
+      ) {
+        throw new Error('The local service Runner binding is invalid.');
+      }
+      if (command === 'service-run' && !serviceVerified) {
+        throw new Error('The Windows service configuration could not be verified.');
+      }
+      const instance = await new FileRunnerInstanceLock(dataRoot)
+        .acquire(credential.runnerDeviceId);
       const controller = new AbortController();
       const stop = () => controller.abort();
       process.on('SIGINT', stop);
@@ -183,6 +269,7 @@ export async function runCli(
       } finally {
         process.off('SIGINT', stop);
         process.off('SIGTERM', stop);
+        await instance.release();
       }
       return 0;
     }
@@ -192,4 +279,28 @@ export async function runCli(
     default:
       throw new Error('Unknown Local Runner command.');
   }
+}
+
+export function determineRuntimeMode(input: {
+  command: string;
+  requested: string | undefined;
+  headed: boolean;
+  attended: boolean;
+}): RunnerRuntimeMode {
+  if (input.command === 'service-run') {
+    if (input.headed || input.attended || input.requested !== undefined) {
+      throw new Error('Service mode rejects interactive execution options.');
+    }
+    return 'service';
+  }
+  if (input.requested !== undefined) {
+    if (input.requested !== 'interactive' && input.requested !== 'unattended_process') {
+      throw new Error('Runner runtime mode is invalid.');
+    }
+    if (input.requested === 'unattended_process' && (input.headed || input.attended)) {
+      throw new Error('Unattended process mode rejects interactive execution options.');
+    }
+    return input.requested;
+  }
+  return input.headed || input.attended ? 'interactive' : 'unattended_process';
 }

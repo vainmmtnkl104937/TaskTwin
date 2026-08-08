@@ -31,6 +31,48 @@ export async function runSecretsCli(input: {
     return 0;
   }
 
+  if (command === 'protector') {
+    const subcommand = trailing[0] ?? 'status';
+    const protectorArgs = trailing.slice(1);
+    if (subcommand === 'status') {
+      assertNoArgs(protectorArgs, 'protector status');
+      const profile = await input.vault.protectorProfile();
+      input.output.write(
+        profile === 'windows_dpapi_ng_machine_v1'
+          ? 'Local Secret Store protector: Windows native; automatic unlock available.'
+          : profile === 'local_secret_master_key_wrap_v1'
+            ? 'Local Secret Store protector: passphrase; automatic unlock unavailable.'
+            : 'Local Secret Store protector: unavailable.',
+      );
+      return 0;
+    }
+    if (
+      subcommand === 'migrate' &&
+      protectorArgs.length === 2 &&
+      protectorArgs[0] === '--to' &&
+      protectorArgs[1] === 'os-native'
+    ) {
+      const passphrase = passphraseBytes(
+        await input.prompt.read('Current vault passphrase: ', signal),
+      );
+      try {
+        const vault = await input.vault.migrateProtectorToNative({
+          workspaceId: credential.workspaceId,
+          runnerDeviceId: credential.runnerDeviceId,
+          passphrase,
+        });
+        await synchronize(input.transport, input.vault, credential);
+        input.output.write(
+          `Local Secret Store protector migrated to Windows native protection at revision ${vault.revision}.`,
+        );
+        return 0;
+      } finally {
+        passphrase.fill(0);
+      }
+    }
+    throw new Error('Unknown protector command. Only status and migrate --to os-native are supported.');
+  }
+
   if (command === 'init') {
     assertNoArgs(trailing, 'init');
     const passphrase = await confirmedSecret(input.prompt, signal, 'New vault passphrase: ', 'Confirm vault passphrase: ');
@@ -50,51 +92,52 @@ export async function runSecretsCli(input: {
 
   if (command === 'set') {
     const alias = exactlyOneAlias(trailing, 'set');
-    const passphrase = passphraseBytes(await input.prompt.read('Vault passphrase: ', signal));
+    const passphrase = await unlockForLocalMutation(input, credential, signal);
     let secret = '';
     let confirmation = '';
     try {
-      await input.vault.unlock({ workspaceId: credential.workspaceId,
-        runnerDeviceId: credential.runnerDeviceId, passphrase });
       secret = await input.prompt.read(`Secret value for ${alias}: `, signal);
       confirmation = await input.prompt.read(`Confirm secret value for ${alias}: `, signal);
       if (secret !== confirmation) throw new Error('Secret confirmation did not match.');
-      const vault = await input.vault.setSecret({ alias, plaintext: secret, passphrase });
+      const vault = await input.vault.setSecret({
+        alias,
+        plaintext: secret,
+        ...(passphrase === null ? {} : { passphrase }),
+      });
       await synchronize(input.transport, input.vault, credential);
       input.output.write(`Secret alias ${alias} stored at revision ${vault.revision}.`);
       return 0;
     } finally {
       secret = '';
       confirmation = '';
-      passphrase.fill(0);
+      passphrase?.fill(0);
     }
   }
 
   if (command === 'remove') {
     const alias = exactlyOneAlias(trailing, 'remove');
-    const passphrase = passphraseBytes(await input.prompt.read('Vault passphrase: ', signal));
+    const passphrase = await unlockForLocalMutation(input, credential, signal);
     let confirmation = '';
     try {
-      await input.vault.unlock({ workspaceId: credential.workspaceId,
-        runnerDeviceId: credential.runnerDeviceId, passphrase });
       confirmation = await input.prompt.read(`Type REMOVE to remove ${alias}: `, signal, 16);
       if (confirmation !== 'REMOVE') throw new Error('Secret removal cancelled.');
-      const vault = await input.vault.removeSecret({ alias, passphrase });
+      const vault = await input.vault.removeSecret({
+        alias,
+        ...(passphrase === null ? {} : { passphrase }),
+      });
       await synchronize(input.transport, input.vault, credential);
       input.output.write(`Secret alias ${alias} removed at revision ${vault.revision}.`);
       return 0;
     } finally {
       confirmation = '';
-      passphrase.fill(0);
+      passphrase?.fill(0);
     }
   }
 
   if (command === 'list') {
     assertNoArgs(trailing, 'list');
-    const passphrase = passphraseBytes(await input.prompt.read('Vault passphrase: ', signal));
+    const passphrase = await unlockForLocalMutation(input, credential, signal);
     try {
-      await input.vault.unlock({ workspaceId: credential.workspaceId,
-        runnerDeviceId: credential.runnerDeviceId, passphrase });
       const inventory = await input.vault.inventory();
       if (inventory.entries.length === 0) input.output.write('No secret aliases configured.');
       for (const entry of inventory.entries) {
@@ -102,11 +145,43 @@ export async function runSecretsCli(input: {
       }
       return 0;
     } finally {
-      passphrase.fill(0);
+      passphrase?.fill(0);
     }
   }
 
   throw new Error('Unknown secrets command. Reveal and export are not supported.');
+}
+
+async function unlockForLocalMutation(
+  input: {
+    vault: LocalSecretVaultService;
+    prompt: NoEchoPrompt;
+  },
+  credential: StoredRunnerCredential,
+  signal: AbortSignal,
+): Promise<Buffer | null> {
+  const profile = await input.vault.protectorProfile();
+  if (profile === 'windows_dpapi_ng_machine_v1') {
+    await input.vault.unlock({
+      workspaceId: credential.workspaceId,
+      runnerDeviceId: credential.runnerDeviceId,
+    });
+    return null;
+  }
+  const passphrase = passphraseBytes(
+    await input.prompt.read('Vault passphrase: ', signal),
+  );
+  try {
+    await input.vault.unlock({
+      workspaceId: credential.workspaceId,
+      runnerDeviceId: credential.runnerDeviceId,
+      passphrase,
+    });
+    return passphrase;
+  } catch (error: unknown) {
+    passphrase.fill(0);
+    throw error;
+  }
 }
 
 async function synchronize(

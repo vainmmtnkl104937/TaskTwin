@@ -61,3 +61,14 @@ original request to settle.
 ## Runner Secret Inventory
 
 `runner.secret_inventory.updated` is emitted only when the Control Plane accepts a new monotonic inventory revision. Its strict payload contains Runner ID, previous/new revision, configured alias count, and the metadata-only inventory digest. It excludes aliases, secret values or value hashes, ciphertext, nonces, passphrases, master-key material, and local paths. Exact retries, status refreshes, and Runner startup do not create this event.
+
+## Runner Runtime
+
+`runner.runtime_mode.changed` and `runner.secret_protector.changed` are emitted
+only when a Runner heartbeat changes accepted durable safe metadata. Payloads
+contain Runner ID, mode/autonomy/service state or old/new unlock mode only.
+Repeated identical heartbeats create no event. Protected native blobs, service
+accounts, hostnames, instance identifiers, paths, aliases and secrets are
+invalid payload fields. Local install/uninstall and local migration happen
+outside the Control Plane trust boundary; central audit records only the state
+later validated and accepted through the Runner protocol.

@@ -39,6 +39,11 @@ export const FORBIDDEN_AUDIT_FIELDS = [
   'ip',
   'username',
   'hostname',
+  'serviceAccount',
+  'protectedKey',
+  'masterKey',
+  'vaultPath',
+  'localPath',
   'outputLength',
   'outputHash',
 ] as const;

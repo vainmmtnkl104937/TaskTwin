@@ -59,6 +59,31 @@ export default async function RunnerDevicesPage({
                 Status: {device.connectionStatus} · Last seen:{' '}
                 {device.lastSeenAt ?? 'Never'}
               </p>
+              <section aria-label="Runner runtime">
+                <h3>Runtime</h3>
+                {device.runtime ? (
+                  <dl>
+                    <div><dt>Mode</dt><dd>{runtimeModeLabel(device.runtime.runtimeMode)}</dd></div>
+                    <div><dt>Service status</dt><dd>{labelWords(device.runtime.serviceStatus)}</dd></div>
+                    <div><dt>Autonomy</dt><dd>{labelWords(device.runtime.autonomyLevel)}</dd></div>
+                    <div><dt>Secret unlock</dt><dd>{secretUnlockLabel(device.runtime.secretUnlockMode)}</dd></div>
+                    <div>
+                      <dt>Scheduled execution</dt>
+                      <dd>{device.capabilities.includes('scheduled_execution_v1')
+                        ? 'Available'
+                        : 'Unavailable'}</dd>
+                    </div>
+                    <div>
+                      <dt>Restart resilience</dt>
+                      <dd>{device.runtime.restartResilient
+                        ? 'Available after reboot'
+                        : 'Process lifetime only'}</dd>
+                    </div>
+                  </dl>
+                ) : (
+                  <p>Runtime metadata has not been reported by this Runner version.</p>
+                )}
+              </section>
               <section aria-label="Local Secret Store status">
                 <h3>Local Secret Store</h3>
                 {device.localSecretStore ? (
@@ -102,4 +127,33 @@ export default async function RunnerDevicesPage({
       </section>
     </main>
   );
+}
+
+function runtimeModeLabel(
+  mode: 'interactive' | 'unattended_process' | 'service',
+): string {
+  switch (mode) {
+    case 'interactive':
+      return 'Interactive';
+    case 'unattended_process':
+      return 'Unattended Process';
+    case 'service':
+      return 'Service mode';
+  }
+}
+
+function secretUnlockLabel(mode: 'none' | 'manual' | 'os_native'): string {
+  switch (mode) {
+    case 'none':
+      return 'Unavailable';
+    case 'manual':
+      return 'Manual';
+    case 'os_native':
+      return 'OS-native';
+  }
+}
+
+function labelWords(value: string): string {
+  const words = value.replaceAll('_', ' ');
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }

@@ -21,6 +21,8 @@ Scheduled runs requiring secrets pin the accepted vault ID, revision, and metada
 ## Consequences
 
 - The portable MVP requires one local no-echo unlock after every Runner restart.
+  ADR-032 later adds an optional, explicit Windows-native migration; portable
+  passphrase behavior is unchanged.
 - Scheduled secret execution is unavailable while locked or unsynchronized.
 - There is no environment-variable or plaintext-file fallback.
 - There is no Web entry, reveal, export, sharing, backup, master-key rotation, cloud vault, or automatic OS keychain unlock.

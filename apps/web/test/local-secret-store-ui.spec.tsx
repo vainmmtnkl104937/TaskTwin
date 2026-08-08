@@ -32,6 +32,15 @@ vi.mock('@/lib/server/control-plane', () => ({
           installationId: 'b95243b1-ae72-4c05-9c2e-f0030f5fca03',
         },
         capabilities: ['scheduled_execution_v1', 'local_secret_store_v1'],
+        runtime: {
+          schemaVersion: 1,
+          runtimeMode: 'service',
+          autonomyLevel: 'boot_resilient',
+          serviceStatus: 'running',
+          secretUnlockMode: 'os_native',
+          restartResilient: true,
+          runtimeMetadataRevision: 3,
+        },
         connectionStatus: 'online',
         lastSeenAt: '2026-08-09T00:00:00.000Z',
         revokedAt: null,
@@ -67,8 +76,15 @@ describe('Local Secret Store Web metadata', () => {
     );
     expect(screen.getByRole('heading', { name: 'Local Secret Store' })).toBeInTheDocument();
     expect(screen.getByText('LOGIN_PASSWORD')).toBeInTheDocument();
+    expect(screen.getByText('Service mode')).toBeInTheDocument();
+    expect(screen.getByText('Boot resilient')).toBeInTheDocument();
+    expect(screen.getByText('OS-native')).toBeInTheDocument();
+    expect(screen.getByText('Available after reboot')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('WEB_SECRET_VALUE_29');
     expect(screen.queryByRole('button', { name: /reveal/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /install service/i })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('NT AUTHORITY');
+    expect(document.body.textContent).not.toContain('protectedKey');
   });
 
   it('shows required alias availability and local-only missing guidance', () => {

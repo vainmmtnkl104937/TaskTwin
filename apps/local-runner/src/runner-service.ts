@@ -10,13 +10,23 @@ import {
   WORKFLOW_EXTRACTION_CAPABILITY,
   WORKFLOW_APPROVAL_CAPABILITY,
   WORKFLOW_MANUAL_REPAIR_CAPABILITY,
-  WORKFLOW_SCHEDULED_EXECUTION_CAPABILITY,
   LOCATOR_REPAIR_PROPOSALS_CAPABILITY,
-  LOCAL_SECRET_STORE_CAPABILITY,
   type RunnerCapability,
   type RunnerDeviceMetadata,
   type StoredRunnerCredential,
 } from '@tasktwin/runner-protocol';
+import {
+  DEFAULT_RUNNER_DRAIN_TIMEOUT_MS,
+  RUNNER_SERVICE_RUNTIME_SCHEMA_VERSION,
+  classifyHttpConnectionFailure,
+  deriveAutonomyLevel,
+  deriveSecretUnlockMode,
+  deriveServiceCapabilities,
+  deriveServiceStatus,
+  reconnectDelayMilliseconds,
+  type RunnerRuntimeMode,
+  type RunnerRuntimeReport,
+} from '@tasktwin/runner-service-runtime';
 
 import {
   ControlPlaneClientError,
@@ -46,7 +56,46 @@ export class RunnerRevokedError extends Error {
   }
 }
 
+export interface DrainableRunWorker {
+  hasActiveRun(): boolean;
+  waitForActiveRun(): Promise<void>;
+  forceCancelActiveRun(): void;
+}
+
+export async function drainRunWorker(input: {
+  worker: DrainableRunWorker;
+  timeoutMilliseconds: number;
+  clock: RunnerClock;
+  output: RunnerOutput;
+}): Promise<'completed' | 'cancelled'> {
+  if (!input.worker.hasActiveRun()) return 'completed';
+  const timeout = new AbortController();
+  let timedOut = false;
+  try {
+    await Promise.race([
+      input.worker.waitForActiveRun().catch(() => undefined),
+      input.clock
+        .sleep(input.timeoutMilliseconds, timeout.signal)
+        .then(() => {
+          timedOut = true;
+        })
+        .catch(() => undefined),
+    ]);
+  } finally {
+    timeout.abort();
+  }
+  if (!timedOut || !input.worker.hasActiveRun()) return 'completed';
+  input.output.write('RUNNER_DRAIN_TIMED_OUT');
+  input.worker.forceCancelActiveRun();
+  await input.worker.waitForActiveRun().catch(() => undefined);
+  return 'cancelled';
+}
+
 export class LocalRunnerService {
+  private initialized = false;
+  private draining = false;
+  private currentWorker: RunJobWorker | null = null;
+
   constructor(
     private readonly store: RunnerCredentialStore,
     private readonly transport: RunnerControlPlaneTransport,
@@ -63,6 +112,17 @@ export class LocalRunnerService {
     } = { headed: false, attended: false },
     private readonly localSecretRuntime?: LocalSecretRuntime,
     private readonly localSecretProvider?: LocalVaultSecretProvider,
+    private readonly runtimeConfiguration: {
+      runtimeMode: RunnerRuntimeMode;
+      serviceVerified: boolean;
+      nativeProtectorAvailable: boolean;
+      drainTimeoutMilliseconds: number;
+    } = {
+      runtimeMode: 'unattended_process',
+      serviceVerified: false,
+      nativeProtectorAvailable: false,
+      drainTimeoutMilliseconds: DEFAULT_RUNNER_DRAIN_TIMEOUT_MS,
+    },
   ) {}
 
   async pair(input: {
@@ -143,13 +203,63 @@ export class LocalRunnerService {
 
   async start(signal: AbortSignal): Promise<void> {
     const credential = await this.requireCredential();
-    await this.keyManager?.ensureRegistered(credential);
     await this.localSecretRuntime?.prepare(credential, signal);
-    this.output.write('TaskTwin Local Runner started safely.');
+    let failures = 0;
+    const beginDrain = () => {
+      this.draining = true;
+      this.currentWorker?.beginDrain();
+    };
+    signal.addEventListener('abort', beginDrain, { once: true });
+    this.output.write('TaskTwin Local Runner initialized local state.');
+    try {
+      while (!this.draining) {
+        try {
+          await this.keyManager?.ensureRegistered(credential);
+          if (this.localSecretRuntime?.isNativeUnlockVerified?.() === true) {
+            await this.localSecretRuntime.refresh(credential);
+          }
+          this.initialized = true;
+          await this.sendHeartbeat(credential);
+          failures = 0;
+          await this.runConnectedSession(credential);
+        } catch (error: unknown) {
+          if (error instanceof RunnerRevokedError) {
+            this.output.write('RUNNER_RUNTIME_REVOKED');
+            return;
+          }
+          if (this.draining) break;
+          const classification = error instanceof ControlPlaneClientError
+            ? classifyHttpConnectionFailure(error.status)
+            : 'retryable';
+          if (classification === 'permanent') {
+            this.output.write('RUNNER_CONNECTION_PERMANENT_FAILURE');
+            return;
+          }
+          failures += 1;
+          this.output.write('CONTROL_PLANE_UNAVAILABLE');
+          await this.clock
+            .sleep(reconnectDelayMilliseconds(failures), signal)
+            .catch(() => undefined);
+        }
+      }
+      if (this.draining) {
+        await this.sendHeartbeat(credential).catch(() => undefined);
+      }
+      await this.drainCurrentWorker();
+      this.output.write('TaskTwin Local Runner stopped safely.');
+    } finally {
+      this.initialized = false;
+      this.currentWorker = null;
+      await this.localSecretRuntime?.dispose();
+      signal.removeEventListener('abort', beginDrain);
+    }
+  }
+
+  private async runConnectedSession(
+    credential: StoredRunnerCredential,
+  ): Promise<void> {
     if (this.jobTransport !== undefined && this.browserSessions !== undefined) {
       const operation = new AbortController();
-      const stopOperation = () => operation.abort();
-      signal.addEventListener('abort', stopOperation, { once: true });
       const worker = new RunJobWorker(
         this.jobTransport,
         this.browserSessions,
@@ -162,35 +272,76 @@ export class LocalRunnerService {
         this.localSecretProvider,
         () => this.localSecretRuntime?.currentPin(),
       );
+      this.currentWorker = worker;
+      if (this.draining) worker.beginDrain();
       try {
         const jobs = worker
           .runLoop(credential, operation.signal)
-          .finally(stopOperation);
+          .finally(() => operation.abort());
         const heartbeat = this.runHeartbeatLoop(
           credential,
           operation.signal,
-        ).finally(stopOperation);
-        await Promise.all([jobs, heartbeat]);
-        this.output.write('TaskTwin Local Runner stopped safely.');
-        return;
+        ).finally(() => operation.abort());
+        const drain = this.waitForDrain(worker, operation);
+        await Promise.all([jobs, heartbeat, drain]);
       } finally {
-        await this.localSecretRuntime?.dispose();
-        signal.removeEventListener('abort', stopOperation);
+        operation.abort();
+        if (this.currentWorker === worker) this.currentWorker = null;
       }
+      return;
     }
-    try {
-      await this.runHeartbeatLoop(credential, signal);
-      this.output.write('TaskTwin Local Runner stopped safely.');
-    } finally {
-      await this.localSecretRuntime?.dispose();
+    const operation = new AbortController();
+    const heartbeat = this.runHeartbeatLoop(
+      credential,
+      operation.signal,
+    ).finally(() => operation.abort());
+    const drain = this.waitUntilDraining(operation).finally(() =>
+      operation.abort(),
+    );
+    await Promise.all([heartbeat, drain]);
+  }
+
+  private async waitForDrain(
+    worker: RunJobWorker,
+    operation: AbortController,
+  ): Promise<void> {
+    while (!this.draining && !operation.signal.aborted) {
+      await this.clock.sleep(100, operation.signal).catch(() => undefined);
     }
+    if (!this.draining) return;
+    worker.beginDrain();
+    await this.drainWorker(worker);
+    operation.abort();
+  }
+
+  private async waitUntilDraining(operation: AbortController): Promise<void> {
+    while (!this.draining && !operation.signal.aborted) {
+      await this.clock.sleep(100, operation.signal).catch(() => undefined);
+    }
+    operation.abort();
+  }
+
+  private async drainCurrentWorker(): Promise<void> {
+    if (this.currentWorker !== null) {
+      this.currentWorker.beginDrain();
+      await this.drainWorker(this.currentWorker);
+    }
+  }
+
+  private async drainWorker(worker: RunJobWorker): Promise<void> {
+    await drainRunWorker({
+      worker,
+      timeoutMilliseconds: this.runtimeConfiguration.drainTimeoutMilliseconds,
+      clock: this.clock,
+      output: this.output,
+    });
   }
 
   private async runHeartbeatLoop(
     credential: StoredRunnerCredential,
     signal: AbortSignal,
   ): Promise<void> {
-    let nextIntervalSeconds = await this.sendHeartbeat(credential);
+    let nextIntervalSeconds = 1;
     while (!signal.aborted) {
       await this.clock
         .sleep(nextIntervalSeconds * 1_000, signal)
@@ -198,17 +349,8 @@ export class LocalRunnerService {
       if (signal.aborted) {
         break;
       }
-      try {
-        nextIntervalSeconds = await this.sendHeartbeat(credential);
-      } catch (error: unknown) {
-        if (error instanceof RunnerRevokedError) {
-          this.output.write(
-            'Runner authentication was rejected; heartbeat stopped.',
-          );
-          return;
-        }
-        throw error;
-      }
+      if (this.draining) return;
+      nextIntervalSeconds = await this.sendHeartbeat(credential);
     }
   }
 
@@ -236,6 +378,7 @@ export class LocalRunnerService {
         credential,
         this.runnerVersion,
         this.capabilities(),
+        this.runtimeReport(),
       );
       return response.nextHeartbeatInSeconds;
     } catch (error: unknown) {
@@ -250,6 +393,7 @@ export class LocalRunnerService {
   }
 
   private capabilities(): RunnerCapability[] {
+    if (this.draining) return [];
     const capabilities: RunnerCapability[] = [];
     if (this.browserSessions !== undefined) {
       capabilities.push(
@@ -273,22 +417,43 @@ export class LocalRunnerService {
         capabilities.push(SECURE_INPUT_CAPABILITIES[1]);
       }
     }
-    if (
-      !this.executionConfiguration.headed &&
-      this.browserSessions !== undefined &&
-      this.jobTransport !== undefined &&
-      !capabilities.includes(WORKFLOW_MANUAL_REPAIR_CAPABILITY) &&
-      !capabilities.includes(LOCATOR_REPAIR_PROPOSALS_CAPABILITY)
-    ) {
-      capabilities.push(WORKFLOW_SCHEDULED_EXECUTION_CAPABILITY);
-    }
-    if (
-      this.localSecretRuntime?.isReady() === true &&
-      this.localSecretProvider !== undefined
-    ) {
-      capabilities.push(LOCAL_SECRET_STORE_CAPABILITY);
+    if (this.initialized) {
+      for (const capability of deriveServiceCapabilities(this.capabilityState())) {
+        capabilities.push(capability);
+      }
     }
     return capabilities;
+  }
+
+  private capabilityState() {
+    return {
+      runtimeMode: this.runtimeConfiguration.runtimeMode,
+      headed: this.executionConfiguration.headed,
+      jobWorkerAvailable: this.jobTransport !== undefined,
+      browserAvailable: this.browserSessions !== undefined,
+      serviceVerified: this.runtimeConfiguration.serviceVerified,
+      nativeProtectorAvailable: this.runtimeConfiguration.nativeProtectorAvailable,
+      nativeUnlockVerified: this.localSecretRuntime?.isNativeUnlockVerified?.() === true,
+      configuredUnlockMode:
+        this.localSecretRuntime?.secretUnlockMode?.() ?? 'none',
+      vaultReady: this.localSecretRuntime?.isReady() === true,
+      localSecretProviderAvailable: this.localSecretProvider !== undefined,
+      inventorySynchronized: this.localSecretRuntime?.currentPin() !== undefined,
+      draining: this.draining,
+    };
+  }
+
+  private runtimeReport(): RunnerRuntimeReport {
+    const state = this.capabilityState();
+    const autonomyLevel = deriveAutonomyLevel(state);
+    return {
+      schemaVersion: RUNNER_SERVICE_RUNTIME_SCHEMA_VERSION,
+      runtimeMode: this.runtimeConfiguration.runtimeMode,
+      autonomyLevel,
+      serviceStatus: deriveServiceStatus(state),
+      secretUnlockMode: deriveSecretUnlockMode(state),
+      restartResilient: autonomyLevel === 'boot_resilient',
+    };
   }
 }
 

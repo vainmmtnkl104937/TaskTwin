@@ -53,6 +53,7 @@ function safeDevice(record: RunnerDeviceRecord, now: Date) {
     lastSeenAt: record.lastSeenAt?.toISOString() ?? null,
     revokedAt: record.revokedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
+    runtime: record.runtime,
     localSecretStore:
       record.localSecretStore === null
         ? null
@@ -123,11 +124,21 @@ export class RunnerService {
       throw new ForbiddenException();
     }
     try {
-      await this.repository.heartbeat({
+      const runtime = await this.repository.heartbeat({
         ...runner,
         runnerVersion: request.data.runnerVersion,
         capabilities: request.data.capabilities,
+        ...(request.data.runtime === undefined ? {} : { runtime: request.data.runtime }),
         now: new Date(),
+      });
+      return RunnerHeartbeatResponseSchema.parse({
+        schemaVersion: 1,
+        runnerDeviceId: runner.runnerDeviceId,
+        workspaceId: runner.workspaceId,
+        connectionStatus: 'online',
+        capabilities: request.data.capabilities,
+        ...(runtime === null ? {} : { runtime }),
+        nextHeartbeatInSeconds: DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
       });
     } catch (error: unknown) {
       if (
@@ -138,14 +149,6 @@ export class RunnerService {
       }
       throw error;
     }
-    return RunnerHeartbeatResponseSchema.parse({
-      schemaVersion: 1,
-      runnerDeviceId: runner.runnerDeviceId,
-      workspaceId: runner.workspaceId,
-      connectionStatus: 'online',
-      capabilities: request.data.capabilities,
-      nextHeartbeatInSeconds: DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
-    });
   }
 
   async registerEncryptionKey(runner: AuthenticatedRunner, input: unknown) {

@@ -3,6 +3,10 @@ import type {
   LocalSecretInventoryPin,
   LocalSecretInventorySyncRequest,
 } from '@tasktwin/local-secret-store';
+import type {
+  RunnerRuntimeMode,
+  RunnerSecretUnlockMode,
+} from '@tasktwin/runner-service-runtime';
 
 import type { RunnerControlPlaneTransport } from '../control-plane-client.js';
 import type { RunnerOutput } from '../runner-service.js';
@@ -15,18 +19,23 @@ export interface LocalSecretRuntime {
   refresh(credential: StoredRunnerCredential): Promise<void>;
   isReady(): boolean;
   currentPin(): LocalSecretInventoryPin | undefined;
+  isNativeUnlockVerified?(): boolean;
+  secretUnlockMode?(): RunnerSecretUnlockMode;
   dispose(): Promise<void>;
 }
 
 export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
   private ready = false;
   private pin: LocalSecretInventoryPin | undefined;
+  private nativeUnlockVerified = false;
+  private configuredUnlockMode: RunnerSecretUnlockMode = 'none';
 
   constructor(
     private readonly vault: LocalSecretVaultService,
     private readonly prompt: NoEchoPrompt,
     private readonly transport: RunnerControlPlaneTransport,
     private readonly output: RunnerOutput,
+    private readonly runtimeMode: RunnerRuntimeMode = 'unattended_process',
   ) {}
 
   async prepare(
@@ -43,7 +52,34 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
       this.output.write('Local Secret Store status: corrupted.');
       return;
     }
-    if (!this.prompt.isAvailable()) {
+    const protectorProfile = await this.vault.protectorProfile();
+    this.configuredUnlockMode = protectorProfile === 'windows_dpapi_ng_machine_v1'
+      ? 'os_native'
+      : protectorProfile === 'local_secret_master_key_wrap_v1'
+        ? 'manual'
+        : 'none';
+    if (protectorProfile === 'windows_dpapi_ng_machine_v1') {
+      try {
+        await this.vault.unlock({
+          workspaceId: credential.workspaceId,
+          runnerDeviceId: credential.runnerDeviceId,
+        });
+        this.nativeUnlockVerified = true;
+        try {
+          await this.refresh(credential);
+          this.output.write('Local Secret Store unlocked natively and synchronized.');
+        } catch {
+          this.output.write('Local Secret Store unlocked natively; inventory synchronization is pending.');
+        }
+      } catch {
+        this.nativeUnlockVerified = false;
+        await this.vault.dispose();
+        await this.reportStatus(credential, 'locked');
+        this.output.write('Local Secret Store native unlock failed safely.');
+      }
+      return;
+    }
+    if (this.runtimeMode === 'service' || !this.prompt.isAvailable()) {
       await this.reportStatus(credential, 'locked');
       this.output.write('Local Secret Store status: locked.');
       return;
@@ -58,8 +94,12 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
         runnerDeviceId: credential.runnerDeviceId,
         passphrase,
       });
-      await this.refresh(credential);
-      this.output.write('Local Secret Store unlocked and synchronized.');
+      try {
+        await this.refresh(credential);
+        this.output.write('Local Secret Store unlocked and synchronized.');
+      } catch {
+        this.output.write('Local Secret Store unlocked; inventory synchronization is pending.');
+      }
     } catch {
       await this.vault.dispose();
       await this.reportStatus(credential, 'locked');
@@ -92,6 +132,14 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
     return this.ready;
   }
 
+  isNativeUnlockVerified(): boolean {
+    return this.nativeUnlockVerified;
+  }
+
+  secretUnlockMode(): RunnerSecretUnlockMode {
+    return this.configuredUnlockMode;
+  }
+
   currentPin(): LocalSecretInventoryPin | undefined {
     return this.pin;
   }
@@ -99,6 +147,8 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
   async dispose(): Promise<void> {
     this.ready = false;
     this.pin = undefined;
+    this.nativeUnlockVerified = false;
+    this.configuredUnlockMode = 'none';
     await this.vault.dispose();
   }
 

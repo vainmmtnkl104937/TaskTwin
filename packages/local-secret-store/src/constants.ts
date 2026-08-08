@@ -2,6 +2,9 @@ export const LOCAL_SECRET_STORE_SCHEMA_VERSION = 1;
 export const LOCAL_SECRET_RECORD_PROFILE = 'local_secret_record_v1';
 export const LOCAL_SECRET_MASTER_KEY_PROFILE =
   'local_secret_master_key_wrap_v1';
+export const WINDOWS_NATIVE_MASTER_KEY_PROFILE =
+  'windows_dpapi_ng_machine_v1';
+export const WINDOWS_NATIVE_MASTER_KEY_ALGORITHM = 'DPAPI-NG';
 export const LOCAL_SECRET_INVENTORY_PROFILE = 'local_secret_inventory_v1';
 export const LOCAL_SECRET_CONTENT_ALGORITHM = 'AES-256-GCM';
 export const LOCAL_SECRET_KDF_ALGORITHM = 'scrypt-rfc7914-v1';
@@ -16,3 +19,4 @@ export const LOCAL_SECRET_KDF_MAX_MEMORY_BYTES = 256 * 1024 * 1024;
 export const MAX_LOCAL_SECRET_CHARACTERS = 4_096;
 export const MAX_LOCAL_SECRET_RECORDS = 1_000;
 export const MAX_LOCAL_VAULT_FILE_BYTES = 16 * 1024 * 1024;
+export const MAX_NATIVE_PROTECTED_KEY_BYTES = 16 * 1024;
