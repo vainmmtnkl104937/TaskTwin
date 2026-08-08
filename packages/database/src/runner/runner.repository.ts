@@ -27,6 +27,7 @@ import type {
   RunnerPollingResult,
 } from './runner-records.js';
 import type { OperationalAlertTransactionAppender } from '../operational-alerts/operational-alert-port.js';
+import type { LocalSecretStoreStatus } from '@tasktwin/local-secret-store';
 
 const MANAGER_ROLES = [OrganizationRole.OWNER, OrganizationRole.ADMIN] as const;
 const SERIALIZATION_RETRY_COUNT = 3;
@@ -77,6 +78,13 @@ function toDeviceRecord(row: {
   revokedAt: Date | null;
   createdAt: Date;
   capabilities: string[];
+  secretInventory?: {
+    storeStatus: string;
+    vaultRevision: number;
+    lastSynchronizedAt: Date;
+    _count: { entries: number };
+    entries: Array<{ alias: string; secretVersionId: string }>;
+  } | null;
 }): RunnerDeviceRecord {
   return {
     id: row.id,
@@ -92,6 +100,19 @@ function toDeviceRecord(row: {
     lastSeenAt: row.lastSeenAt,
     revokedAt: row.revokedAt,
     createdAt: row.createdAt,
+    localSecretStore:
+      row.secretInventory === null || row.secretInventory === undefined
+        ? null
+        : {
+            status:
+              row.secretInventory.storeStatus.toLowerCase() as LocalSecretStoreStatus,
+            vaultRevision: row.secretInventory.vaultRevision,
+            configuredSecretCount: row.secretInventory._count.entries,
+            lastSynchronizedAt: row.secretInventory.lastSynchronizedAt,
+            aliases: [...row.secretInventory.entries].sort((left, right) =>
+              left.alias.localeCompare(right.alias),
+            ),
+          },
   };
 }
 
@@ -438,6 +459,15 @@ export class RunnerRepository {
         revokedAt: true,
         createdAt: true,
         capabilities: true,
+        secretInventory: {
+          select: {
+            storeStatus: true,
+            vaultRevision: true,
+            lastSynchronizedAt: true,
+            _count: { select: { entries: true } },
+            entries: { select: { alias: true, secretVersionId: true } },
+          },
+        },
       },
     });
     return {

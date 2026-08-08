@@ -16,6 +16,7 @@ export const AUDIT_ENTITY_KINDS = [
   'workflow_schedule_occurrence',
   'operational_alert',
   'notification_outbox_message',
+  'runner_device',
 ] as const;
 
 export const AuditEntityKindSchema = z.enum(AUDIT_ENTITY_KINDS);

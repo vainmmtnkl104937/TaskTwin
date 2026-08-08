@@ -13,6 +13,8 @@ import {
   InMemoryCredentialStore,
 } from './credential-store.js';
 import { LocalRunnerService, type RunnerClock } from './runner-service.js';
+import type { LocalSecretRuntime } from './secrets/local-secret-runtime.js';
+import type { LocalVaultSecretProvider } from './secrets/local-vault-secret-provider.js';
 
 const paired: Extract<PairingPollingResponse, { status: 'paired' }> = {
   schemaVersion: 1,
@@ -142,6 +144,47 @@ describe('LocalRunnerService', () => {
     await context.service.unpair();
     expect(await context.store.load()).toBeNull();
     expect(context.output.join('\n')).not.toContain(paired.credential);
+  });
+
+  it('advertises local_secret_store_v1 only for a ready synchronized runtime with a provider', async () => {
+    const context = setup();
+    const credential: StoredRunnerCredential = {
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    };
+    await context.store.save(credential);
+    const runtime = {
+      isReady: () => true,
+      currentPin: vi.fn(),
+      prepare: vi.fn(),
+      refresh: vi.fn(),
+      dispose: vi.fn(),
+    } as unknown as LocalSecretRuntime;
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      context.clock,
+      '0.1.0',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      runtime,
+      {} as LocalVaultSecretProvider,
+    );
+    await service.status();
+    expect(context.transport.heartbeat).toHaveBeenCalledWith(
+      credential,
+      '0.1.0',
+      ['local_secret_store_v1'],
+    );
   });
 
   it('stops the heartbeat loop after runner authentication is rejected', async () => {

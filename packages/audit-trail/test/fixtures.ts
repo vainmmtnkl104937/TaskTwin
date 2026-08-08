@@ -343,6 +343,13 @@ export const VALID_PAYLOADS: AuditPayloadByType = {
     alertId: ALERT_ID, alertType: 'approval_required', severity: 'warning',
     sourceType: 'approval_request', sourceId: APPROVAL_ID, recipientCount: 1,
   },
+  'runner.secret_inventory.updated': {
+    runnerDeviceId: RUNNER_ID,
+    previousRevision: 1,
+    newRevision: 2,
+    configuredSecretCount: 3,
+    inventoryDigest: DIGEST,
+  },
 };
 
 export function auditInput<EventType extends AuditEventType>(

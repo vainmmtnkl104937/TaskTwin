@@ -16,6 +16,13 @@ import { LocalRunnerService, systemClock } from './runner-service.js';
 import { FileRunnerEncryptionKeyStore } from './secure-inputs/runner-encryption-key-store.js';
 import { RunnerKeyManager } from './secure-inputs/runner-key-manager.js';
 import { InteractiveSecretProvider } from './secure-inputs/interactive-secret-provider.js';
+import { FileLocalSecretVaultStore } from './secrets/local-secret-vault-store.js';
+import { LocalSecretVaultService } from './secrets/local-secret-vault-service.js';
+import { LocalVaultSecretProvider } from './secrets/local-vault-secret-provider.js';
+import { NodeScryptMasterKeyProtector } from './secrets/node-secret-crypto.js';
+import { TerminalNoEchoPrompt } from './secrets/no-echo-prompt.js';
+import { RunnerLocalSecretRuntime } from './secrets/local-secret-runtime.js';
+import { runSecretsCli } from './secrets/secrets-cli.js';
 
 const RUNNER_VERSION = '0.1.0';
 
@@ -74,6 +81,23 @@ export async function runCli(
   },
 ): Promise<number> {
   const command = argv[0] ?? 'start';
+  const transport = new HttpRunnerControlPlaneTransport();
+  const credentialStore = new FileCredentialStore();
+  const prompt = new TerminalNoEchoPrompt();
+  const vaultService = new LocalSecretVaultService(
+    new FileLocalSecretVaultStore(),
+    new NodeScryptMasterKeyProtector(),
+  );
+  if (command === 'secrets') {
+    return runSecretsCli({
+      args: argv.slice(1),
+      credentials: credentialStore,
+      vault: vaultService,
+      prompt,
+      transport,
+      output,
+    });
+  }
   const parsed = parseArgs({
     args: argv.slice(1),
     options: {
@@ -86,14 +110,20 @@ export async function runCli(
     },
     strict: true,
   });
-  const transport = new HttpRunnerControlPlaneTransport();
   const keyManager = new RunnerKeyManager(
     new FileRunnerEncryptionKeyStore(),
     transport,
   );
   const secretProvider = new InteractiveSecretProvider();
+  const localVaultProvider = new LocalVaultSecretProvider(vaultService);
+  const localSecretRuntime = new RunnerLocalSecretRuntime(
+    vaultService,
+    prompt,
+    transport,
+    output,
+  );
   const service = new LocalRunnerService(
-    new FileCredentialStore(),
+    credentialStore,
     transport,
     output,
     systemClock,
@@ -106,6 +136,8 @@ export async function runCli(
       headed: parsed.values.headed ?? false,
       attended: parsed.values.attended ?? false,
     },
+    localSecretRuntime,
+    localVaultProvider,
   );
   switch (command) {
     case 'execute-fixture': {

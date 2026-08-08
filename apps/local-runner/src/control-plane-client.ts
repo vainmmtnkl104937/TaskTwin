@@ -51,6 +51,11 @@ import {
   type RunnerLocatorRepairProposalCreate,
   type RunnerLocatorRepairProposalCreated,
 } from '@tasktwin/workflow-locator-repair';
+import {
+  LocalSecretInventorySyncResponseSchema,
+  type LocalSecretInventorySyncRequest,
+  type LocalSecretInventorySyncResponse,
+} from '@tasktwin/local-secret-store';
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
@@ -79,6 +84,10 @@ export interface RunnerControlPlaneTransport {
     credential: StoredRunnerCredential,
     request: RunnerEncryptionKeyRegistrationRequest,
   ): Promise<RunnerEncryptionKeyRegistrationResponse>;
+  synchronizeSecretInventory(
+    credential: StoredRunnerCredential,
+    request: LocalSecretInventorySyncRequest,
+  ): Promise<LocalSecretInventorySyncResponse>;
 }
 
 export interface RunnerJobTransport {
@@ -214,6 +223,21 @@ export class HttpRunnerControlPlaneTransport
     return this.request(
       `${credential.controlPlaneOrigin}/runner/encryption-keys`,
       RunnerEncryptionKeyRegistrationResponseSchema,
+      {
+        method: 'POST',
+        headers: this.runnerHeaders(credential),
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  synchronizeSecretInventory(
+    credential: StoredRunnerCredential,
+    request: LocalSecretInventorySyncRequest,
+  ): Promise<LocalSecretInventorySyncResponse> {
+    return this.request(
+      `${credential.controlPlaneOrigin}/runner/secret-inventory`,
+      LocalSecretInventorySyncResponseSchema,
       {
         method: 'POST',
         headers: this.runnerHeaders(credential),

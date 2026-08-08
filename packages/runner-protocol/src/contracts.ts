@@ -5,10 +5,15 @@ import {
   RunnerEncryptionKeyRegistrationResponseSchema,
   RunnerPublicKeyMetadataSchema,
 } from '@tasktwin/secure-run-inputs';
+import {
+  LocalSecretAliasSchema,
+  LocalSecretStoreStatusSchema,
+} from '@tasktwin/local-secret-store';
 
 import {
   DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
   LOCATOR_REPAIR_PROPOSALS_CAPABILITY,
+  LOCAL_SECRET_STORE_CAPABILITY,
   MAX_POLL_INTERVAL_SECONDS,
   OPAQUE_CODE_PATTERN,
   RUNNER_PROTOCOL_SCHEMA_VERSION,
@@ -33,10 +38,11 @@ export const RunnerCapabilitySchema = z.union([
   z.literal(WORKFLOW_MANUAL_REPAIR_CAPABILITY),
   z.literal(WORKFLOW_SCHEDULED_EXECUTION_CAPABILITY),
   z.literal(LOCATOR_REPAIR_PROPOSALS_CAPABILITY),
+  z.literal(LOCAL_SECRET_STORE_CAPABILITY),
 ]);
 export const RunnerCapabilitiesSchema = z
   .array(RunnerCapabilitySchema)
-  .max(8)
+  .max(9)
   .superRefine((values, context) => {
     if (new Set(values).size !== values.length) {
       context.addIssue({
@@ -210,6 +216,16 @@ export const SafeRunnerDeviceSchema = z.strictObject({
   lastSeenAt: IsoDateSchema.nullable(),
   revokedAt: IsoDateSchema.nullable(),
   createdAt: IsoDateSchema,
+  localSecretStore: z.strictObject({
+    status: LocalSecretStoreStatusSchema,
+    vaultRevision: z.number().int().positive().nullable(),
+    configuredSecretCount: z.number().int().nonnegative().max(1_000),
+    lastSynchronizedAt: IsoDateSchema.nullable(),
+    aliases: z.array(z.strictObject({
+      alias: LocalSecretAliasSchema,
+      secretVersionId: UuidSchema,
+    })).max(1_000),
+  }).nullable().optional(),
 });
 
 export const RunnerDeviceListResponseSchema = z.strictObject({

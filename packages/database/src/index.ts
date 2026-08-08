@@ -196,3 +196,7 @@ export {
   AuditVerificationStateRepository,
   type AuditVerificationStateRecord,
 } from './operational-telemetry/audit-verification-state.repository.js';
+export { RunnerSecretInventoryRepository } from './runner-secret-inventory/runner-secret-inventory.repository.js';
+export { RunnerSecretInventoryRepositoryError } from './runner-secret-inventory/runner-secret-inventory-errors.js';
+export type { RunnerSecretInventoryRepositoryErrorCode } from './runner-secret-inventory/runner-secret-inventory-errors.js';
+export type { RunnerSecretInventoryRecord, RunnerSecretInventorySyncResult } from './runner-secret-inventory/runner-secret-inventory-records.js';

@@ -4,7 +4,9 @@ import {
   RunnerRepositoryError,
   type SecureRunInputRepository,
   type RunnerRepository,
+  type RunnerSecretInventoryRepository,
 } from '@tasktwin/database';
+import { createLocalSecretInventoryDigest } from '@tasktwin/local-secret-store';
 import { describe, expect, it, vi } from 'vitest';
 
 import { RunnerService } from './runner.service.js';
@@ -90,5 +92,63 @@ describe('RunnerService encryption key registration', () => {
     expect(JSON.stringify(registerRunnerKey.mock.calls)).not.toContain(
       pair.privateKey.toString('base64url'),
     );
+  });
+});
+
+describe('RunnerService local secret inventory', () => {
+  it('accepts only safe inventory metadata and returns the trusted revision', async () => {
+    const vaultId = '53f321f7-ae3a-4707-b9d0-4f617ea116bd';
+    const entries = [{
+      alias: 'LOGIN_PASSWORD',
+      secretVersionId: 'b1304362-6088-44e2-9e8b-64b516ba322d',
+    }];
+    const inventoryDigest = createLocalSecretInventoryDigest(
+      { sha256Hex: (value) => createHash('sha256').update(value).digest('hex') },
+      { vaultId, workspaceId: runner.workspaceId,
+        runnerDeviceId: runner.runnerDeviceId, vaultRevision: 2, entries },
+    );
+    const synchronize = vi.fn().mockResolvedValue({
+      idempotent: false,
+      inventory: {
+        runnerDeviceId: runner.runnerDeviceId,
+        workspaceId: runner.workspaceId,
+        vaultId,
+        vaultRevision: 2,
+        storeStatus: 'ready',
+        inventoryDigest,
+        lastSynchronizedAt: new Date('2026-08-09T00:00:00.000Z'),
+        entries,
+      },
+    });
+    const service = new RunnerService(
+      {} as RunnerRepository,
+      undefined,
+      { synchronize } as unknown as RunnerSecretInventoryRepository,
+    );
+    const request = { schemaVersion: 1, profile: 'local_secret_inventory_v1',
+      vaultId, vaultRevision: 2, inventoryDigest, storeStatus: 'ready', entries };
+    await expect(service.synchronizeSecretInventory(runner, request)).resolves.toMatchObject({
+      vaultId,
+      vaultRevision: 2,
+      storeStatus: 'ready',
+    });
+    expect(JSON.stringify(synchronize.mock.calls)).not.toContain('secretValue');
+  });
+
+  it('strictly rejects ciphertext and secret value fields', async () => {
+    const synchronize = vi.fn();
+    const service = new RunnerService(
+      {} as RunnerRepository,
+      undefined,
+      { synchronize } as unknown as RunnerSecretInventoryRepository,
+    );
+    await expect(service.synchronizeSecretInventory(runner, {
+      schemaVersion: 1,
+      profile: 'local_secret_inventory_v1',
+      storeStatus: 'locked',
+      ciphertext: 'forbidden',
+      secretValue: 'API_RECOGNIZABLE_SECRET_29',
+    })).rejects.toMatchObject({ status: 400 });
+    expect(synchronize).not.toHaveBeenCalled();
   });
 });

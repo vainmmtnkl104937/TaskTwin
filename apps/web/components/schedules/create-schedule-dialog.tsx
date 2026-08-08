@@ -9,7 +9,8 @@ import { COMMON_TIMEZONES } from '@/lib/schedule-contracts';
 type ScheduleType = 'one_time' | 'daily' | 'weekly';
 
 interface CreateScheduleDialogProps {
-  workspaceId: string;
+  initialWorkflows: WorkflowOption[];
+  initialRunners: RunnerOption[];
 }
 
 interface WorkflowOption {
@@ -17,12 +18,18 @@ interface WorkflowOption {
   name: string;
   versionId: string;
   version: number;
+  requiredSecretAliases: string[];
 }
 
 interface RunnerOption {
   id: string;
   name: string;
   status: string;
+  localSecretStore?: {
+    status: string;
+    configuredSecretCount: number;
+    aliases: Array<{ alias: string; secretVersionId: string }>;
+  } | null;
 }
 
 const WEEKDAY_OPTIONS = [
@@ -84,7 +91,10 @@ function previewNextOccurrence(
   return `${toLocalDateString(nextOccurrence)} at ${time} (${timezone})`;
 }
 
-export function CreateScheduleDialog({ workspaceId }: CreateScheduleDialogProps) {
+export function CreateScheduleDialog({
+  initialWorkflows,
+  initialRunners,
+}: CreateScheduleDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -92,8 +102,8 @@ export function CreateScheduleDialog({ workspaceId }: CreateScheduleDialogProps)
   const [message, setMessage] = useState('');
 
   // Data
-  const [workflows, setWorkflows] = useState<WorkflowOption[]>([]);
-  const [runners, setRunners] = useState<RunnerOption[]>([]);
+  const [workflows] = useState<WorkflowOption[]>(initialWorkflows);
+  const [runners] = useState<RunnerOption[]>(initialRunners);
 
   // Form state
   const [name, setName] = useState('');
@@ -110,50 +120,13 @@ export function CreateScheduleDialog({ workspaceId }: CreateScheduleDialogProps)
 
   const nameRef = useRef<HTMLInputElement>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [workflowsRes, runnersRes] = await Promise.all([
-        fetch(`/api/workspaces/${workspaceId}/workflows`),
-        fetch(`/api/workspaces/${workspaceId}/runners`),
-      ]);
-
-      if (workflowsRes.ok) {
-        const workflowsData = await workflowsRes.json();
-        setWorkflows(workflowsData.workflows ?? []);
-        // Set default workflow version if not already set
-        const fetchedWorkflows = workflowsData.workflows ?? [];
-        if (fetchedWorkflows.length > 0 && !workflowVersionId) {
-          setWorkflowVersionId(fetchedWorkflows[0].versionId);
-        }
-      }
-
-      if (runnersRes.ok) {
-        const runnersData = await runnersRes.json();
-        // Filter runners with scheduled_execution capability
-        const schedulableRunners = (runnersData.runners ?? []).filter(
-          (r: { capabilities: string[] }) => r.capabilities?.includes('scheduled_execution_v1'),
-        );
-        setRunners(schedulableRunners);
-        // Set default runner if not already set
-        if (schedulableRunners.length > 0 && !runnerDeviceId) {
-          setRunnerDeviceId(schedulableRunners[0].id);
-        }
-      }
-    } catch {
-      // Ignore fetch errors
-    } finally {
-      setLoading(false);
-    }
-  }, [workspaceId, workflowVersionId, runnerDeviceId]);
-
   const openDialog = useCallback(() => {
     setOpen(true);
     setTimeout(() => nameRef.current?.focus(), 50);
-    if (workflows.length === 0) {
-      loadData();
-    }
-  }, [loadData, workflows.length]);
+    setLoading(false);
+    if (!workflowVersionId && workflows[0]) setWorkflowVersionId(workflows[0].versionId);
+    if (!runnerDeviceId && runners[0]) setRunnerDeviceId(runners[0].id);
+  }, [runnerDeviceId, runners, workflowVersionId, workflows]);
 
   const closeDialog = useCallback(() => {
     setOpen(false);
@@ -220,6 +193,17 @@ export function CreateScheduleDialog({ workspaceId }: CreateScheduleDialogProps)
     intervalDays,
     intervalWeeks,
   );
+  const selectedRunner = runners.find((runner) => runner.id === runnerDeviceId);
+  const selectedWorkflow = workflows.find(
+    (workflow) => workflow.versionId === workflowVersionId,
+  );
+  const availableAliases = new Set(
+    selectedRunner?.localSecretStore?.aliases.map((entry) => entry.alias) ?? [],
+  );
+  const missingAliases =
+    selectedWorkflow?.requiredSecretAliases.filter(
+      (alias) => !availableAliases.has(alias),
+    ) ?? [];
 
   const isFormValid =
     name.trim().length > 0 &&
@@ -332,6 +316,31 @@ export function CreateScheduleDialog({ workspaceId }: CreateScheduleDialogProps)
                   ))}
                 </select>
               </label>
+              {selectedRunner ? (
+                <div className="metadata" aria-label="Selected Runner secret readiness">
+                  <strong>Local Secret Store:</strong>{' '}
+                  {selectedRunner.localSecretStore?.status ?? 'unavailable'} ·{' '}
+                  {selectedRunner.localSecretStore?.configuredSecretCount ?? 0} aliases configured.
+                  {selectedWorkflow && selectedWorkflow.requiredSecretAliases.length > 0 ? (
+                    <ul aria-label="Required secret aliases">
+                      {selectedWorkflow.requiredSecretAliases.map((alias) => (
+                        <li key={alias}>
+                          {alias}: {availableAliases.has(alias) ? 'available' : 'missing'}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>This workflow requires no local secret aliases.</p>
+                  )}
+                  {selectedRunner.localSecretStore?.status !== 'ready' ||
+                  missingAliases.length > 0 ? (
+                    <p>
+                      Configure each missing alias locally with runner secrets set &lt;alias&gt;,
+                      then restart or synchronize the Runner. Secret values are never entered here.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               {runners.length === 0 && !loading ? (
                 <p className="inline-error">
                   No runners with scheduled execution capability found. Please pair a runner

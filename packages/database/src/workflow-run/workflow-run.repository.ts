@@ -32,6 +32,8 @@ import {
   SecureRunInputEnvelopeSchema,
   SecureRunInputManifestSchema,
 } from '@tasktwin/secure-run-inputs';
+import { analyzeWorkflowInputs } from '@tasktwin/workflow-inputs';
+import type { LocalSecretInventoryPin } from '@tasktwin/local-secret-store';
 import {
   createAuditSourceId,
   type AuditEventInput,
@@ -341,7 +343,7 @@ function buildRunCancelRequestedInput(input: {
 
 function buildRunTerminalInput(input: {
   workspaceId: string;
-  actor: { type: 'runner' | 'user' | 'system'; userId?: string; runnerDeviceId?: string; reason?: 'automatic_expiry' | 'lease_expired' | 'completion_reconciliation' | 'policy_supersede' | 'run_cancelled' };
+  actor: { type: 'runner' | 'user' | 'system'; userId?: string; runnerDeviceId?: string; reason?: 'automatic_expiry' | 'lease_expired' | 'completion_reconciliation' | 'policy_supersede' | 'run_cancelled' | 'secret_inventory_sync' };
   runId: string;
   terminalStatus: 'succeeded' | 'failed' | 'cancelled' | 'timed_out' | 'interrupted';
   terminationCause?: string;
@@ -1213,11 +1215,22 @@ export class WorkflowRunRepository {
     leaseTokenHash: string;
     now: Date;
     leaseExpiresAt: Date;
+    secretInventory?: LocalSecretInventoryPin;
   }): Promise<ClaimWorkflowRunResult> {
     return this.runSerializable(async (transaction) => {
       const runner = await transaction.runnerDevice.findUnique({
         where: { id: input.runnerDeviceId },
-        select: { revokedAt: true },
+        select: {
+          revokedAt: true,
+          secretInventory: {
+            select: {
+              vaultId: true,
+              vaultRevision: true,
+              inventoryDigest: true,
+              storeStatus: true,
+            },
+          },
+        },
       });
       if (runner === null || runner.revokedAt !== null) {
         throw new WorkflowRunRepositoryError('RUNNER_REVOKED');
@@ -1244,6 +1257,10 @@ export class WorkflowRunRepository {
           },
           policyDigest: true,
           policyEvaluation: true,
+          secretResolutionMode: true,
+          secretVaultId: true,
+          secretInventoryRevision: true,
+          secretInventoryDigest: true,
           inputEnvelope: {
             include: {
               preparation: {
@@ -1314,6 +1331,14 @@ export class WorkflowRunRepository {
           createdByUserId: true,
           steps: { select: { id: true } },
           outputs: { select: { status: true } },
+          secretResolutionMode: true,
+          secretVaultId: true,
+          secretInventoryRevision: true,
+          secretInventoryDigest: true,
+          scheduleId: true,
+          occurrenceId: true,
+          scheduledFor: true,
+          schedule: { select: { createdByUserId: true } },
           workspace: {
             select: {
               executionPolicyVersions: {
@@ -1325,6 +1350,201 @@ export class WorkflowRunRepository {
           },
         },
       });
+      const pinnedSecretInventory =
+        queued?.secretResolutionMode === 'LOCAL_STORE' &&
+        queued.secretVaultId !== null &&
+        queued.secretInventoryRevision !== null &&
+        queued.secretInventoryDigest !== null
+          ? {
+              schemaVersion: 1 as const,
+              vaultId: queued.secretVaultId,
+              vaultRevision: queued.secretInventoryRevision,
+              inventoryDigest: queued.secretInventoryDigest,
+            }
+          : undefined;
+      const currentInventory = runner.secretInventory;
+      const secretInventoryMatches =
+        pinnedSecretInventory === undefined ||
+        (input.secretInventory !== undefined &&
+          currentInventory?.storeStatus === 'READY' &&
+          input.secretInventory.vaultId === pinnedSecretInventory.vaultId &&
+          input.secretInventory.vaultRevision === pinnedSecretInventory.vaultRevision &&
+          input.secretInventory.inventoryDigest === pinnedSecretInventory.inventoryDigest &&
+          currentInventory.vaultId === pinnedSecretInventory.vaultId &&
+          currentInventory.vaultRevision === pinnedSecretInventory.vaultRevision &&
+          currentInventory.inventoryDigest === pinnedSecretInventory.inventoryDigest);
+      if (queued !== null && !secretInventoryMatches) {
+        await transaction.workflowRun.update({
+          where: { id: runId },
+          data: {
+            status: WorkflowRunStatus.FAILED,
+            finishedAt: input.now,
+            terminationCause: 'secret_inventory_changed_before_execution',
+            steps: {
+              updateMany: {
+                where: { status: WorkflowRunStepStatus.PENDING },
+                data: {
+                  status: WorkflowRunStepStatus.SKIPPED,
+                  finishedAt: input.now,
+                  skippedReason: 'secret_inventory_changed_before_execution',
+                },
+              },
+            },
+          },
+        });
+        if (queued.scheduleId !== null) {
+          await transaction.workflowSchedule.update({
+            where: { id: queued.scheduleId },
+            data: {
+              status: 'AUTO_PAUSED',
+              autoPauseReason: 'secret_readiness_failed',
+              autoPausedAt: input.now,
+              autoPausedByOccurrenceId: queued.occurrenceId,
+              nextOccurrenceAt: null,
+            },
+          });
+          if (queued.occurrenceId !== null) {
+            await transaction.workflowScheduleOccurrence.updateMany({
+              where: { id: queued.occurrenceId },
+              data: {
+                status: 'SKIPPED',
+                skipReason: 'secret_inventory_changed_before_execution',
+                skippedAt: input.now,
+                completedAt: input.now,
+                terminationCause: 'secret_inventory_changed_before_execution',
+              },
+            });
+            await appendAuditEventTransactional(transaction, this.auditTrail, {
+              workspaceId: queued.workspaceId,
+              eventType: 'schedule.occurrence.skipped',
+              actor: { type: 'system', reason: 'scheduler' },
+              primaryEntity: {
+                kind: 'workflow_schedule_occurrence',
+                id: queued.occurrenceId,
+              },
+              relatedEntities: [
+                { kind: 'workflow_schedule', id: queued.scheduleId },
+                { kind: 'workflow_run', id: runId },
+              ],
+              occurredAt: input.now,
+              sourceId: createAuditSourceId(
+                'schedule_occurrence_secret_inventory_changed',
+                [queued.occurrenceId, runId],
+                auditHasherForTrail,
+              ),
+              payload: {
+                scheduleId: queued.scheduleId,
+                occurrenceId: queued.occurrenceId,
+                scheduledFor: queued.scheduledFor ?? input.now,
+                skipReason: 'secret_inventory_changed_before_execution',
+                skippedAt: input.now,
+              },
+            });
+          }
+          await appendAuditEventTransactional(transaction, this.auditTrail, {
+            workspaceId: queued.workspaceId,
+            eventType: 'schedule.auto_paused',
+            actor: { type: 'system', reason: 'automatic' },
+            primaryEntity: { kind: 'workflow_schedule', id: queued.scheduleId },
+            ...(queued.occurrenceId === null
+              ? {}
+              : {
+                  relatedEntities: [
+                    {
+                      kind: 'workflow_schedule_occurrence' as const,
+                      id: queued.occurrenceId,
+                    },
+                  ],
+                }),
+            occurredAt: input.now,
+            sourceId: createAuditSourceId(
+              'schedule_secret_inventory_auto_paused',
+              [queued.scheduleId, queued.occurrenceId ?? runId],
+              auditHasherForTrail,
+            ),
+            payload: {
+              scheduleId: queued.scheduleId,
+              reason: 'secret_readiness_failed',
+              autoPausedAt: input.now,
+              ...(queued.occurrenceId === null
+                ? {}
+                : { triggeringOccurrenceId: queued.occurrenceId }),
+            },
+          });
+          await this.operationalAlerts?.append(transaction, {
+            schemaVersion: 1,
+            workspaceId: queued.workspaceId,
+            type: 'schedule_auto_paused',
+            source: { type: 'workflow_schedule', id: queued.scheduleId },
+            primaryEntity: { type: 'workflow_schedule', id: queued.scheduleId },
+            relatedEntities:
+              queued.occurrenceId === null
+                ? []
+                : [
+                    {
+                      type: 'workflow_schedule_occurrence',
+                      id: queued.occurrenceId,
+                    },
+                  ],
+            template: {
+              schemaVersion: 1,
+              templateKey: 'schedule_auto_paused.v1',
+              workflowScheduleId: queued.scheduleId,
+              reason: 'secret_readiness_failed',
+              autoPausedAt: input.now.toISOString(),
+              ...(queued.occurrenceId === null
+                ? {}
+                : { occurrenceId: queued.occurrenceId }),
+            },
+            actionTarget: {
+              schemaVersion: 1,
+              kind: 'schedule',
+              workspaceId: queued.workspaceId,
+              workflowScheduleId: queued.scheduleId,
+            },
+            creatorUserId:
+              queued.schedule?.createdByUserId ?? queued.createdByUserId,
+          });
+        }
+        await appendAuditEventTransactional(
+          transaction,
+          this.auditTrail,
+          buildRunTerminalInput({
+            workspaceId: queued.workspaceId,
+            actor: { type: 'system', reason: 'secret_inventory_sync' },
+            runId,
+            terminalStatus: 'failed',
+            terminationCause: 'secret_inventory_changed_before_execution',
+            finishedAt: input.now,
+            stepCount: queued.steps.length,
+            producedOutputCount: queued.outputs.filter(
+              (output) => output.status === WorkflowRunOutputStatus.PRODUCED,
+            ).length,
+          }),
+        );
+        await this.operationalAlerts?.append(transaction, {
+          schemaVersion: 1,
+          workspaceId: queued.workspaceId,
+          type: 'run_failed',
+          source: { type: 'workflow_run', id: runId },
+          primaryEntity: { type: 'workflow_run', id: runId },
+          relatedEntities: [],
+          template: {
+            schemaVersion: 1,
+            templateKey: 'run_failed.v1',
+            workflowRunId: runId,
+            failedAt: input.now.toISOString(),
+          },
+          actionTarget: {
+            schemaVersion: 1,
+            kind: 'run',
+            workspaceId: queued.workspaceId,
+            workflowRunId: runId,
+          },
+          creatorUserId: queued.createdByUserId,
+        });
+        return { status: 'no_job' };
+      }
       if (
         queued === null ||
         queued.policyVersionId === null ||
@@ -1403,6 +1623,10 @@ export class WorkflowRunRepository {
               },
             },
           },
+          secretResolutionMode: true,
+          secretVaultId: true,
+          secretInventoryRevision: true,
+          secretInventoryDigest: true,
         },
       });
       await appendAuditEventTransactional(
@@ -2451,6 +2675,10 @@ export class WorkflowRunRepository {
       } | null;
       policyDigest: string | null;
       policyEvaluation: Prisma.JsonValue | null;
+      secretResolutionMode?: string | null;
+      secretVaultId?: string | null;
+      secretInventoryRevision?: number | null;
+      secretInventoryDigest?: string | null;
       inputEnvelope: {
         schemaVersion: number;
         profile: string;
@@ -2497,7 +2725,26 @@ export class WorkflowRunRepository {
       allowedOrigins: parseJsonArray(row.allowedOrigins),
       options: parseOptions(row.executionOptions),
       runtimeInput:
-        row.inputEnvelope === null
+        row.secretResolutionMode === 'LOCAL_STORE' &&
+        row.secretVaultId !== null && row.secretVaultId !== undefined &&
+        row.secretInventoryRevision !== null && row.secretInventoryRevision !== undefined &&
+        row.secretInventoryDigest !== null && row.secretInventoryDigest !== undefined
+          ? {
+              kind: 'local_secret_store',
+              inventory: {
+                schemaVersion: 1,
+                vaultId: row.secretVaultId,
+                vaultRevision: row.secretInventoryRevision,
+                inventoryDigest: row.secretInventoryDigest,
+              },
+              secrets: analyzeWorkflowInputs(
+                WorkflowDefinitionSchema.parse(row.workflowVersion.definition),
+              ).secretRequirements.map((requirement) => ({
+                secretName: requirement.secretName,
+                usageCount: requirement.usageCount,
+              })),
+            }
+          : row.inputEnvelope === null
           ? { kind: 'none' }
           : {
               kind: 'encrypted_envelope',

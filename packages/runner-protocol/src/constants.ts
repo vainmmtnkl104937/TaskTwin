@@ -7,6 +7,7 @@ export const WORKFLOW_SCHEDULED_EXECUTION_CAPABILITY =
   'scheduled_execution_v1';
 export const LOCATOR_REPAIR_PROPOSALS_CAPABILITY =
   'locator_repair_proposals_v1';
+export const LOCAL_SECRET_STORE_CAPABILITY = 'local_secret_store_v1';
 export const DEFAULT_PAIRING_EXPIRES_IN_SECONDS = 600;
 export const DEFAULT_POLL_INTERVAL_SECONDS = 5;
 export const MAX_POLL_INTERVAL_SECONDS = 30;

@@ -12,6 +12,7 @@ import {
   WORKFLOW_MANUAL_REPAIR_CAPABILITY,
   WORKFLOW_SCHEDULED_EXECUTION_CAPABILITY,
   LOCATOR_REPAIR_PROPOSALS_CAPABILITY,
+  LOCAL_SECRET_STORE_CAPABILITY,
   type RunnerCapability,
   type RunnerDeviceMetadata,
   type StoredRunnerCredential,
@@ -26,6 +27,8 @@ import type { RunnerCredentialStore } from './credential-store.js';
 import type { BrowserSessionFactory } from './execution/browser-session.js';
 import { RunJobWorker } from './job-dispatch/run-job-worker.js';
 import type { RunnerKeyManager } from './secure-inputs/runner-key-manager.js';
+import type { LocalSecretRuntime } from './secrets/local-secret-runtime.js';
+import type { LocalVaultSecretProvider } from './secrets/local-vault-secret-provider.js';
 
 export interface RunnerOutput {
   write(message: string): void;
@@ -58,6 +61,8 @@ export class LocalRunnerService {
       headed: boolean;
       attended: boolean;
     } = { headed: false, attended: false },
+    private readonly localSecretRuntime?: LocalSecretRuntime,
+    private readonly localSecretProvider?: LocalVaultSecretProvider,
   ) {}
 
   async pair(input: {
@@ -139,6 +144,7 @@ export class LocalRunnerService {
   async start(signal: AbortSignal): Promise<void> {
     const credential = await this.requireCredential();
     await this.keyManager?.ensureRegistered(credential);
+    await this.localSecretRuntime?.prepare(credential, signal);
     this.output.write('TaskTwin Local Runner started safely.');
     if (this.jobTransport !== undefined && this.browserSessions !== undefined) {
       const operation = new AbortController();
@@ -153,6 +159,8 @@ export class LocalRunnerService {
         this.keyManager,
         this.secretProvider,
         this.executionConfiguration,
+        this.localSecretProvider,
+        () => this.localSecretRuntime?.currentPin(),
       );
       try {
         const jobs = worker
@@ -166,11 +174,16 @@ export class LocalRunnerService {
         this.output.write('TaskTwin Local Runner stopped safely.');
         return;
       } finally {
+        await this.localSecretRuntime?.dispose();
         signal.removeEventListener('abort', stopOperation);
       }
     }
-    await this.runHeartbeatLoop(credential, signal);
-    this.output.write('TaskTwin Local Runner stopped safely.');
+    try {
+      await this.runHeartbeatLoop(credential, signal);
+      this.output.write('TaskTwin Local Runner stopped safely.');
+    } finally {
+      await this.localSecretRuntime?.dispose();
+    }
   }
 
   private async runHeartbeatLoop(
@@ -262,11 +275,18 @@ export class LocalRunnerService {
     }
     if (
       !this.executionConfiguration.headed &&
-      !capabilities.includes(WORKFLOW_APPROVAL_CAPABILITY) &&
+      this.browserSessions !== undefined &&
+      this.jobTransport !== undefined &&
       !capabilities.includes(WORKFLOW_MANUAL_REPAIR_CAPABILITY) &&
       !capabilities.includes(LOCATOR_REPAIR_PROPOSALS_CAPABILITY)
     ) {
       capabilities.push(WORKFLOW_SCHEDULED_EXECUTION_CAPABILITY);
+    }
+    if (
+      this.localSecretRuntime?.isReady() === true &&
+      this.localSecretProvider !== undefined
+    ) {
+      capabilities.push(LOCAL_SECRET_STORE_CAPABILITY);
     }
     return capabilities;
   }

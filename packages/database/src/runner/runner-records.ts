@@ -5,6 +5,7 @@ import type {
 } from '@tasktwin/runner-protocol';
 
 import type { OrganizationRole } from '../generated/prisma/client.js';
+import type { LocalSecretStoreStatus } from '@tasktwin/local-secret-store';
 
 export interface RunnerOrganizationAccess {
   organizationId: string;
@@ -29,6 +30,13 @@ export interface RunnerDeviceRecord {
   lastSeenAt: Date | null;
   revokedAt: Date | null;
   createdAt: Date;
+  localSecretStore: {
+    status: LocalSecretStoreStatus;
+    vaultRevision: number | null;
+    configuredSecretCount: number;
+    lastSynchronizedAt: Date | null;
+    aliases: Array<{ alias: string; secretVersionId: string }>;
+  } | null;
 }
 
 export interface RunnerDeviceListRecord {

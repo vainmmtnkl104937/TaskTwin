@@ -27,6 +27,7 @@
     "@node-rs/argon2": "2.0.2",
     "@tasktwin/audit-trail": "workspace:*",
     "@tasktwin/database": "workspace:*",
+    "@tasktwin/local-secret-store": "workspace:*",
     "@tasktwin/operational-alerts": "workspace:*",
     "@tasktwin/operational-telemetry": "workspace:*",
     "@tasktwin/recording-converter": "workspace:*",

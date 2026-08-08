@@ -9,6 +9,7 @@ export const AuditSystemReasonSchema = z.enum([
   'scheduler',
   'automatic',
   'notification_worker',
+  'secret_inventory_sync',
 ]);
 
 export const UserAuditActorSchema = z

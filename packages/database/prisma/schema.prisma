@@ -280,6 +280,21 @@ enum OperationalComponentType {
   @@map("operational_component_type")
 }
 
+enum RunnerSecretStoreStatus {
+  READY
+  LOCKED
+  UNAVAILABLE
+  CORRUPTED
+
+  @@map("runner_secret_store_status")
+}
+
+enum WorkflowRunSecretResolutionMode {
+  LOCAL_STORE
+
+  @@map("workflow_run_secret_resolution_mode")
+}
+
 model User {
   id                          String                            @id @default(uuid()) @db.Uuid
   email                       String                            @unique(map: "users_email_key") @db.VarChar(254)
@@ -364,6 +379,7 @@ model Workspace {
   notificationOutboxMessages NotificationOutboxMessage[]
   userNotifications          UserNotification[]
   auditVerificationState     WorkspaceAuditVerificationState?
+  runnerSecretInventories    RunnerSecretInventory[]
 
   @@unique([organizationId, slug], map: "workspaces_organization_id_slug_key")
   @@map("workspaces")
@@ -533,6 +549,7 @@ model RunnerDevice {
   repairRequests         WorkflowRepairRequest[]
   locatorRepairProposals WorkflowLocatorRepairProposal[]
   schedules              WorkflowSchedule[]
+  secretInventory        RunnerSecretInventory?
 
   @@index([workspaceId, revokedAt, lastSeenAt], map: "runner_devices_workspace_id_revoked_at_last_seen_at_idx")
   @@index([revokedById], map: "runner_devices_revoked_by_id_idx")
@@ -646,6 +663,10 @@ model WorkflowRun {
   finishedAt               DateTime?                        @map("finished_at") @db.Timestamptz(3)
   createdAt                DateTime                         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  secretResolutionMode     WorkflowRunSecretResolutionMode? @map("secret_resolution_mode")
+  secretVaultId            String?                          @map("secret_vault_id") @db.Uuid
+  secretInventoryRevision  Int?                             @map("secret_inventory_revision")
+  secretInventoryDigest    String?                          @map("secret_inventory_digest") @db.Char(64)
   workspace                Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   workflow                 Workflow                         @relation(fields: [workflowId], references: [id], onDelete: Restrict)
   workflowVersion          WorkflowVersion                  @relation(fields: [workflowVersionId], references: [id], onDelete: Restrict)
@@ -678,6 +699,34 @@ model WorkflowRun {
   @@index([policyVersionId, createdAt], map: "workflow_runs_policy_version_id_created_at_idx")
   @@index([scheduleId], map: "workflow_runs_schedule_idx")
   @@map("workflow_runs")
+}
+
+model RunnerSecretInventory {
+  runnerDeviceId     String                       @id @map("runner_device_id") @db.Uuid
+  workspaceId        String                       @map("workspace_id") @db.Uuid
+  vaultId            String                       @unique(map: "runner_secret_inventories_vault_id_key") @map("vault_id") @db.Uuid
+  vaultRevision      Int                          @map("vault_revision")
+  storeStatus        RunnerSecretStoreStatus      @map("store_status")
+  inventoryDigest    String                       @map("inventory_digest") @db.Char(64)
+  lastSynchronizedAt DateTime                     @map("last_synchronized_at") @db.Timestamptz(3)
+  createdAt          DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  runnerDevice       RunnerDevice                 @relation(fields: [runnerDeviceId], references: [id], onDelete: Restrict)
+  workspace          Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  entries            RunnerSecretInventoryEntry[]
+
+  @@map("runner_secret_inventories")
+}
+
+model RunnerSecretInventoryEntry {
+  runnerDeviceId  String                @map("runner_device_id") @db.Uuid
+  alias           String                @db.VarChar(80)
+  secretVersionId String                @map("secret_version_id") @db.Uuid
+  inventory       RunnerSecretInventory @relation(fields: [runnerDeviceId], references: [runnerDeviceId], onDelete: Cascade)
+
+  @@id([runnerDeviceId, alias], map: "runner_secret_inventory_entries_pkey")
+  @@unique([runnerDeviceId, secretVersionId], map: "runner_secret_inventory_entries_version_key")
+  @@map("runner_secret_inventory_entries")
 }
 
 model WorkspaceExecutionPolicyVersion {

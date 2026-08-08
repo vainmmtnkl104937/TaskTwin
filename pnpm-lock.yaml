@@ -38,6 +38,9 @@ importers:
       '@tasktwin/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@tasktwin/local-secret-store':
+        specifier: workspace:*
+        version: link:../../packages/local-secret-store
       '@tasktwin/operational-alerts':
         specifier: workspace:*
         version: link:../../packages/operational-alerts
@@ -172,6 +175,9 @@ importers:
 
   apps/local-runner:
     dependencies:
+      '@tasktwin/local-secret-store':
+        specifier: workspace:*
+        version: link:../../packages/local-secret-store
       '@tasktwin/locator-engine':
         specifier: workspace:*
         version: link:../../packages/locator-engine
@@ -220,6 +226,9 @@ importers:
       playwright:
         specifier: 1.62.0
         version: 1.62.0
+      proper-lockfile:
+        specifier: 4.1.2
+        version: 4.1.2
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -230,6 +239,9 @@ importers:
       '@types/node':
         specifier: 22.19.1
         version: 22.19.1
+      '@types/proper-lockfile':
+        specifier: 4.1.4
+        version: 4.1.4
       eslint:
         specifier: 9.39.5
         version: 9.39.5(jiti@2.7.0)
@@ -276,6 +288,9 @@ importers:
       '@tasktwin/audit-trail':
         specifier: workspace:*
         version: link:../../packages/audit-trail
+      '@tasktwin/local-secret-store':
+        specifier: workspace:*
+        version: link:../../packages/local-secret-store
       '@tasktwin/operational-alerts':
         specifier: workspace:*
         version: link:../../packages/operational-alerts
@@ -435,6 +450,9 @@ importers:
       '@tasktwin/audit-trail':
         specifier: workspace:*
         version: link:../audit-trail
+      '@tasktwin/local-secret-store':
+        specifier: workspace:*
+        version: link:../local-secret-store
       '@tasktwin/locator-engine':
         specifier: workspace:*
         version: link:../locator-engine
@@ -471,6 +489,9 @@ importers:
       '@tasktwin/workflow-extraction':
         specifier: workspace:*
         version: link:../workflow-extraction
+      '@tasktwin/workflow-inputs':
+        specifier: workspace:*
+        version: link:../workflow-inputs
       '@tasktwin/workflow-lifecycle':
         specifier: workspace:*
         version: link:../workflow-lifecycle
@@ -511,6 +532,31 @@ importers:
       prisma:
         specifier: 7.9.1
         version: 7.9.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@22.19.1)(happy-dom@20.11.1)(vite@8.1.5(@types/node@22.19.1)(jiti@2.7.0)(terser@5.49.0))
+
+  packages/local-secret-store:
+    dependencies:
+      '@tasktwin/workflow-inputs':
+        specifier: workspace:*
+        version: link:../workflow-inputs
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@tasktwin/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 22.19.1
+        version: 22.19.1
+      eslint:
+        specifier: 9.39.5
+        version: 9.39.5(jiti@2.7.0)
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -673,6 +719,9 @@ importers:
 
   packages/run-protocol:
     dependencies:
+      '@tasktwin/local-secret-store':
+        specifier: workspace:*
+        version: link:../local-secret-store
       '@tasktwin/secure-run-inputs':
         specifier: workspace:*
         version: link:../secure-run-inputs
@@ -722,6 +771,9 @@ importers:
 
   packages/runner-protocol:
     dependencies:
+      '@tasktwin/local-secret-store':
+        specifier: workspace:*
+        version: link:../local-secret-store
       '@tasktwin/secure-run-inputs':
         specifier: workspace:*
         version: link:../secure-run-inputs
@@ -1078,6 +1130,9 @@ importers:
 
   packages/workflow-scheduling:
     dependencies:
+      '@tasktwin/local-secret-store':
+        specifier: workspace:*
+        version: link:../local-secret-store
       '@tasktwin/workflow-inputs':
         specifier: workspace:*
         version: link:../workflow-inputs
@@ -2378,6 +2433,9 @@ packages:
   '@types/pg@8.20.0':
     resolution: {integrity: sha512-bEPFOaMAHTEP1EzpvHTbmwR8UsFyHSKsRisLIHVMXnpNefSbGA1bD6CVy+qKjGSqmZqNqBDV2azOBo8TgkcVow==}
 
+  '@types/proper-lockfile@4.1.4':
+    resolution: {integrity: sha512-uo2ABllncSqg9F1D4nugVl9v93RmjxF6LJzQLMLDdPaXCUIDPeOJ21Gbqi43xNKzBi/WQ0Q0dICqufzQbMjipQ==}
+
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
     peerDependencies:
@@ -2385,6 +2443,9 @@ packages:
 
   '@types/react@19.2.17':
     resolution: {integrity: sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw==}
+
+  '@types/retry@0.12.5':
+    resolution: {integrity: sha512-3xSjTp3v03X/lSQLkczaN9UIEwJMoMCA1+Nb5HfbJEQWogdeQIyVtTvxPXDQjZ5zws8rFQfVfRdz03ARihPJgw==}
 
   '@types/superagent@8.1.11':
     resolution: {integrity: sha512-KA7srSW/HENDtOw9DOqaFLgWuMqN9WgjEw62lh9dpvRaZDkhdOkazASd7X7i2eMUYLHa1U37ZttnePsH5zTDHw==}
@@ -6559,6 +6620,10 @@ snapshots:
       pg-protocol: 1.15.0
       pg-types: 2.2.0
 
+  '@types/proper-lockfile@4.1.4':
+    dependencies:
+      '@types/retry': 0.12.5
+
   '@types/react-dom@19.2.3(@types/react@19.2.17)':
     dependencies:
       '@types/react': 19.2.17
@@ -6566,6 +6631,8 @@ snapshots:
   '@types/react@19.2.17':
     dependencies:
       csstype: 3.2.3
+
+  '@types/retry@0.12.5': {}
 
   '@types/superagent@8.1.11':
     dependencies:

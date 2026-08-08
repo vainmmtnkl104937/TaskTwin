@@ -1,5 +1,9 @@
 # TaskTwin Local Runner
 
+## Local Secret Store
+
+After pairing, use `pnpm runner -- secrets init`, `pnpm runner -- secrets status`, `pnpm runner -- secrets set <alias>`, `pnpm runner -- secrets remove <alias>`, and `pnpm runner -- secrets list`. Passphrases and values are prompted locally without echo and are never accepted through argv. See `docs/local-runner-secret-management.md` and ADR-030 for the storage and threat model.
+
 ## Ephemeral extraction
 
 The Playwright adapter supports text, field/select value, checked-state, and

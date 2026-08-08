@@ -48,6 +48,7 @@ export const AUDIT_EVENT_TYPES = [
   'notification.alert.created',
   'notification.alert.resolved',
   'notification.delivery.dead_lettered',
+  'runner.secret_inventory.updated',
 ] as const;
 
 export const AuditEventTypeSchema = z.enum(AUDIT_EVENT_TYPES);

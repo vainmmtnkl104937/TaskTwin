@@ -18,6 +18,7 @@
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@tasktwin/local-secret-store": "workspace:*",
     "@tasktwin/secure-run-inputs": "workspace:*",
     "zod": "4.4.3"
   },

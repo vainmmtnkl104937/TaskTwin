@@ -388,3 +388,9 @@ Implemented the in-app operational alert foundation: strict safe templates, tran
 Implemented separate API liveness/readiness, database-time component heartbeats, fixed-window Workspace operational snapshots and a Workspace Operations Dashboard. Aggregates cover component health, Runner capacity, runs, Approvals, Repairs, Schedules, notification delivery and authoritative Audit integrity without collecting workflow business or runtime data.
 
 Session 28 excludes public Prometheus metrics, Grafana, OpenTelemetry, distributed tracing, external APM, infrastructure auto-alerting, business analytics and user-defined windows.
+
+# Session 29: Local Secret Store
+
+Implemented encrypted Local Runner secret storage for unattended scheduled workflows, safe inventory synchronization, revision rollback protection, readiness/occurrence checks and claim-time inventory pinning. The Control Plane remains outside the plaintext boundary.
+
+Web secret entry/reveal/export, environment fallback, cloud providers, automatic OS unlock, secret sharing, binary material, master-key rotation and forensic erasure guarantees remain future work.

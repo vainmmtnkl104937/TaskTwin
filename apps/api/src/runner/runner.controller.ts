@@ -38,6 +38,16 @@ export class RunnerController {
     return this.service.heartbeat(runner, body);
   }
 
+  @Post('runner/secret-inventory')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RunnerCredentialGuard)
+  synchronizeSecretInventory(
+    @CurrentRunner() runner: AuthenticatedRunner,
+    @Body() body: unknown,
+  ) {
+    return this.service.synchronizeSecretInventory(runner, body);
+  }
+
   @Post('runner/encryption-keys')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RunnerCredentialGuard)
