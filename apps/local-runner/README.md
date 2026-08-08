@@ -4,6 +4,27 @@
 
 After pairing, use `pnpm runner -- secrets init`, `pnpm runner -- secrets status`, `pnpm runner -- secrets set <alias>`, `pnpm runner -- secrets remove <alias>`, and `pnpm runner -- secrets list`. Passphrases and values are prompted locally without echo and are never accepted through argv. See `docs/local-runner-secret-management.md` and ADR-030 for the storage and threat model.
 
+## Windows service mode
+
+Prepare the checksum-pinned WinSW artifact, build, explicitly migrate a
+passphrase vault when native auto-unlock is wanted, then manage the local
+service:
+
+```powershell
+pnpm --filter @tasktwin/local-runner service:prepare-windows
+pnpm --filter @tasktwin/local-runner build
+pnpm --filter @tasktwin/local-runner runner -- secrets protector migrate --to os-native
+pnpm --filter @tasktwin/local-runner runner -- service install
+pnpm --filter @tasktwin/local-runner runner -- service start
+pnpm --filter @tasktwin/local-runner runner -- service status
+```
+
+Service operations are local-only and privileged. Service mode is headless,
+rejects interactive secret providers, uses a per-Runner filesystem lock,
+reconnects with bounded backoff and drains before forced cancellation. It never
+resumes an old run after crash/reboot. See `docs/local-runner-service.md`,
+`docs/windows-runner-deployment.md`, ADR-031 and ADR-032.
+
 ## Ephemeral extraction
 
 The Playwright adapter supports text, field/select value, checked-state, and

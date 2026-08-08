@@ -6,6 +6,7 @@ import {
   LOCAL_SECRET_STORE_SCHEMA_VERSION,
   LocalSecretAliasSchema,
   LocalSecretInventoryPinSchema,
+  InMemoryMasterKeyLease,
   LocalSecretStoreError,
   LocalSecretTextSchema,
   LocalSecretVaultSchema,
@@ -17,6 +18,7 @@ import {
   type LocalSecretInventorySnapshot,
   type LocalSecretMasterKeyAadBase,
   type LocalSecretMasterKeyProtector,
+  type MasterKeyLease,
   type LocalSecretStoreStatus,
   type LocalSecretVault,
 } from '@tasktwin/local-secret-store';
@@ -38,15 +40,19 @@ export interface LocalSecretVaultStatus {
 }
 
 export class LocalSecretVaultService {
-  private masterKey: Uint8Array | null = null;
+  private masterKeyLease: MasterKeyLease | null = null;
   private unlockedVaultId: string | null = null;
   private synchronizedPin: LocalSecretInventoryPin | null = null;
 
   constructor(
     private readonly store: LocalSecretVaultStore,
-    private readonly protector: LocalSecretMasterKeyProtector,
+    protector: LocalSecretMasterKeyProtector | readonly LocalSecretMasterKeyProtector[],
     private readonly now: () => Date = () => new Date(),
-  ) {}
+  ) {
+    this.protectors = Array.isArray(protector) ? [...protector] : [protector];
+  }
+
+  private readonly protectors: readonly LocalSecretMasterKeyProtector[];
 
   async initialize(input: {
     workspaceId: string;
@@ -67,7 +73,8 @@ export class LocalSecretVaultService {
     const aad = masterKeyAad({ vaultId, workspaceId: input.workspaceId,
       runnerDeviceId: input.runnerDeviceId, revision, inventoryDigest });
     try {
-      const protection = await this.protector.protect({ masterKey, passphrase: input.passphrase, aad });
+      const protection = await this.requireProtector(LOCAL_SECRET_MASTER_KEY_PROFILE)
+        .protect({ masterKey, passphrase: input.passphrase, aad });
       const vault = LocalSecretVaultSchema.parse({
         schemaVersion: 1,
         vaultId,
@@ -81,7 +88,7 @@ export class LocalSecretVaultService {
         updatedAt: createdAt,
       });
       await this.store.create(vault);
-      await this.adoptMasterKey(masterKey, vaultId);
+      await this.adoptMasterKey(new InMemoryMasterKeyLease(masterKey), vaultId);
       return vault;
     } finally {
       masterKey.fill(0);
@@ -91,53 +98,159 @@ export class LocalSecretVaultService {
   async unlock(input: {
     workspaceId: string;
     runnerDeviceId: string;
-    passphrase: Uint8Array;
+    passphrase?: Uint8Array;
   }): Promise<LocalSecretVault> {
     const vault = await this.requireVault();
     if (vault.workspaceId !== input.workspaceId || vault.runnerDeviceId !== input.runnerDeviceId) {
       throw new LocalSecretStoreError('VAULT_BINDING_INVALID');
     }
     this.assertInventoryDigest(vault);
-    const masterKey = await this.protector.unprotect({
+    const masterKeyLease = await this.requireProtector(vault.masterKeyProtection.profile).unprotect({
       protection: vault.masterKeyProtection,
-      passphrase: input.passphrase,
+      ...(input.passphrase === undefined ? {} : { passphrase: input.passphrase }),
       aad: masterKeyAad(vault),
     });
     try {
-      await this.adoptMasterKey(masterKey, vault.vaultId);
-    } finally {
-      masterKey.fill(0);
+      await this.adoptMasterKey(masterKeyLease, vault.vaultId);
+    } catch (error: unknown) {
+      masterKeyLease.dispose();
+      throw error;
     }
     return vault;
+  }
+
+  async migrateProtectorToNative(input: {
+    workspaceId: string;
+    runnerDeviceId: string;
+    passphrase: Uint8Array;
+  }): Promise<LocalSecretVault> {
+    const initial = await this.requireVault();
+    if (
+      initial.workspaceId !== input.workspaceId ||
+      initial.runnerDeviceId !== input.runnerDeviceId
+    ) {
+      throw new LocalSecretStoreError('VAULT_BINDING_INVALID');
+    }
+    if (initial.masterKeyProtection.profile !== LOCAL_SECRET_MASTER_KEY_PROFILE) {
+      throw new LocalSecretStoreError('PROTECTOR_MIGRATION_INVALID');
+    }
+    const nativeProtector = this.protectors.find(
+      (protector) => protector.profile === 'windows_dpapi_ng_machine_v1',
+    );
+    if (nativeProtector === undefined) {
+      throw new LocalSecretStoreError('NATIVE_PROTECTOR_UNAVAILABLE');
+    }
+
+    const verified: { lease: MasterKeyLease | null } = { lease: null };
+    try {
+      const committed = await this.store.replaceVerified(
+        initial.revision,
+        async (current) => {
+          if (
+            current.workspaceId !== input.workspaceId ||
+            current.runnerDeviceId !== input.runnerDeviceId ||
+            current.masterKeyProtection.profile !== LOCAL_SECRET_MASTER_KEY_PROFILE
+          ) {
+            throw new LocalSecretStoreError('PROTECTOR_MIGRATION_INVALID');
+          }
+          this.assertInventoryDigest(current);
+          const oldLease = await this.requireProtector(LOCAL_SECRET_MASTER_KEY_PROFILE)
+            .unprotect({
+              protection: current.masterKeyProtection,
+              passphrase: input.passphrase,
+              aad: masterKeyAad(current),
+            });
+          try {
+            this.assertRecordsDecryptable(current, oldLease);
+            const revision = current.revision + 1;
+            const inventoryDigest = createLocalSecretInventoryDigest(
+              nodeLocalSecretDigestProvider,
+              {
+                vaultId: current.vaultId,
+                workspaceId: current.workspaceId,
+                runnerDeviceId: current.runnerDeviceId,
+                vaultRevision: revision,
+                entries: inventoryEntriesFromVault(current),
+              },
+            );
+            const protection = await oldLease.use((masterKey) =>
+              nativeProtector.protect({
+                masterKey,
+                aad: masterKeyAad({ ...current, revision, inventoryDigest }),
+              }),
+            );
+            return LocalSecretVaultSchema.parse({
+              ...current,
+              revision,
+              inventoryDigest,
+              masterKeyProtection: protection,
+              updatedAt: this.now().toISOString(),
+            });
+          } finally {
+            oldLease.dispose();
+          }
+        },
+        async (candidate) => {
+          const lease = await nativeProtector.unprotect({
+            protection: candidate.masterKeyProtection,
+            aad: masterKeyAad(candidate),
+          });
+          try {
+            this.assertInventoryDigest(candidate);
+            this.assertRecordsDecryptable(candidate, lease);
+            verified.lease = lease;
+          } catch (error: unknown) {
+            lease.dispose();
+            throw error;
+          }
+        },
+      );
+      if (verified.lease === null) {
+        throw new LocalSecretStoreError('PROTECTOR_MIGRATION_VERIFICATION_FAILED');
+      }
+      await this.adoptMasterKey(verified.lease, committed.vaultId);
+      verified.lease = null;
+      this.synchronizedPin = null;
+      return committed;
+    } catch (error: unknown) {
+      verified.lease?.dispose();
+      if (error instanceof LocalSecretStoreError) throw error;
+      throw new LocalSecretStoreError('PROTECTOR_MIGRATION_VERIFICATION_FAILED');
+    }
+  }
+
+  async protectorProfile(): Promise<LocalSecretVault['masterKeyProtection']['profile'] | null> {
+    return (await this.store.load())?.masterKeyProtection.profile ?? null;
   }
 
   async setSecret(input: {
     alias: string;
     plaintext: string;
-    passphrase: Uint8Array;
+    passphrase?: Uint8Array;
   }): Promise<LocalSecretVault> {
     const alias = LocalSecretAliasSchema.safeParse(input.alias);
     const plaintext = LocalSecretTextSchema.safeParse(input.plaintext);
     if (!alias.success) throw new LocalSecretStoreError('SECRET_ALIAS_INVALID');
     if (!plaintext.success) throw new LocalSecretStoreError('SECRET_VALUE_INVALID');
     const current = await this.requireUnlockedVault();
-    const masterKey = this.requireMasterKey();
     const timestamp = this.now().toISOString();
     const recordId = randomUUID();
     const secretVersionId = randomUUID();
-    const record = encryptLocalSecretRecord({
-      plaintext: plaintext.data,
-      masterKey,
-      aad: recordAad(current, alias.data, recordId, secretVersionId),
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
+    const record = this.requireMasterKeyLease().use((masterKey) =>
+      encryptLocalSecretRecord({
+        plaintext: plaintext.data,
+        masterKey,
+        aad: recordAad(current, alias.data, recordId, secretVersionId),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+    );
     const records = [...current.records.filter((item) => item.alias !== alias.data), record]
       .sort((left, right) => left.alias.localeCompare(right.alias));
     return this.commitMutation(current, records, input.passphrase, timestamp);
   }
 
-  async removeSecret(input: { alias: string; passphrase: Uint8Array }): Promise<LocalSecretVault> {
+  async removeSecret(input: { alias: string; passphrase?: Uint8Array }): Promise<LocalSecretVault> {
     const alias = LocalSecretAliasSchema.safeParse(input.alias);
     if (!alias.success) throw new LocalSecretStoreError('SECRET_ALIAS_INVALID');
     const current = await this.requireUnlockedVault();
@@ -166,11 +279,18 @@ export class LocalSecretVaultService {
       for (const alias of unique) {
         const record = vault.records.find((item) => item.alias === alias);
         if (record === undefined) throw new LocalSecretStoreError('SECRET_NOT_FOUND');
-        values[alias] = decryptLocalSecretRecord({
-          record,
-          masterKey: this.requireMasterKey(),
-          aad: recordAad(vault, alias, record.recordId, record.secretVersionId),
-        });
+        values[alias] = this.requireMasterKeyLease().use((masterKey) =>
+          decryptLocalSecretRecord({
+            record,
+            masterKey,
+            aad: recordAad(
+              vault,
+              alias,
+              record.recordId,
+              record.secretVersionId,
+            ),
+          }),
+        );
       }
       return values;
     } catch (error: unknown) {
@@ -192,7 +312,7 @@ export class LocalSecretVaultService {
   }
 
   async isReady(): Promise<boolean> {
-    if (this.masterKey === null || this.unlockedVaultId === null || this.synchronizedPin === null) return false;
+    if (this.masterKeyLease === null || this.unlockedVaultId === null || this.synchronizedPin === null) return false;
     try {
       const vault = await this.requireUnlockedVault();
       return localSecretInventoryMatches(vaultPin(vault), this.synchronizedPin);
@@ -205,7 +325,7 @@ export class LocalSecretVaultService {
     try {
       const vault = await this.store.load();
       if (vault === null) return { status: 'unavailable', vaultRevision: null, configuredSecretCount: 0, synchronized: false };
-      const unlocked = this.masterKey !== null && this.unlockedVaultId === vault.vaultId;
+      const unlocked = this.masterKeyLease !== null && this.unlockedVaultId === vault.vaultId;
       return {
         status: unlocked ? 'ready' : 'locked',
         vaultRevision: vault.revision,
@@ -220,8 +340,8 @@ export class LocalSecretVaultService {
   }
 
   async dispose(): Promise<void> {
-    this.masterKey?.fill(0);
-    this.masterKey = null;
+    this.masterKeyLease?.dispose();
+    this.masterKeyLease = null;
     this.unlockedVaultId = null;
     this.synchronizedPin = null;
   }
@@ -229,7 +349,7 @@ export class LocalSecretVaultService {
   private async commitMutation(
     current: LocalSecretVault,
     records: LocalSecretVault['records'],
-    passphrase: Uint8Array,
+    passphrase: Uint8Array | undefined,
     timestamp: string,
   ): Promise<LocalSecretVault> {
     const revision = current.revision + 1;
@@ -241,11 +361,13 @@ export class LocalSecretVaultService {
       vaultRevision: revision,
       entries,
     });
-    const protection = await this.protector.protect({
-      masterKey: this.requireMasterKey(),
-      passphrase,
-      aad: masterKeyAad({ ...current, revision, inventoryDigest }),
-    });
+    const protection = await this.requireMasterKeyLease().use((masterKey) =>
+      this.requireProtector(current.masterKeyProtection.profile).protect({
+        masterKey,
+        ...(passphrase === undefined ? {} : { passphrase }),
+        aad: masterKeyAad({ ...current, revision, inventoryDigest }),
+      }),
+    );
     const next = LocalSecretVaultSchema.parse({ ...current, revision, inventoryDigest,
       masterKeyProtection: protection, records, updatedAt: timestamp });
     await this.store.replace(current.revision, next);
@@ -261,7 +383,7 @@ export class LocalSecretVaultService {
 
   private async requireUnlockedVault(): Promise<LocalSecretVault> {
     const vault = await this.requireVault();
-    if (this.masterKey === null || this.unlockedVaultId !== vault.vaultId) {
+    if (this.masterKeyLease === null || this.unlockedVaultId !== vault.vaultId) {
       throw new LocalSecretStoreError('VAULT_LOCKED');
     }
     this.assertInventoryDigest(vault);
@@ -279,14 +401,43 @@ export class LocalSecretVaultService {
     if (digest !== vault.inventoryDigest) throw new LocalSecretStoreError('VAULT_CORRUPTED');
   }
 
-  private requireMasterKey(): Uint8Array {
-    if (this.masterKey === null) throw new LocalSecretStoreError('VAULT_LOCKED');
-    return this.masterKey;
+  private assertRecordsDecryptable(vault: LocalSecretVault, lease: MasterKeyLease): void {
+    for (const record of vault.records) {
+      const plaintext = lease.use((masterKey) =>
+        decryptLocalSecretRecord({
+          record,
+          masterKey,
+          aad: recordAad(
+            vault,
+            record.alias,
+            record.recordId,
+            record.secretVersionId,
+          ),
+        }),
+      );
+      // JavaScript strings cannot be reliably zeroed; never retain or log it.
+      void plaintext;
+    }
   }
 
-  private async adoptMasterKey(masterKey: Uint8Array, vaultId: string): Promise<void> {
+  private requireMasterKeyLease(): MasterKeyLease {
+    if (this.masterKeyLease === null) throw new LocalSecretStoreError('VAULT_LOCKED');
+    return this.masterKeyLease;
+  }
+
+  private requireProtector(
+    profile: LocalSecretVault['masterKeyProtection']['profile'],
+  ): LocalSecretMasterKeyProtector {
+    const protector = this.protectors.find((candidate) => candidate.profile === profile);
+    if (protector === undefined) {
+      throw new LocalSecretStoreError('MASTER_KEY_PROTECTOR_UNSUPPORTED');
+    }
+    return protector;
+  }
+
+  private async adoptMasterKey(masterKeyLease: MasterKeyLease, vaultId: string): Promise<void> {
     await this.dispose();
-    this.masterKey = Uint8Array.from(masterKey);
+    this.masterKeyLease = masterKeyLease;
     this.unlockedVaultId = vaultId;
   }
 }

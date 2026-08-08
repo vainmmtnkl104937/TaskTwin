@@ -14,3 +14,4 @@ packages/database/src/generated/
 .DS_Store
 Thumbs.db
 *.log
+apps/local-runner/windows/vendor/**/*.exe

@@ -43,6 +43,42 @@ describe('runner capabilities', () => {
       'workflow_extraction_v1',
     ]);
   });
+
+  it('accepts strict service runtime metadata and rejects local identity data', () => {
+    const valid = {
+      schemaVersion: 1,
+      runnerVersion: '0.1.0',
+      capabilities: [
+        'runner_service_v1',
+        'os_native_secret_unlock_v1',
+      ],
+      runtime: {
+        schemaVersion: 1,
+        runtimeMode: 'service',
+        autonomyLevel: 'boot_resilient',
+        serviceStatus: 'running',
+        secretUnlockMode: 'os_native',
+        restartResilient: true,
+      },
+    };
+    expect(RunnerHeartbeatRequestSchema.parse(valid).runtime).toEqual(
+      valid.runtime,
+    );
+    for (const prohibited of [
+      { hostname: 'private-host' },
+      { serviceAccount: 'NT AUTHORITY\\LocalService' },
+      { protectedKey: 'forbidden-protected-key' },
+      { instanceId: 'forbidden-instance-id' },
+      { vaultPath: 'C:\\private\\vault.json' },
+    ]) {
+      expect(
+        RunnerHeartbeatRequestSchema.safeParse({
+          ...valid,
+          runtime: { ...valid.runtime, ...prohibited },
+        }).success,
+      ).toBe(false);
+    }
+  });
 });
 
 describe('runner device metadata', () => {

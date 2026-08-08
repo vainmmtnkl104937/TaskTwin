@@ -289,6 +289,41 @@ enum RunnerSecretStoreStatus {
   @@map("runner_secret_store_status")
 }
 
+enum RunnerRuntimeMode {
+  interactive
+  unattended_process
+  service
+
+  @@map("runner_runtime_mode")
+}
+
+enum RunnerAutonomyLevel {
+  interactive
+  process_unattended
+  boot_resilient
+
+  @@map("runner_autonomy_level")
+}
+
+enum RunnerServiceStatus {
+  not_applicable
+  starting
+  running
+  degraded
+  draining
+  stopped
+
+  @@map("runner_service_status")
+}
+
+enum RunnerSecretUnlockMode {
+  none
+  manual
+  os_native
+
+  @@map("runner_secret_unlock_mode")
+}
+
 enum WorkflowRunSecretResolutionMode {
   LOCAL_STORE
 
@@ -543,6 +578,13 @@ model RunnerDevice {
   workflowRuns           WorkflowRun[]
   capabilities           String[]                        @default([])
   capabilitiesUpdatedAt  DateTime?                       @map("capabilities_updated_at") @db.Timestamptz(3)
+  runtimeMode             RunnerRuntimeMode?              @map("runtime_mode")
+  autonomyLevel           RunnerAutonomyLevel?            @map("autonomy_level")
+  serviceStatus           RunnerServiceStatus?            @map("service_status")
+  secretUnlockMode        RunnerSecretUnlockMode?         @map("secret_unlock_mode")
+  restartResilient        Boolean?                         @map("restart_resilient")
+  runtimeMetadataRevision Int                              @default(0) @map("runtime_metadata_revision")
+  runtimeMetadataUpdatedAt DateTime?                       @map("runtime_metadata_updated_at") @db.Timestamptz(3)
   encryptionKeys         RunnerEncryptionKey[]
   runInputPreparations   WorkflowRunInputPreparation[]
   approvalRequests       WorkflowApprovalRequest[]

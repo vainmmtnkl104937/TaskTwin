@@ -394,3 +394,16 @@ Session 28 excludes public Prometheus metrics, Grafana, OpenTelemetry, distribut
 Implemented encrypted Local Runner secret storage for unattended scheduled workflows, safe inventory synchronization, revision rollback protection, readiness/occurrence checks and claim-time inventory pinning. The Control Plane remains outside the plaintext boundary.
 
 Web secret entry/reveal/export, environment fallback, cloud providers, automatic OS unlock, secret sharing, binary material, master-key rotation and forensic erasure guarantees remain future work.
+
+# Session 30: Windows production Runner service
+
+Implemented explicit Interactive, Unattended Process and Windows Service modes;
+truthful process-unattended versus boot-resilient autonomy; one-process local
+locking; bounded reconnect; graceful drain; non-resumable crash recovery; and
+strict safe runtime metadata in Runner Detail.
+
+Added explicit passphrase-to-Windows-native protector migration with candidate
+reopen verification and DPAPI-NG startup auto-unlock. Existing Session 29
+process-unattended schedules remain compatible. macOS/Linux services and native
+protectors, MSI/signing, auto-update, durable run resume, remote service
+management, master-key rotation and secret backup remain out of scope.

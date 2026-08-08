@@ -15,6 +15,11 @@ export interface LocalSecretVaultStore {
   load(): Promise<LocalSecretVault | null>;
   create(vault: LocalSecretVault): Promise<void>;
   replace(expectedRevision: number, vault: LocalSecretVault): Promise<void>;
+  replaceVerified(
+    expectedRevision: number,
+    buildCandidate: (current: LocalSecretVault) => Promise<LocalSecretVault>,
+    verifyCandidate: (candidate: LocalSecretVault) => Promise<void>,
+  ): Promise<LocalSecretVault>;
 }
 
 export class FileLocalSecretVaultStore implements LocalSecretVaultStore {
@@ -56,9 +61,23 @@ export class FileLocalSecretVaultStore implements LocalSecretVaultStore {
   }
 
   async replace(expectedRevision: number, vault: LocalSecretVault): Promise<void> {
+    await this.replaceVerified(
+      expectedRevision,
+      async () => vault,
+      async () => undefined,
+    );
+  }
+
+  async replaceVerified(
+    expectedRevision: number,
+    buildCandidate: (current: LocalSecretVault) => Promise<LocalSecretVault>,
+    verifyCandidate: (candidate: LocalSecretVault) => Promise<void>,
+  ): Promise<LocalSecretVault> {
+    let committed: LocalSecretVault | null = null;
     await this.withLock(async () => {
       const current = await this.load();
       if (current === null) throw new LocalSecretStoreError('VAULT_NOT_INITIALIZED');
+      const vault = LocalSecretVaultSchema.parse(await buildCandidate(current));
       if (current.revision !== expectedRevision || vault.revision !== expectedRevision + 1) {
         throw new LocalSecretStoreError('VAULT_REVISION_CONFLICT');
       }
@@ -69,8 +88,11 @@ export class FileLocalSecretVaultStore implements LocalSecretVaultStore {
       ) {
         throw new LocalSecretStoreError('VAULT_BINDING_INVALID');
       }
-      await this.writeAtomic(LocalSecretVaultSchema.parse(vault));
+      await this.writeAtomic(vault, verifyCandidate);
+      committed = vault;
     });
+    if (committed === null) throw new LocalSecretStoreError('VAULT_UNAVAILABLE');
+    return committed;
   }
 
   private async withLock(operation: () => Promise<void>): Promise<void> {
@@ -93,7 +115,10 @@ export class FileLocalSecretVaultStore implements LocalSecretVaultStore {
     }
   }
 
-  private async writeAtomic(vault: LocalSecretVault): Promise<void> {
+  private async writeAtomic(
+    vault: LocalSecretVault,
+    verifyCandidate?: (candidate: LocalSecretVault) => Promise<void>,
+  ): Promise<void> {
     const temporaryPath = join(this.directoryPath, `.local-secret-vault.${randomUUID()}.tmp`);
     let handle: Awaited<ReturnType<typeof open>> | null = null;
     try {
@@ -103,6 +128,12 @@ export class FileLocalSecretVaultStore implements LocalSecretVaultStore {
       await handle.close();
       handle = null;
       await chmod(temporaryPath, 0o600);
+      if (verifyCandidate !== undefined) {
+        const serialized = await readFile(temporaryPath, 'utf8');
+        const reopened = LocalSecretVaultSchema.safeParse(JSON.parse(serialized) as unknown);
+        if (!reopened.success) throw new LocalSecretStoreError('VAULT_CORRUPTED');
+        await verifyCandidate(reopened.data);
+      }
       await rename(temporaryPath, this.filePath);
       await chmod(this.filePath, 0o600);
     } catch (error: unknown) {

@@ -25,4 +25,8 @@ Passphrases and values are prompted locally without echo. There is deliberately 
 
 ## Limitations
 
-Only bounded UTF-8 text secrets are supported. Unlock is process-local and must be repeated after restart. Automatic OS-level unlock, forensic erasure guarantees, secret history, cloud backup, binary material, OTP generation, cloud providers, and cross-Runner sharing are not implemented.
+Only bounded UTF-8 text secrets are supported. Session 29 required a local
+unlock after restart; Session 30 later added an explicit Windows-native
+protector migration and service auto-unlock. Forensic erasure guarantees,
+secret history, cloud backup, binary material, OTP generation, cloud providers,
+and cross-Runner sharing remain unimplemented.

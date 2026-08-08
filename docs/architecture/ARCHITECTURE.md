@@ -839,3 +839,23 @@ The Operations Dashboard is deliberately not a public metrics endpoint. IDs, wor
 # Local Secret Store
 
 Secret plaintext belongs exclusively to the Local Runner. `packages/local-secret-store` defines portable vault, inventory, AAD and pin contracts, while the Runner owns platform cryptography, no-echo input, file locking and atomic persistence. The Control Plane stores only alias/random-version inventory metadata and monotonic revision trust. Scheduled runs pin this safe inventory identity and are rejected before execution when it changes. See [ADR-030](../adr/ADR-030-local-secret-store.md).
+
+# Windows production Runner service
+
+`@tasktwin/runner-service-runtime` defines platform-independent modes,
+autonomy, lifecycle, reconnect, drain and capability derivation. The Windows
+adapter remains in `apps/local-runner`: local WinSW service management,
+Runner-ID filesystem locking, DPAPI-NG master-key protection and fixed native
+process invocation never enter Control Plane packages.
+
+The service is `boot_resilient` only after SCM state, native vault unlock,
+vault integrity and inventory synchronization are verified. A native-unlock
+failure yields partial operation for non-secret workflows and withholds secret
+capabilities. Transient network failures reconnect with bounded backoff;
+revocation stops polling. Graceful stop drains and cleans up, while crash/reboot
+starts a fresh worker and never resumes an old WorkflowRun lease or browser.
+
+The Control Plane stores strict safe runtime metadata and audits accepted mode
+and protector transitions. Native blobs, local identities and paths never
+cross that boundary. See [ADR-031](../adr/ADR-031-production-runner-service.md)
+and [ADR-032](../adr/ADR-032-os-native-secret-protection.md).

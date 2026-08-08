@@ -19,6 +19,7 @@ import {
   LOCAL_SECRET_RECORD_PROFILE,
   LOCAL_SECRET_STORE_SCHEMA_VERSION,
   LocalSecretMasterKeyProtectionSchema,
+  InMemoryMasterKeyLease,
   LocalSecretStoreError,
   LocalSecretTextSchema,
   encodeLocalSecretMasterKeyAad,
@@ -28,6 +29,7 @@ import {
   type LocalSecretMasterKeyAadBase,
   type LocalSecretMasterKeyProtection,
   type LocalSecretMasterKeyProtector,
+  type MasterKeyLease,
   type LocalSecretRecordAad,
 } from '@tasktwin/local-secret-store';
 
@@ -95,14 +97,19 @@ function decryptAuthenticated(
 }
 
 export class NodeScryptMasterKeyProtector implements LocalSecretMasterKeyProtector {
+  readonly profile = LOCAL_SECRET_MASTER_KEY_PROFILE;
+
   async protect(input: {
     masterKey: Uint8Array;
-    passphrase: Uint8Array;
+    passphrase?: Uint8Array;
     aad: LocalSecretMasterKeyAadBase;
   }): Promise<LocalSecretMasterKeyProtection> {
     const salt = randomBytes(LOCAL_SECRET_KDF_SALT_BYTES);
     let wrappingKey: Buffer | null = null;
     try {
+      if (input.passphrase === undefined) {
+        throw new LocalSecretStoreError('VAULT_UNLOCK_FAILED');
+      }
       wrappingKey = await deriveKey(input.passphrase, salt);
       const kdf = {
         schemaVersion: 1 as const,
@@ -136,11 +143,17 @@ export class NodeScryptMasterKeyProtector implements LocalSecretMasterKeyProtect
 
   async unprotect(input: {
     protection: LocalSecretMasterKeyProtection;
-    passphrase: Uint8Array;
+    passphrase?: Uint8Array;
     aad: LocalSecretMasterKeyAadBase;
-  }): Promise<Uint8Array> {
+  }): Promise<MasterKeyLease> {
     const parsed = LocalSecretMasterKeyProtectionSchema.safeParse(input.protection);
-    if (!parsed.success) throw new LocalSecretStoreError('VAULT_UNLOCK_FAILED');
+    if (
+      !parsed.success ||
+      parsed.data.profile !== LOCAL_SECRET_MASTER_KEY_PROFILE ||
+      input.passphrase === undefined
+    ) {
+      throw new LocalSecretStoreError('VAULT_UNLOCK_FAILED');
+    }
     const salt = Buffer.from(parsed.data.kdf.salt, 'base64url');
     let wrappingKey: Buffer | null = null;
     try {
@@ -155,7 +168,9 @@ export class NodeScryptMasterKeyProtector implements LocalSecretMasterKeyProtect
         plaintext.fill(0);
         throw new Error('Invalid master key.');
       }
-      return plaintext;
+      const lease = new InMemoryMasterKeyLease(plaintext);
+      plaintext.fill(0);
+      return lease;
     } catch {
       throw new LocalSecretStoreError('VAULT_UNLOCK_FAILED');
     } finally {

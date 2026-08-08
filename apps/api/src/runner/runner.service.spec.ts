@@ -55,6 +55,57 @@ describe('RunnerService heartbeat', () => {
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it('persists and returns only strict safe runtime metadata', async () => {
+    const runtimeReport = {
+      schemaVersion: 1 as const,
+      runtimeMode: 'service' as const,
+      autonomyLevel: 'boot_resilient' as const,
+      serviceStatus: 'running' as const,
+      secretUnlockMode: 'os_native' as const,
+      restartResilient: true,
+    };
+    const runtimeMetadata = {
+      ...runtimeReport,
+      runtimeMetadataRevision: 2,
+    };
+    const heartbeat = vi.fn().mockResolvedValue(runtimeMetadata);
+    const service = new RunnerService({ heartbeat } as unknown as RunnerRepository);
+    await expect(
+      service.heartbeat(runner, {
+        schemaVersion: 1,
+        runnerVersion: '0.1.0',
+        capabilities: ['runner_service_v1', 'os_native_secret_unlock_v1'],
+        runtime: runtimeReport,
+      }),
+    ).resolves.toMatchObject({ runtime: runtimeMetadata });
+    expect(heartbeat).toHaveBeenCalledWith(
+      expect.objectContaining({ runtime: runtimeReport }),
+    );
+    expect(JSON.stringify(heartbeat.mock.calls)).not.toContain('protectedKey');
+    expect(JSON.stringify(heartbeat.mock.calls)).not.toContain('serviceAccount');
+  });
+
+  it('rejects protected-key and local identity fields in heartbeat metadata', async () => {
+    const heartbeat = vi.fn();
+    const service = new RunnerService({ heartbeat } as unknown as RunnerRepository);
+    await expect(
+      service.heartbeat(runner, {
+        schemaVersion: 1,
+        runnerVersion: '0.1.0',
+        runtime: {
+          schemaVersion: 1,
+          runtimeMode: 'service',
+          autonomyLevel: 'boot_resilient',
+          serviceStatus: 'running',
+          secretUnlockMode: 'os_native',
+          restartResilient: true,
+          protectedKey: 'must-never-cross-the-boundary',
+        },
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(heartbeat).not.toHaveBeenCalled();
+  });
 });
 
 describe('RunnerService encryption key registration', () => {

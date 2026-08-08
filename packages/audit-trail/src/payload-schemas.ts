@@ -511,6 +511,32 @@ export const RunnerSecretInventoryUpdatedPayloadSchema = z.object({
   inventoryDigest: DigestSchema,
 }).strict();
 
+const RunnerRuntimeModeValueSchema = z.enum([
+  'interactive', 'unattended_process', 'service',
+]);
+const RunnerAutonomyValueSchema = z.enum([
+  'interactive', 'process_unattended', 'boot_resilient',
+]);
+const RunnerServiceStatusValueSchema = z.enum([
+  'not_applicable', 'starting', 'running', 'degraded', 'draining', 'stopped',
+]);
+const RunnerSecretUnlockModeValueSchema = z.enum(['none', 'manual', 'os_native']);
+
+export const RunnerRuntimeModeChangedPayloadSchema = z.object({
+  runnerDeviceId: UuidSchema,
+  previousRuntimeMode: RunnerRuntimeModeValueSchema.nullable(),
+  runtimeMode: RunnerRuntimeModeValueSchema,
+  previousAutonomyLevel: RunnerAutonomyValueSchema.nullable(),
+  autonomyLevel: RunnerAutonomyValueSchema,
+  serviceStatus: RunnerServiceStatusValueSchema,
+}).strict();
+
+export const RunnerSecretProtectorChangedPayloadSchema = z.object({
+  runnerDeviceId: UuidSchema,
+  previousUnlockMode: RunnerSecretUnlockModeValueSchema.nullable(),
+  unlockMode: RunnerSecretUnlockModeValueSchema,
+}).strict();
+
 export const AUDIT_PAYLOAD_SCHEMAS = {
   'workflow.created': WorkflowCreatedPayloadSchema,
   'workflow_version.created': WorkflowVersionCreatedPayloadSchema,
@@ -561,6 +587,8 @@ export const AUDIT_PAYLOAD_SCHEMAS = {
   'notification.alert.resolved': NotificationAlertResolvedPayloadSchema,
   'notification.delivery.dead_lettered': NotificationDeliveryDeadLetteredPayloadSchema,
   'runner.secret_inventory.updated': RunnerSecretInventoryUpdatedPayloadSchema,
+  'runner.runtime_mode.changed': RunnerRuntimeModeChangedPayloadSchema,
+  'runner.secret_protector.changed': RunnerSecretProtectorChangedPayloadSchema,
 } as const satisfies Record<AuditEventType, z.ZodType>;
 
 export function parseAuditPayload<EventType extends AuditEventType>(

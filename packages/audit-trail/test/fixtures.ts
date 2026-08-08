@@ -350,6 +350,19 @@ export const VALID_PAYLOADS: AuditPayloadByType = {
     configuredSecretCount: 3,
     inventoryDigest: DIGEST,
   },
+  'runner.runtime_mode.changed': {
+    runnerDeviceId: RUNNER_ID,
+    previousRuntimeMode: 'unattended_process',
+    runtimeMode: 'service',
+    previousAutonomyLevel: 'process_unattended',
+    autonomyLevel: 'boot_resilient',
+    serviceStatus: 'running',
+  },
+  'runner.secret_protector.changed': {
+    runnerDeviceId: RUNNER_ID,
+    previousUnlockMode: 'manual',
+    unlockMode: 'os_native',
+  },
 };
 
 export function auditInput<EventType extends AuditEventType>(

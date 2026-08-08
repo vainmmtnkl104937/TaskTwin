@@ -12,10 +12,13 @@ import {
   LOCAL_SECRET_KDF_P,
   LOCAL_SECRET_KDF_R,
   LOCAL_SECRET_MASTER_KEY_PROFILE,
+  MAX_NATIVE_PROTECTED_KEY_BYTES,
   LOCAL_SECRET_RECORD_PROFILE,
   LOCAL_SECRET_STORE_SCHEMA_VERSION,
   MAX_LOCAL_SECRET_CHARACTERS,
   MAX_LOCAL_SECRET_RECORDS,
+  WINDOWS_NATIVE_MASTER_KEY_ALGORITHM,
+  WINDOWS_NATIVE_MASTER_KEY_PROFILE,
 } from './constants.js';
 
 export const LocalSecretUuidSchema = z.string().uuid();
@@ -56,7 +59,7 @@ export const LocalSecretScryptParametersSchema = z.strictObject({
   keyLength: z.literal(32),
 });
 
-export const LocalSecretMasterKeyProtectionSchema = z.strictObject({
+export const PassphraseLocalSecretMasterKeyProtectionSchema = z.strictObject({
   schemaVersion: z.literal(LOCAL_SECRET_STORE_SCHEMA_VERSION),
   profile: z.literal(LOCAL_SECRET_MASTER_KEY_PROFILE),
   kdf: LocalSecretScryptParametersSchema,
@@ -64,6 +67,21 @@ export const LocalSecretMasterKeyProtectionSchema = z.strictObject({
   iv: LocalSecretBase64UrlSchema.max(64),
   ciphertext: LocalSecretBase64UrlSchema.max(256),
 });
+
+export const WindowsNativeLocalSecretMasterKeyProtectionSchema = z.strictObject({
+  schemaVersion: z.literal(LOCAL_SECRET_STORE_SCHEMA_VERSION),
+  profile: z.literal(WINDOWS_NATIVE_MASTER_KEY_PROFILE),
+  algorithm: z.literal(WINDOWS_NATIVE_MASTER_KEY_ALGORITHM),
+  bindingProfile: z.literal('windows_machine_and_vault_acl_v1'),
+  protectedKey: LocalSecretBase64UrlSchema.max(
+    Math.ceil((MAX_NATIVE_PROTECTED_KEY_BYTES * 4) / 3) + 4,
+  ),
+});
+
+export const LocalSecretMasterKeyProtectionSchema = z.discriminatedUnion('profile', [
+  PassphraseLocalSecretMasterKeyProtectionSchema,
+  WindowsNativeLocalSecretMasterKeyProtectionSchema,
+]);
 
 export const EncryptedLocalSecretRecordSchema = z.strictObject({
   schemaVersion: z.literal(LOCAL_SECRET_STORE_SCHEMA_VERSION),
@@ -191,6 +209,12 @@ export const LocalSecretMasterKeyAadSchema = LocalSecretMasterKeyAadBaseSchema.e
 export type LocalSecretStoreStatus = z.infer<typeof LocalSecretStoreStatusSchema>;
 export type LocalSecretInventoryEntry = z.infer<typeof LocalSecretInventoryEntrySchema>;
 export type LocalSecretMasterKeyProtection = z.infer<typeof LocalSecretMasterKeyProtectionSchema>;
+export type PassphraseLocalSecretMasterKeyProtection = z.infer<
+  typeof PassphraseLocalSecretMasterKeyProtectionSchema
+>;
+export type WindowsNativeLocalSecretMasterKeyProtection = z.infer<
+  typeof WindowsNativeLocalSecretMasterKeyProtectionSchema
+>;
 export type EncryptedLocalSecretRecord = z.infer<typeof EncryptedLocalSecretRecordSchema>;
 export type LocalSecretVault = z.infer<typeof LocalSecretVaultSchema>;
 export type LocalSecretInventorySnapshot = z.infer<typeof LocalSecretInventorySnapshotSchema>;

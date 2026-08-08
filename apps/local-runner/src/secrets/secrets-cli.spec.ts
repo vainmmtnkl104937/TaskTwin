@@ -67,6 +67,10 @@ describe('runner secrets CLI', () => {
       prompt, transport, output: { write: (message) => output.push(message) } });
 
     await expect(invoke(['init'])).resolves.toBe(0);
+    await expect(invoke(['protector', 'status'])).resolves.toBe(0);
+    expect(output).toContain(
+      'Local Secret Store protector: passphrase; automatic unlock unavailable.',
+    );
     await expect(invoke(['set', 'LOGIN_PASSWORD'])).resolves.toBe(0);
     await expect(invoke(['list'])).resolves.toBe(0);
     expect(output.join('\n')).toContain('LOGIN_PASSWORD');
@@ -82,6 +86,15 @@ describe('runner secrets CLI', () => {
     await expect(invoke(['init', 'argv-passphrase'])).rejects.toThrow(
       'accepts no arguments',
     );
+    await expect(
+      invoke([
+        'protector',
+        'migrate',
+        '--to',
+        'os-native',
+        'argv-passphrase',
+      ]),
+    ).rejects.toThrow('Only status and migrate --to os-native are supported');
     await expect(invoke(['remove', 'LOGIN_PASSWORD'])).resolves.toBe(0);
     expect((await vault.inventory()).entries).toEqual([]);
     await expect(invoke(['reveal', 'LOGIN_PASSWORD'])).rejects.toThrow(

@@ -23,6 +23,10 @@ import { LocatorRepairBrowserBridge } from '../locator-repair/browser-bridge.js'
 import { assertClaimedJobPolicy } from './policy-preflight.js';
 
 export class RunJobWorker {
+  private acceptingJobs = true;
+  private activeRun: Promise<void> | null = null;
+  private readonly pollingAbort = new AbortController();
+  private readonly forcedCancellation = new AbortController();
   constructor(
     private readonly transport: RunnerJobTransport,
     private readonly sessions: BrowserSessionFactory,
@@ -43,24 +47,57 @@ export class RunJobWorker {
     credential: StoredRunnerCredential,
     signal: AbortSignal,
   ): Promise<void> {
-    while (!signal.aborted) {
-      const claimRequest = RunnerJobClaimRequestSchema.parse({
-        schemaVersion: 1,
-        runProtocolVersion: 2,
-        workflowEngineSchemaVersion: 1,
-        runnerVersion: this.runnerVersion,
-        claimAttemptId: randomUUID(),
-        secretInventory: this.localInventoryPin?.(),
-      });
-      const claim = await this.claimWithRetry(credential, claimRequest);
-      if (claim.status === 'no_job') {
-        await this.clock
-          .sleep(claim.pollAfterSeconds * 1_000, signal)
-          .catch(() => undefined);
-        continue;
+    const force = () => this.forcedCancellation.abort();
+    signal.addEventListener('abort', force, { once: true });
+    try {
+      while (!signal.aborted && this.acceptingJobs) {
+        const claimRequest = RunnerJobClaimRequestSchema.parse({
+          schemaVersion: 1,
+          runProtocolVersion: 2,
+          workflowEngineSchemaVersion: 1,
+          runnerVersion: this.runnerVersion,
+          claimAttemptId: randomUUID(),
+          secretInventory: this.localInventoryPin?.(),
+        });
+        const claim = await this.claimWithRetry(credential, claimRequest);
+        if (claim.status === 'no_job') {
+          await this.clock
+            .sleep(claim.pollAfterSeconds * 1_000, this.pollingAbort.signal)
+            .catch(() => undefined);
+          continue;
+        }
+        const active = this.executeClaimedJob(
+          credential,
+          claim.job,
+          this.forcedCancellation.signal,
+        );
+        this.activeRun = active;
+        try {
+          await active;
+        } finally {
+          if (this.activeRun === active) this.activeRun = null;
+        }
       }
-      await this.executeClaimedJob(credential, claim.job, signal);
+    } finally {
+      signal.removeEventListener('abort', force);
     }
+  }
+
+  beginDrain(): void {
+    this.acceptingJobs = false;
+    this.pollingAbort.abort();
+  }
+
+  hasActiveRun(): boolean {
+    return this.activeRun !== null;
+  }
+
+  async waitForActiveRun(): Promise<void> {
+    await this.activeRun;
+  }
+
+  forceCancelActiveRun(): void {
+    this.forcedCancellation.abort();
   }
 
   private async claimWithRetry(

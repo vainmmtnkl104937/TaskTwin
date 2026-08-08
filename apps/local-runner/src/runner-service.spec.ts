@@ -12,7 +12,11 @@ import {
   CredentialStoreError,
   InMemoryCredentialStore,
 } from './credential-store.js';
-import { LocalRunnerService, type RunnerClock } from './runner-service.js';
+import {
+  LocalRunnerService,
+  drainRunWorker,
+  type RunnerClock,
+} from './runner-service.js';
 import type { LocalSecretRuntime } from './secrets/local-secret-runtime.js';
 import type { LocalVaultSecretProvider } from './secrets/local-vault-secret-provider.js';
 
@@ -146,7 +150,7 @@ describe('LocalRunnerService', () => {
     expect(context.output.join('\n')).not.toContain(paired.credential);
   });
 
-  it('advertises local_secret_store_v1 only for a ready synchronized runtime with a provider', async () => {
+  it('does not advertise execution capabilities from a status probe before initialization', async () => {
     const context = setup();
     const credential: StoredRunnerCredential = {
       schemaVersion: 1,
@@ -183,7 +187,15 @@ describe('LocalRunnerService', () => {
     expect(context.transport.heartbeat).toHaveBeenCalledWith(
       credential,
       '0.1.0',
-      ['local_secret_store_v1'],
+      [],
+      {
+        schemaVersion: 1,
+        runtimeMode: 'unattended_process',
+        autonomyLevel: 'process_unattended',
+        serviceStatus: 'not_applicable',
+        secretUnlockMode: 'none',
+        restartResilient: false,
+      },
     );
   });
 
@@ -208,7 +220,247 @@ describe('LocalRunnerService', () => {
       })
       .mockRejectedValueOnce(new ControlPlaneClientError(401));
     await context.service.start(new AbortController().signal);
-    expect(context.output.join('\n')).toContain('heartbeat stopped');
+    expect(context.output.join('\n')).toContain('RUNNER_RUNTIME_REVOKED');
     expect(context.transport.heartbeat).toHaveBeenCalledTimes(2);
+  });
+
+  it('advertises service and native-secret capabilities only after verified startup', async () => {
+    const context = setup();
+    const credential: StoredRunnerCredential = {
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    };
+    await context.store.save(credential);
+    const controller = new AbortController();
+    context.transport.heartbeat.mockImplementation(async () => {
+      controller.abort();
+      return {
+        schemaVersion: 1,
+        runnerDeviceId: paired.runnerDeviceId,
+        workspaceId: paired.workspaceId,
+        connectionStatus: 'online',
+        nextHeartbeatInSeconds: 30,
+      };
+    });
+    const runtime = {
+      prepare: vi.fn(),
+      refresh: vi.fn(),
+      dispose: vi.fn(),
+      isReady: () => true,
+      isNativeUnlockVerified: () => true,
+      secretUnlockMode: () => 'os_native',
+      currentPin: () => ({
+        schemaVersion: 1,
+        vaultId: '53f321f7-ae3a-4707-b9d0-4f617ea116bd',
+        vaultRevision: 3,
+        inventoryDigest: 'a'.repeat(64),
+      }),
+    } as LocalSecretRuntime;
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      context.clock,
+      '0.1.0',
+      {} as never,
+      {} as never,
+      undefined,
+      undefined,
+      { headed: false, attended: false },
+      runtime,
+      {} as LocalVaultSecretProvider,
+      {
+        runtimeMode: 'service',
+        serviceVerified: true,
+        nativeProtectorAvailable: true,
+        drainTimeoutMilliseconds: 60_000,
+      },
+    );
+    await service.start(controller.signal);
+    const heartbeatCall = context.transport.heartbeat.mock.calls[0];
+    expect(heartbeatCall?.[2]).toEqual(
+      expect.arrayContaining([
+        'runner_service_v1',
+        'scheduled_execution_v1',
+        'local_secret_store_v1',
+        'os_native_secret_unlock_v1',
+      ]),
+    );
+    expect(heartbeatCall?.[3]).toEqual({
+      schemaVersion: 1,
+      runtimeMode: 'service',
+      autonomyLevel: 'boot_resilient',
+      serviceStatus: 'running',
+      secretUnlockMode: 'os_native',
+      restartResilient: true,
+    });
+    expect(runtime.prepare).toHaveBeenCalledBefore(
+      context.transport.heartbeat,
+    );
+    expect(runtime.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a service online for non-secret work after native unlock failure', async () => {
+    const context = setup();
+    await context.store.save({
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    });
+    const controller = new AbortController();
+    context.transport.heartbeat.mockImplementation(async () => {
+      controller.abort();
+      return {
+        schemaVersion: 1,
+        runnerDeviceId: paired.runnerDeviceId,
+        workspaceId: paired.workspaceId,
+        connectionStatus: 'online',
+        nextHeartbeatInSeconds: 30,
+      };
+    });
+    const runtime = {
+      prepare: vi.fn(),
+      refresh: vi.fn(),
+      dispose: vi.fn(),
+      isReady: () => false,
+      isNativeUnlockVerified: () => false,
+      secretUnlockMode: () => 'os_native',
+      currentPin: () => undefined,
+    } as LocalSecretRuntime;
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      context.clock,
+      '0.1.0',
+      {} as never,
+      {} as never,
+      undefined,
+      undefined,
+      { headed: false, attended: false },
+      runtime,
+      {} as LocalVaultSecretProvider,
+      {
+        runtimeMode: 'service',
+        serviceVerified: true,
+        nativeProtectorAvailable: true,
+        drainTimeoutMilliseconds: 60_000,
+      },
+    );
+    await service.start(controller.signal);
+    const capabilities = context.transport.heartbeat.mock.calls[0]?.[2] ?? [];
+    expect(capabilities).toContain('runner_service_v1');
+    expect(capabilities).toContain('scheduled_execution_v1');
+    expect(capabilities).not.toContain('local_secret_store_v1');
+    expect(capabilities).not.toContain('os_native_secret_unlock_v1');
+    expect(context.transport.heartbeat.mock.calls[0]?.[3]).toMatchObject({
+      autonomyLevel: 'process_unattended',
+      serviceStatus: 'degraded',
+      secretUnlockMode: 'os_native',
+      restartResilient: false,
+    });
+  });
+
+  it('uses bounded reconnect delay and reconnects after a transient outage', async () => {
+    const context = setup();
+    await context.store.save({
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    });
+    const controller = new AbortController();
+    context.transport.heartbeat
+      .mockRejectedValueOnce(new ControlPlaneClientError(503))
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        return {
+          schemaVersion: 1,
+          runnerDeviceId: paired.runnerDeviceId,
+          workspaceId: paired.workspaceId,
+          connectionStatus: 'online',
+          nextHeartbeatInSeconds: 30,
+        };
+      });
+    await context.service.start(controller.signal);
+    expect(context.transport.heartbeat).toHaveBeenCalledTimes(3);
+    expect(context.clock.sleep).toHaveBeenCalledWith(1_000, controller.signal);
+    expect(context.output).toContain('CONTROL_PLANE_UNAVAILABLE');
+  });
+});
+
+describe('service shutdown drain', () => {
+  it('allows an active run to finish and cancels the unused timeout', async () => {
+    let active = true;
+    let timeoutCancelled = false;
+    const forceCancelActiveRun = vi.fn();
+    const result = await drainRunWorker({
+      worker: {
+        hasActiveRun: () => active,
+        waitForActiveRun: async () => {
+          active = false;
+        },
+        forceCancelActiveRun,
+      },
+      timeoutMilliseconds: 60_000,
+      clock: {
+        now: () => new Date(),
+        sleep: (_milliseconds, signal) =>
+          new Promise<void>((_resolve, reject) =>
+            signal?.addEventListener(
+              'abort',
+              () => {
+                timeoutCancelled = true;
+                reject(new Error('cancelled'));
+              },
+              { once: true },
+            ),
+          ),
+      },
+      output: { write: vi.fn() },
+    });
+    expect(result).toBe('completed');
+    expect(timeoutCancelled).toBe(true);
+    expect(forceCancelActiveRun).not.toHaveBeenCalled();
+  });
+
+  it('uses safe cancellation after the bounded drain timeout', async () => {
+    let active = true;
+    let finish: (() => void) | undefined;
+    const activeRun = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const output: string[] = [];
+    const result = await drainRunWorker({
+      worker: {
+        hasActiveRun: () => active,
+        waitForActiveRun: () => activeRun,
+        forceCancelActiveRun: () => {
+          active = false;
+          finish?.();
+        },
+      },
+      timeoutMilliseconds: 10,
+      clock: {
+        now: () => new Date(),
+        sleep: async () => undefined,
+      },
+      output: { write: (message) => output.push(message) },
+    });
+    expect(result).toBe('cancelled');
+    expect(output).toEqual(['RUNNER_DRAIN_TIMED_OUT']);
+    expect(active).toBe(false);
   });
 });
