@@ -14,7 +14,8 @@
   "dependencies": {
     "@tasktwin/audit-trail": "workspace:*",
     "@tasktwin/database": "workspace:*",
-    "@tasktwin/operational-alerts": "workspace:*"
+    "@tasktwin/operational-alerts": "workspace:*",
+    "@tasktwin/operational-telemetry": "workspace:*"
   },
   "devDependencies": {
     "@tasktwin/config": "workspace:*",

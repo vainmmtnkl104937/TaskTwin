@@ -16,6 +16,7 @@
     "@tasktwin/secure-run-inputs": "workspace:*",
     "@tasktwin/audit-trail": "workspace:*",
     "@tasktwin/operational-alerts": "workspace:*",
+    "@tasktwin/operational-telemetry": "workspace:*",
     "@tasktwin/workflow-editor-core": "workspace:*",
     "@tasktwin/workflow-approval": "workspace:*",
     "@tasktwin/workflow-extraction": "workspace:*",

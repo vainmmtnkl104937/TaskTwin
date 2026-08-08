@@ -18,6 +18,8 @@ import { ExecutionPolicyModule } from './execution-policy/execution-policy.modul
 import { AuditTrailModule } from './audit-trail/audit-trail.module.js';
 import { WorkflowScheduleModule } from './workflow-schedule/workflow-schedule.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { OperationalTelemetryModule } from './operational-telemetry/operational-telemetry.module.js';
+import { OperationsModule } from './operations/operations.module.js';
 
 @Module({
   imports: [
@@ -37,6 +39,8 @@ import { NotificationsModule } from './notifications/notifications.module.js';
     WorkflowScheduleModule,
     SchedulerModule,
     NotificationsModule,
+    OperationalTelemetryModule,
+    OperationsModule,
   ],
   controllers: [HealthController],
   providers: [HealthService],

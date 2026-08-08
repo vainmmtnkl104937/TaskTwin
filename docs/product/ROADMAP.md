@@ -378,6 +378,13 @@ Playwright, browser recording, workflow execution, AI integration, cloud
 deployment, CI/CD, Docker, React Flow, or business database models. Dependencies
 for those capabilities will be evaluated only in the session that implements
 them.
+
 # Session 27: Operational notifications
 
 Implemented the in-app operational alert foundation: strict safe templates, transactional outbox, membership routing, crash-safe multi-worker delivery, bounded retry/dead letter, unread count, Notification Bell and Inbox. External channels, preferences, recurring reminders, digests, escalation and manual dead-letter replay remain future work.
+
+# Session 28: Privacy-safe operational telemetry
+
+Implemented separate API liveness/readiness, database-time component heartbeats, fixed-window Workspace operational snapshots and a Workspace Operations Dashboard. Aggregates cover component health, Runner capacity, runs, Approvals, Repairs, Schedules, notification delivery and authoritative Audit integrity without collecting workflow business or runtime data.
+
+Session 28 excludes public Prometheus metrics, Grafana, OpenTelemetry, distributed tracing, external APM, infrastructure auto-alerting, business analytics and user-defined windows.

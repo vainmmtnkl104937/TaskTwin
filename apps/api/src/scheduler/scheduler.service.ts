@@ -1,31 +1,51 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { WorkflowScheduleRepository } from '@tasktwin/database';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
+import {
+  ComponentHeartbeatRepository,
+  WorkflowScheduleRepository,
+} from '@tasktwin/database';
+
+import { ComponentHeartbeatReporter } from '../operational-telemetry/component-heartbeat.reporter.js';
 
 @Injectable()
 export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SchedulerService.name);
   private interval: NodeJS.Timeout | null = null;
+  private activeTick: Promise<void> | null = null;
+  private readonly heartbeat: ComponentHeartbeatReporter;
+  private enabled = false;
   private readonly POLL_INTERVAL_MS = 30_000;
 
-  constructor(private readonly repository: WorkflowScheduleRepository) {}
+  constructor(
+    private readonly repository: WorkflowScheduleRepository,
+    heartbeatRepository: ComponentHeartbeatRepository,
+  ) {
+    this.heartbeat = new ComponentHeartbeatReporter(
+      heartbeatRepository,
+      'scheduler',
+    );
+  }
 
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
     const enabled = process.env['SCHEDULER_ENABLED'] === 'true';
     if (!enabled) {
       this.logger.log('Scheduler is disabled via SCHEDULER_ENABLED env var');
       return;
     }
 
+    this.enabled = true;
+    await this.heartbeat.start();
     this.logger.log('Starting scheduler polling loop');
     this.interval = setInterval(() => {
-      this.tick().catch((err) => {
-        this.logger.error('Scheduler tick failed', err);
-      });
+      this.startTick();
     }, this.POLL_INTERVAL_MS);
+    this.interval.unref();
 
-    this.tick().catch((err) => {
-      this.logger.error('Initial scheduler tick failed', err);
-    });
+    this.startTick();
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -34,6 +54,19 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       this.interval = null;
       this.logger.log('Scheduler polling loop stopped');
     }
+    this.enabled = false;
+    await this.activeTick;
+    await this.heartbeat.stop();
+  }
+
+  private startTick(): void {
+    if (!this.enabled || this.activeTick !== null) return;
+    const tick = this.tick()
+      .catch(() => this.logger.error('SCHEDULER_TICK_FAILED'))
+      .finally(() => {
+        if (this.activeTick === tick) this.activeTick = null;
+      });
+    this.activeTick = tick;
   }
 
   private async tick(): Promise<void> {
@@ -42,21 +75,22 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
 
     try {
       await this.processDueSchedules(now);
-    } catch (err) {
-      this.logger.error('Failed to process due schedules', err);
+    } catch {
+      this.logger.error('SCHEDULER_PROCESS_DUE_FAILED');
     }
 
     try {
       await this.reconcileTimedOutOccurrences(now);
-    } catch (err) {
-      this.logger.error('Failed to reconcile timed-out occurrences', err);
+    } catch {
+      this.logger.error('SCHEDULER_RECONCILE_TIMEOUT_FAILED');
     }
 
     try {
       const count = await this.repository.reconcileTerminalOccurrences(now);
-      if (count > 0) this.logger.log(`Reconciled ${count} terminal occurrence(s)`);
-    } catch (err) {
-      this.logger.error('Failed to reconcile terminal occurrences', err);
+      if (count > 0)
+        this.logger.log(`Reconciled ${count} terminal occurrence(s)`);
+    } catch {
+      this.logger.error('SCHEDULER_RECONCILE_TERMINAL_FAILED');
     }
   }
 
@@ -88,8 +122,8 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
               `Schedule ${schedule.scheduleId} occurrence dispatched (id: ${result.occurrence.id})`,
             );
           }
-        } catch (err) {
-          this.logger.error(`Failed to process schedule ${schedule.scheduleId}`, err);
+        } catch {
+          this.logger.error('SCHEDULER_OCCURRENCE_FAILED');
         }
       }),
     );

@@ -16,6 +16,8 @@ import {
   ExecutionPolicyRepository,
   WorkflowScheduleRepository,
   WorkspaceAuditTrailRepository,
+  ComponentHeartbeatRepository,
+  AuditVerificationStateRepository,
   type PrismaClient,
 } from '@tasktwin/database';
 
@@ -35,6 +37,18 @@ import { OperationalAlertAppender } from '../operational-alerts/operational-aler
     PrismaService,
     DatabaseHealthService,
     OperationalAlertAppender,
+    {
+      provide: ComponentHeartbeatRepository,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: PrismaClient) =>
+        new ComponentHeartbeatRepository(client),
+    },
+    {
+      provide: AuditVerificationStateRepository,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: PrismaClient) =>
+        new AuditVerificationStateRepository(client),
+    },
     {
       provide: IdentityRepository,
       inject: [DATABASE_CLIENT],
@@ -133,6 +147,10 @@ import { OperationalAlertAppender } from '../operational-alerts/operational-aler
     WorkflowScheduleRepository,
     WorkspaceAuditTrailRepository,
     OperationalAlertAppender,
+    ComponentHeartbeatRepository,
+    AuditVerificationStateRepository,
+    PrismaService,
+    DATABASE_CLIENT,
   ],
 })
 export class DatabaseModule {}

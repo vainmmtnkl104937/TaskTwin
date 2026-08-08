@@ -766,7 +766,7 @@ that omits attempt-level and output-level events.
 ## Scheduled Execution
 
 TaskTwin supports scheduled workflow runs through a database-backed scheduler.
-The scheduler is implemented in `apps/local-runner` and is powered by the
+The scheduler is implemented in `apps/api/src/scheduler` and is powered by the
 framework-independent `packages/workflow-scheduling` package.
 
 ### Scheduler
@@ -821,8 +821,17 @@ timezone identifiers.
 - INTERRUPTED or side-effect-unknown runs trigger automatic schedule pause.
 - OWNER or ADMIN must review and manually resume.
 - No automatic retry or Run Now for scheduled runs.
+
 # Operational alerts and notification delivery
 
 Durable domain transitions can call the API `OperationalAlertAppender` with their existing Prisma transaction. The appender validates `@tasktwin/operational-alerts`, resolves recipients from current membership, persists the unique alert and per-user IN_APP outbox rows, and appends a safe audit event before commit. It never performs delivery.
 
 `apps/notification-worker` is a non-HTTP database consumer. PostgreSQL `SKIP LOCKED`, database time, worker fencing and expiring leases allow multiple instances and crash recovery. In-app delivery rechecks membership, creates a unique UserNotification, and completes the outbox message atomically. This is at-least-once processing with idempotent effects, bounded retry and a terminal dead-letter state.
+
+# Privacy-safe operational telemetry
+
+`@tasktwin/operational-telemetry` owns component-health, freshness, fixed-window, bucket, rate and strict snapshot logic without knowledge of NestJS, Prisma, React or infrastructure providers. API, enabled Scheduler and Notification Worker processes persist only random boot UUIDs and lifecycle timestamps using database time.
+
+Liveness is independent of PostgreSQL; readiness is a lightweight dependency/configuration check. Authorized Operations reads aggregate structured Workspace data directly and are not audit events. Audit integrity is distinct from process health: a chain is valid only after an authoritative full verification, and a later chain head returns it to `not_verified`.
+
+The Operations Dashboard is deliberately not a public metrics endpoint. IDs, workflow data, runtime values, secrets, locators, URLs and browser errors are not metric labels or snapshot fields. External telemetry vendors, distributed tracing and infrastructure alerting remain outside the architecture.

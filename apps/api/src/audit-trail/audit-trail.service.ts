@@ -8,6 +8,7 @@ import {
 import {
   RecordingRepository,
   WorkspaceAuditTrailRepository,
+  AuditVerificationStateRepository,
   type PrismaClient,
 } from '@tasktwin/database';
 import { Inject } from '@nestjs/common';
@@ -60,6 +61,7 @@ export class AuditTrailService {
     private readonly recordingRepository: RecordingRepository,
     @Inject(DATABASE_CLIENT) private readonly prisma: PrismaClient,
     private readonly operationalAlerts: OperationalAlertAppender,
+    private readonly auditVerificationState: AuditVerificationStateRepository,
   ) {}
 
   async listEvents(input: {
@@ -169,6 +171,7 @@ export class AuditTrailService {
 
   async verifyChain(input: {
     workspaceId: string;
+    actorUserId: string;
     role: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
     request: AuditVerifyRequest;
   }): Promise<AuditVerifyResponse> {
@@ -195,23 +198,81 @@ export class AuditTrailService {
         ? { expectedFirstSequence: input.request.fromSequence }
         : {}),
     });
-    if (!result.valid && result.failureCode !== undefined && result.failureSequence !== undefined) {
+    const completeVerification =
+      input.request.fromSequence === undefined &&
+      input.request.toSequence === undefined &&
+      result.valid &&
+      result.checkedCount === head.lastSequence &&
+      (head.lastSequence === 0 ||
+        (result.firstSequence === 1 &&
+          result.lastSequence === head.lastSequence));
+    const authoritativeFailure =
+      !result.valid &&
+      result.failureCode !== undefined &&
+      result.failureSequence !== undefined &&
+      (result.failureCode !== 'HEAD_HASH_MISMATCH' ||
+        result.lastSequence === head.lastSequence);
+    if (
+      authoritativeFailure &&
+      result.failureCode !== undefined &&
+      result.failureSequence !== undefined
+    ) {
       const failureCode = result.failureCode;
       const failureSequence = result.failureSequence;
-      const failureTime = events.find((event) => event.sequence === failureSequence)?.occurredAt
-        ?? head.lastEventAt?.toISOString() ?? '1970-01-01T00:00:00.000Z';
+      const failureTime =
+        events.find((event) => event.sequence === failureSequence)
+          ?.occurredAt ??
+        head.lastEventAt?.toISOString() ??
+        '1970-01-01T00:00:00.000Z';
       await this.prisma.$transaction(async (tx) => {
+        await this.auditVerificationState.upsert(tx, {
+          workspaceId: input.workspaceId,
+          valid: false,
+          checkedEventCount: result.checkedCount,
+          firstSequence: result.firstSequence,
+          lastSequence: result.lastSequence,
+          failureSequence,
+          safeFailureCode: failureCode,
+          verifiedByUserId: input.actorUserId,
+        });
         await this.operationalAlerts.append(tx, {
-          schemaVersion: 1, workspaceId: input.workspaceId,
+          schemaVersion: 1,
+          workspaceId: input.workspaceId,
           type: 'audit_integrity_failed',
-          source: { type: 'audit_verification_failure',
-            id: `${failureCode}:${failureSequence}` },
-          primaryEntity: { type: 'workspace_audit_chain', id: input.workspaceId },
+          source: {
+            type: 'audit_verification_failure',
+            id: `${failureCode}:${failureSequence}`,
+          },
+          primaryEntity: {
+            type: 'workspace_audit_chain',
+            id: input.workspaceId,
+          },
           relatedEntities: [],
-          template: { schemaVersion: 1, templateKey: 'audit_integrity_failed.v1',
-            failureKind: failureCode, failureSequence,
-            verifiedAt: failureTime },
-          actionTarget: { schemaVersion: 1, kind: 'audit', workspaceId: input.workspaceId },
+          template: {
+            schemaVersion: 1,
+            templateKey: 'audit_integrity_failed.v1',
+            failureKind: failureCode,
+            failureSequence,
+            verifiedAt: failureTime,
+          },
+          actionTarget: {
+            schemaVersion: 1,
+            kind: 'audit',
+            workspaceId: input.workspaceId,
+          },
+        });
+      });
+    } else if (completeVerification) {
+      await this.prisma.$transaction(async (tx) => {
+        await this.auditVerificationState.upsert(tx, {
+          workspaceId: input.workspaceId,
+          valid: true,
+          checkedEventCount: result.checkedCount,
+          firstSequence: result.firstSequence,
+          lastSequence: result.lastSequence,
+          failureSequence: null,
+          safeFailureCode: null,
+          verifiedByUserId: input.actorUserId,
         });
       });
     }
