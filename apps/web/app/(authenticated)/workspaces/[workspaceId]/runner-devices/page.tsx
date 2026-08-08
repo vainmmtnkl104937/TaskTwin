@@ -59,6 +59,33 @@ export default async function RunnerDevicesPage({
                 Status: {device.connectionStatus} · Last seen:{' '}
                 {device.lastSeenAt ?? 'Never'}
               </p>
+              <section aria-label="Local Secret Store status">
+                <h3>Local Secret Store</h3>
+                {device.localSecretStore ? (
+                  <>
+                    <p>
+                      Status: {device.localSecretStore.status} · Revision:{' '}
+                      {device.localSecretStore.vaultRevision ?? 'none'} · Configured aliases:{' '}
+                      {device.localSecretStore.configuredSecretCount}
+                    </p>
+                    <p className="metadata">
+                      Last inventory sync:{' '}
+                      {device.localSecretStore.lastSynchronizedAt ?? 'Never'}
+                    </p>
+                    {device.localSecretStore.aliases.length > 0 ? (
+                      <ul aria-label="Configured secret aliases">
+                        {device.localSecretStore.aliases.map((entry) => (
+                          <li key={entry.secretVersionId}>{entry.alias}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>No aliases are configured.</p>
+                    )}
+                  </>
+                ) : (
+                  <p>Unavailable. Configure locally with runner secrets init.</p>
+                )}
+              </section>
             </div>
             {result.access.canManage &&
             device.connectionStatus !== 'revoked' ? (

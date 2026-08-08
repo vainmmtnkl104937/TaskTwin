@@ -12,7 +12,13 @@ import {
   SecureRunInputRepository,
   SecureRunInputRepositoryError,
   type RunnerDeviceRecord,
+  RunnerSecretInventoryRepository,
+  RunnerSecretInventoryRepositoryError,
 } from '@tasktwin/database';
+import {
+  LocalSecretInventorySyncRequestSchema,
+  LocalSecretInventorySyncResponseSchema,
+} from '@tasktwin/local-secret-store';
 import {
   DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
   RUNNER_OFFLINE_AFTER_SECONDS,
@@ -47,6 +53,14 @@ function safeDevice(record: RunnerDeviceRecord, now: Date) {
     lastSeenAt: record.lastSeenAt?.toISOString() ?? null,
     revokedAt: record.revokedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
+    localSecretStore:
+      record.localSecretStore === null
+        ? null
+        : {
+            ...record.localSecretStore,
+            lastSynchronizedAt:
+              record.localSecretStore.lastSynchronizedAt?.toISOString() ?? null,
+          },
   };
 }
 
@@ -55,7 +69,50 @@ export class RunnerService {
   constructor(
     private readonly repository: RunnerRepository,
     private readonly secureInputs?: SecureRunInputRepository,
+    private readonly secretInventories?: RunnerSecretInventoryRepository,
   ) {}
+
+  async synchronizeSecretInventory(
+    runner: AuthenticatedRunner,
+    input: unknown,
+  ) {
+    const request = LocalSecretInventorySyncRequestSchema.safeParse(input);
+    if (!request.success || this.secretInventories === undefined) {
+      throw new BadRequestException({
+        code: 'LOCAL_SECRET_INVENTORY_INVALID',
+        message: 'The local secret inventory is invalid.',
+      });
+    }
+    try {
+      const result = await this.secretInventories.synchronize({
+        runnerDeviceId: runner.runnerDeviceId,
+        workspaceId: runner.workspaceId,
+        request: request.data,
+      });
+      return LocalSecretInventorySyncResponseSchema.parse({
+        schemaVersion: 1,
+        idempotent: result.idempotent,
+        vaultId: result.inventory.vaultId,
+        vaultRevision: result.inventory.vaultRevision,
+        inventoryDigest: result.inventory.inventoryDigest,
+        storeStatus: result.inventory.storeStatus,
+        synchronizedAt: result.inventory.lastSynchronizedAt.toISOString(),
+      });
+    } catch (error: unknown) {
+      if (error instanceof RunnerSecretInventoryRepositoryError) {
+        if (
+          error.code === 'RUNNER_UNAVAILABLE'
+        ) {
+          throw new ForbiddenException({ code: error.code });
+        }
+        throw new ConflictException({
+          code: error.code,
+          message: 'The local secret inventory conflicts with trusted state.',
+        });
+      }
+      throw error;
+    }
+  }
 
   async heartbeat(
     runner: AuthenticatedRunner,

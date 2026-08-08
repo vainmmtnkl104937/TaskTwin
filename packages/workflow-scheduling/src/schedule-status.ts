@@ -64,6 +64,8 @@ export const ScheduleSkipReasonSchema = z.enum([
   'nonexistent_local_time',
   /** DST: the local time is ambiguous (clocks fell back); the earlier instant was skipped. */
   'repeated_local_time',
+  'secret_readiness_failed',
+  'secret_inventory_changed_before_execution',
 ]);
 
 export type ScheduleSkipReason = z.infer<typeof ScheduleSkipReasonSchema>;
@@ -81,6 +83,7 @@ export const ScheduleAutoPauseReasonSchema = z.enum([
    * side-effect-unknown termination cause.
    */
   'ambiguous_outcome',
+  'secret_readiness_failed',
 ]);
 
 export type ScheduleAutoPauseReason = z.infer<

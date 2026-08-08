@@ -14,6 +14,7 @@ import {
 } from '@tasktwin/workflow-policy';
 import { RecoveryModeSchema } from '@tasktwin/workflow-recovery';
 import { z } from 'zod';
+import type { LocalSecretStoreStatus } from '@tasktwin/local-secret-store';
 
 import { SchedulingError } from './scheduling-errors.js';
 import { buildOccurrenceKey } from './occurrence-key.js';
@@ -42,6 +43,8 @@ export type ScheduleReadinessIssueCode =
   | 'WORKFLOW_DEFINITION_INVALID'
   | 'RUNTIME_INPUT_REQUIRED'
   | 'SECRET_REQUIRED'
+  | 'LOCAL_SECRET_STORE_NOT_READY'
+  | 'LOCAL_SECRET_ALIAS_MISSING'
   | 'FILE_INPUT_REQUIRED'
   | 'APPROVAL_STEP_FORBIDDEN'
   | 'MANUAL_REPAIR_FORBIDDEN'
@@ -112,9 +115,14 @@ function checkDefinition(definition: unknown): ScheduleReadinessIssue | null {
 
 function checkNoInputsRequired(
   workflow: WorkflowDefinition,
+  localSecrets?: {
+    capabilityAvailable: boolean;
+    status: LocalSecretStoreStatus;
+    synchronized: boolean;
+    aliases: readonly string[];
+  },
 ): ScheduleReadinessIssue | null {
   const analysis = analyzeWorkflowInputs(workflow);
-  if (!analysis.hasBlockingIssues) return null;
 
   for (const issue of analysis.issues) {
     if (issue.severity !== 'blocking') continue;
@@ -141,10 +149,24 @@ function checkNoInputsRequired(
 
   // Check for secret requirements
   if (analysis.secretRequirements.length > 0) {
-    return {
-      code: 'SECRET_REQUIRED',
-      message: 'Workflow requires secret values that cannot be stored in a schedule.',
-    };
+    if (
+      localSecrets === undefined ||
+      !localSecrets.capabilityAvailable ||
+      localSecrets.status !== 'ready' ||
+      !localSecrets.synchronized
+    ) {
+      return {
+        code: 'LOCAL_SECRET_STORE_NOT_READY',
+        message: 'The selected Runner Local Secret Store is not ready and synchronized.',
+      };
+    }
+    const available = new Set(localSecrets.aliases);
+    if (analysis.secretRequirements.some((requirement) => !available.has(requirement.secretName))) {
+      return {
+        code: 'LOCAL_SECRET_ALIAS_MISSING',
+        message: 'The selected Runner is missing at least one required secret alias.',
+      };
+    }
   }
 
   // File inputs are tracked via compatibility checks
@@ -434,6 +456,12 @@ export interface ScheduleCreationReadinessInput {
   readonly executionPolicy: unknown;
   readonly executionPolicyDigest: string;
   readonly workflowDigest: string;
+  readonly localSecrets?: {
+    readonly capabilityAvailable: boolean;
+    readonly status: LocalSecretStoreStatus;
+    readonly synchronized: boolean;
+    readonly aliases: readonly string[];
+  };
 }
 
 export function analyzeScheduleCreationReadiness(
@@ -453,7 +481,7 @@ export function analyzeScheduleCreationReadiness(
   }
   const workflow = defParsed.data;
 
-  const inputIssue = checkNoInputsRequired(workflow);
+  const inputIssue = checkNoInputsRequired(workflow, input.localSecrets);
   if (inputIssue) issues.push(inputIssue);
 
   const stepIssue = checkNoForbiddenSteps(workflow);

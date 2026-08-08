@@ -5,9 +5,16 @@ import { ScheduleStatusBadge } from '@/components/schedules/schedule-status-badg
 import { CreateScheduleDialog } from '@/components/schedules/create-schedule-dialog';
 import { WorkspaceNav } from '@/components/workspace-nav';
 import { getAccessToken } from '@/lib/server/auth-session';
-import { ControlPlaneError, listWorkflowSchedules } from '@/lib/server/control-plane';
+import {
+  ControlPlaneError,
+  getWorkflowVersion,
+  listRunnerDevices,
+  listWorkflowSchedules,
+  listWorkflows,
+} from '@/lib/server/control-plane';
 import type { WorkflowScheduleRecord } from '@/lib/control-plane-contracts';
 import { ScheduleDefinitionSchema } from '@/lib/schedule-contracts';
+import { analyzeWorkflowInputs } from '@tasktwin/workflow-inputs';
 
 function formatDateTime(isoString: string | null): string {
   if (isoString === null) return '—';
@@ -70,8 +77,57 @@ export default async function SchedulesPage({
   }
 
   let result;
+  let workflowOptions: Array<{
+    id: string;
+    name: string;
+    versionId: string;
+    version: number;
+    requiredSecretAliases: string[];
+  }> = [];
+  let runnerOptions: Array<{
+    id: string;
+    name: string;
+    status: string;
+    localSecretStore?: {
+      status: string;
+      configuredSecretCount: number;
+      aliases: Array<{ alias: string; secretVersionId: string }>;
+    } | null;
+  }> = [];
   try {
-    result = await listWorkflowSchedules(accessToken, workspaceId);
+    const [scheduleResult, workflowResult, runnerResult] = await Promise.all([
+      listWorkflowSchedules(accessToken, workspaceId),
+      listWorkflows(accessToken, workspaceId),
+      listRunnerDevices(accessToken, workspaceId),
+    ]);
+    result = scheduleResult;
+    const published = workflowResult.workflows.filter(
+      (workflow) => workflow.status === 'published',
+    );
+    const details = await Promise.all(
+      published.map((workflow) =>
+        getWorkflowVersion(accessToken, workflow.latestVersionId),
+      ),
+    );
+    workflowOptions = details.map((detail, index) => ({
+      id: detail.workflowVersion.workflowId,
+      name: published[index]?.name ?? 'Published workflow',
+      versionId: detail.workflowVersion.id,
+      version: detail.workflowVersion.version,
+      requiredSecretAliases: analyzeWorkflowInputs(
+        detail.workflowVersion.definition,
+      ).secretRequirements.map((requirement) => requirement.secretName),
+    }));
+    runnerOptions = runnerResult.devices
+      .filter((runner) =>
+        runner.capabilities.includes('scheduled_execution_v1'),
+      )
+      .map((runner) => ({
+        id: runner.id,
+        name: runner.metadata.displayName,
+        status: runner.connectionStatus,
+        localSecretStore: runner.localSecretStore ?? null,
+      }));
   } catch (error: unknown) {
     if (error instanceof ControlPlaneError && error.status === 401) {
       redirect('/auth/expired');
@@ -90,7 +146,10 @@ export default async function SchedulesPage({
           {result.access.canEdit ? 'You can create and manage schedules.' : 'Read only.'}
         </p>
         {result.access.canEdit && (
-          <CreateScheduleDialog workspaceId={workspaceId} />
+          <CreateScheduleDialog
+            initialWorkflows={workflowOptions}
+            initialRunners={runnerOptions}
+          />
         )}
       </section>
       <section className="workflow-list" aria-label="Workflow schedules">

@@ -68,6 +68,40 @@ export async function acquireSecureRuntime(input: {
   }
 }
 
+export async function acquireLocalSecretRuntime(input: {
+  runtimeInput: Extract<ClaimedRunInput, { kind: 'local_secret_store' }>;
+  secretProvider: SecretProvider;
+  signal: AbortSignal;
+}): Promise<SecureRuntimeLease> {
+  let secretLease: SecretLease | null = null;
+  try {
+    secretLease = await input.secretProvider.acquire(
+      input.runtimeInput.secrets,
+      input.signal,
+    );
+    const resolver: WorkflowRuntimeValueResolver = {
+      hasVariable: () => false,
+      hasSecret: (name) => secretLease?.has(name) ?? false,
+      resolve: (source) =>
+        source.kind === 'secret'
+          ? requireSecret(secretLease, source.secretName)
+          : (() => {
+              throw new Error('Scheduled local-secret runs cannot use runtime variables.');
+            })(),
+    };
+    return {
+      resolver,
+      dispose: async () => {
+        await secretLease?.dispose();
+        secretLease = null;
+      },
+    };
+  } catch (error: unknown) {
+    await secretLease?.dispose();
+    throw error;
+  }
+}
+
 function requireSecret(lease: SecretLease | null, name: string): string {
   if (lease === null) throw new Error('Secret resolution is unavailable.');
   return lease.resolve(name);

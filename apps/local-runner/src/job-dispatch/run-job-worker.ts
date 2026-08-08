@@ -7,6 +7,7 @@ import {
 } from '@tasktwin/run-protocol';
 import type { StoredRunnerCredential } from '@tasktwin/runner-protocol';
 import type { SecretProvider } from '@tasktwin/secure-run-inputs';
+import type { LocalSecretInventoryPin } from '@tasktwin/local-secret-store';
 
 import type { RunnerJobTransport } from '../control-plane-client.js';
 import type { BrowserSessionFactory } from '../execution/browser-session.js';
@@ -14,7 +15,8 @@ import { LocalWorkflowExecutor } from '../execution/workflow-executor.js';
 import type { RunnerClock, RunnerOutput } from '../runner-service.js';
 import { RunProgressSink } from './run-progress-sink.js';
 import type { RunnerKeyManager } from '../secure-inputs/runner-key-manager.js';
-import { acquireSecureRuntime } from '../secure-inputs/secure-runtime.js';
+import { acquireLocalSecretRuntime, acquireSecureRuntime } from '../secure-inputs/secure-runtime.js';
+import type { LocalVaultSecretProvider } from '../secrets/local-vault-secret-provider.js';
 import { HttpApprovalCoordinator } from './http-approval-coordinator.js';
 import { HttpRecoveryCoordinator } from './http-recovery-coordinator.js';
 import { LocatorRepairBrowserBridge } from '../locator-repair/browser-bridge.js';
@@ -33,6 +35,8 @@ export class RunJobWorker {
       headed: boolean;
       attended: boolean;
     } = { headed: false, attended: false },
+    private readonly localSecretProvider?: LocalVaultSecretProvider,
+    private readonly localInventoryPin?: () => LocalSecretInventoryPin | undefined,
   ) {}
 
   async runLoop(
@@ -46,6 +50,7 @@ export class RunJobWorker {
         workflowEngineSchemaVersion: 1,
         runnerVersion: this.runnerVersion,
         claimAttemptId: randomUUID(),
+        secretInventory: this.localInventoryPin?.(),
       });
       const claim = await this.claimWithRetry(credential, claimRequest);
       if (claim.status === 'no_job') {
@@ -123,6 +128,17 @@ export class RunJobWorker {
         } catch {
           invalidSecureInput = true;
         }
+      }
+      if (job.runtimeInput.kind === 'local_secret_store') {
+        if (this.localSecretProvider === undefined) {
+          throw new Error('Local Secret Store support is unavailable.');
+        }
+        this.localSecretProvider.setExpectedPin(job.runtimeInput.inventory);
+        secureRuntime = await acquireLocalSecretRuntime({
+          runtimeInput: job.runtimeInput,
+          secretProvider: this.localSecretProvider,
+          signal: execution.signal,
+        });
       }
       const locatorRepairBridge =
         job.options.recoveryMode === 'automatic_safe_and_locator_proposals'

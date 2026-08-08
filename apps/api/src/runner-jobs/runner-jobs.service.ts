@@ -381,6 +381,9 @@ export class RunnerJobsService {
         leaseTokenHash: this.crypto.hashToken(token),
         now: new Date(),
         leaseExpiresAt: new Date(Date.now() + DEFAULT_LEASE_SECONDS * 1_000),
+        ...(request.data.secretInventory === undefined
+          ? {}
+          : { secretInventory: request.data.secretInventory }),
       });
       return RunnerJobClaimResponseSchema.parse(
         result.status === 'no_job'

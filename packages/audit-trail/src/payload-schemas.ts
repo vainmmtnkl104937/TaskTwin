@@ -409,6 +409,7 @@ export const ScheduleAutoPausedPayloadSchema = z
       'policy_review_required',
       'source_version_unavailable',
       'ambiguous_outcome',
+      'secret_readiness_failed',
     ]),
     autoPausedAt: AuditTimestampSchema,
     triggeringOccurrenceId: UuidSchema.optional(),
@@ -439,6 +440,8 @@ export const ScheduleOccurrenceSkippedPayloadSchema = z
       'missed_start_window',
       'nonexistent_local_time',
       'repeated_local_time',
+      'secret_readiness_failed',
+      'secret_inventory_changed_before_execution',
     ]),
     skippedAt: AuditTimestampSchema,
   })
@@ -500,6 +503,14 @@ export const NotificationDeliveryDeadLetteredPayloadSchema = z.object({
   recipientCount: CountSchema,
 }).strict();
 
+export const RunnerSecretInventoryUpdatedPayloadSchema = z.object({
+  runnerDeviceId: UuidSchema,
+  previousRevision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  newRevision: SequenceSchema,
+  configuredSecretCount: CountSchema,
+  inventoryDigest: DigestSchema,
+}).strict();
+
 export const AUDIT_PAYLOAD_SCHEMAS = {
   'workflow.created': WorkflowCreatedPayloadSchema,
   'workflow_version.created': WorkflowVersionCreatedPayloadSchema,
@@ -549,6 +560,7 @@ export const AUDIT_PAYLOAD_SCHEMAS = {
   'notification.alert.created': NotificationAlertCreatedPayloadSchema,
   'notification.alert.resolved': NotificationAlertResolvedPayloadSchema,
   'notification.delivery.dead_lettered': NotificationDeliveryDeadLetteredPayloadSchema,
+  'runner.secret_inventory.updated': RunnerSecretInventoryUpdatedPayloadSchema,
 } as const satisfies Record<AuditEventType, z.ZodType>;
 
 export function parseAuditPayload<EventType extends AuditEventType>(

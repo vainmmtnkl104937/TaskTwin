@@ -57,3 +57,7 @@ Every event carries a server-derived `sourceId` keyed on the workspace.
 The appender rejects duplicates with `AUDIT_SOURCE_CONFLICT` (HTTP 409).
 Client retries must regenerate the source identifier or wait for the
 original request to settle.
+
+## Runner Secret Inventory
+
+`runner.secret_inventory.updated` is emitted only when the Control Plane accepts a new monotonic inventory revision. Its strict payload contains Runner ID, previous/new revision, configured alias count, and the metadata-only inventory digest. It excludes aliases, secret values or value hashes, ciphertext, nonces, passphrases, master-key material, and local paths. Exact retries, status refreshes, and Runner startup do not create this event.

@@ -37,9 +37,11 @@ import {
   analyzeScheduleCreationReadiness,
 } from '@tasktwin/workflow-scheduling';
 import { createAuditSourceId, type AuditEventInput } from '@tasktwin/audit-trail';
+import { analyzeWorkflowInputs } from '@tasktwin/workflow-inputs';
 
 const SERIALIZATION_RETRY_COUNT = 3;
 const SCHEDULED_EXECUTION_CAPABILITY = 'scheduled_execution_v1';
+const LOCAL_SECRET_STORE_CAPABILITY = 'local_secret_store_v1';
 const TRIGGER_SCHEDULED = 'scheduled';
 
 const SCHEDULE_EVENT_NAMESPACES = {
@@ -233,7 +235,7 @@ function buildScheduleAutoPausedInput(input: {
   workspaceId: string;
   scheduleId: string;
   occurrenceId: string;
-  reason: 'policy_review_required' | 'source_version_unavailable' | 'ambiguous_outcome';
+  reason: 'policy_review_required' | 'source_version_unavailable' | 'ambiguous_outcome' | 'secret_readiness_failed';
   occurredAt: Date;
 }): AuditEventInput {
   return {
@@ -297,7 +299,7 @@ function buildOccurrenceSkippedInput(input: {
   workspaceId: string;
   scheduleId: string;
   occurrenceId: string;
-  reason: 'schedule_overlap' | 'runner_busy' | 'runner_unavailable' | 'policy_denied' | 'source_version_unavailable' | 'missed_start_window' | 'nonexistent_local_time' | 'repeated_local_time';
+  reason: 'schedule_overlap' | 'runner_busy' | 'runner_unavailable' | 'policy_denied' | 'source_version_unavailable' | 'missed_start_window' | 'nonexistent_local_time' | 'repeated_local_time' | 'secret_readiness_failed';
   scheduledFor: Date;
   occurredAt: Date;
 }): AuditEventInput {
@@ -570,7 +572,19 @@ export class WorkflowScheduleRepository {
           id: input.runnerDeviceId,
           workspaceId: version.workflow.workspaceId,
         },
-        select: { revokedAt: true, capabilities: true },
+        select: {
+          revokedAt: true,
+          capabilities: true,
+          secretInventory: {
+            select: {
+              storeStatus: true,
+              vaultId: true,
+              vaultRevision: true,
+              inventoryDigest: true,
+              entries: { select: { alias: true } },
+            },
+          },
+        },
       });
       if (runner === null) {
         throw new WorkflowScheduleRepositoryError('SCHEDULE_RUNNER_MISMATCH');
@@ -616,6 +630,17 @@ export class WorkflowScheduleRepository {
         workflow: workflowDef,
         policyDigest: activePolicy.digest,
         workflowDigest,
+        localSecrets: {
+          capabilityAvailable: runner.capabilities.includes(LOCAL_SECRET_STORE_CAPABILITY),
+          status: (runner.secretInventory?.storeStatus.toLowerCase() ??
+            'unavailable') as
+            | 'ready'
+            | 'locked'
+            | 'unavailable'
+            | 'corrupted',
+          synchronized: runner.secretInventory !== null,
+          aliases: runner.secretInventory?.entries.map((entry) => entry.alias) ?? [],
+        },
       });
       if (
         policyEvaluation.overallDecision === 'deny' ||
@@ -1200,6 +1225,15 @@ export class WorkflowScheduleRepository {
           revokedAt: true,
           lastSeenAt: true,
           capabilities: true,
+          secretInventory: {
+            select: {
+              storeStatus: true,
+              vaultId: true,
+              vaultRevision: true,
+              inventoryDigest: true,
+              entries: { select: { alias: true } },
+            },
+          },
         },
       });
       if (runner === null) {
@@ -1240,6 +1274,28 @@ export class WorkflowScheduleRepository {
         throw new WorkflowScheduleRepositoryError('SCHEDULE_NOT_READY');
       }
       const workflowDef = workflowDefParsed.data;
+      const secretAnalysis = analyzeWorkflowInputs(workflowDef);
+      const requiredAliases = [...new Set(
+        secretAnalysis.secretRequirements.map((requirement) => requirement.secretName),
+      )];
+      const availableAliases = new Set(
+        runner.secretInventory?.entries.map((entry) => entry.alias) ?? [],
+      );
+      const secretReady =
+        requiredAliases.length === 0 ||
+        (runner.capabilities.includes(LOCAL_SECRET_STORE_CAPABILITY) &&
+          runner.secretInventory?.storeStatus === 'READY' &&
+          requiredAliases.every((alias) => availableAliases.has(alias)));
+      if (!secretReady) {
+        return this.autoPauseSecretOccurrence(transaction, {
+          scheduleId: schedule.id,
+          workspaceId: schedule.workspaceId,
+          createdByUserId: schedule.createdByUserId,
+          scheduledFor: schedule.nextOccurrenceAt,
+          maxStartDelaySeconds: schedule.maxStartDelaySeconds,
+          now: input.now,
+        });
+      }
       const workflowDigest = createCanonicalJsonDigest(workflowDef);
       const policyEvaluation = evaluateWorkflowPolicy({
         policy: parsedPolicy.data,
@@ -1376,6 +1432,14 @@ export class WorkflowScheduleRepository {
           policyDigest: activePolicy.digest,
           allowedOrigins: [],
           executionOptions: { totalTimeoutMs: 3600_000, stepTimeoutMs: 300_000 },
+          ...(requiredAliases.length > 0 && runner.secretInventory !== null
+            ? {
+                secretResolutionMode: 'LOCAL_STORE',
+                secretVaultId: runner.secretInventory.vaultId,
+                secretInventoryRevision: runner.secretInventory.vaultRevision,
+                secretInventoryDigest: runner.secretInventory.inventoryDigest,
+              }
+            : {}),
         },
       });
 
@@ -1852,6 +1916,103 @@ export class WorkflowScheduleRepository {
         workspaceId: row.workspaceId,
         nextOccurrenceAt: row.nextOccurrenceAt,
       }));
+  }
+
+  private async autoPauseSecretOccurrence(
+    transaction: Prisma.TransactionClient,
+    input: {
+      scheduleId: string;
+      workspaceId: string;
+      createdByUserId: string;
+      scheduledFor: Date;
+      maxStartDelaySeconds: number;
+      now: Date;
+    },
+  ): Promise<OccurrenceDispatchResult> {
+    const occurrenceId = randomUUID();
+    const startDeadlineAt = new Date(
+      input.scheduledFor.getTime() + input.maxStartDelaySeconds * 1_000,
+    );
+    const occurrence = await transaction.workflowScheduleOccurrence.create({
+      data: {
+        id: occurrenceId,
+        scheduleId: input.scheduleId,
+        scheduledFor: input.scheduledFor,
+        startDeadlineAt,
+        status: WorkflowScheduleOccurrenceStatus.SKIPPED,
+        skipReason: 'secret_readiness_failed',
+        skippedAt: input.now,
+      },
+    });
+    await transaction.workflowSchedule.update({
+      where: { id: input.scheduleId },
+      data: {
+        status: WorkflowScheduleStatus.AUTO_PAUSED,
+        autoPauseReason: 'secret_readiness_failed',
+        autoPausedAt: input.now,
+        autoPausedByOccurrenceId: occurrenceId,
+        nextOccurrenceAt: null,
+        lastOccurrenceAt: input.scheduledFor,
+      },
+    });
+    await appendAuditEventTransactional(
+      transaction,
+      this.auditTrail,
+      buildOccurrenceSkippedInput({
+        workspaceId: input.workspaceId,
+        scheduleId: input.scheduleId,
+        occurrenceId,
+        reason: 'secret_readiness_failed',
+        scheduledFor: input.scheduledFor,
+        occurredAt: input.now,
+      }),
+    );
+    await appendAuditEventTransactional(
+      transaction,
+      this.auditTrail,
+      buildScheduleAutoPausedInput({
+        workspaceId: input.workspaceId,
+        scheduleId: input.scheduleId,
+        occurrenceId,
+        reason: 'secret_readiness_failed',
+        occurredAt: input.now,
+      }),
+    );
+    await this.operationalAlerts?.append(transaction, {
+      schemaVersion: 1,
+      workspaceId: input.workspaceId,
+      type: 'schedule_auto_paused',
+      source: { type: 'workflow_schedule', id: input.scheduleId },
+      primaryEntity: { type: 'workflow_schedule', id: input.scheduleId },
+      relatedEntities: [
+        { type: 'workflow_schedule_occurrence', id: occurrenceId },
+      ],
+      template: {
+        schemaVersion: 1,
+        templateKey: 'schedule_auto_paused.v1',
+        workflowScheduleId: input.scheduleId,
+        reason: 'secret_readiness_failed',
+        autoPausedAt: input.now.toISOString(),
+        occurrenceId,
+      },
+      actionTarget: {
+        schemaVersion: 1,
+        kind: 'schedule',
+        workspaceId: input.workspaceId,
+        workflowScheduleId: input.scheduleId,
+      },
+      creatorUserId: input.createdByUserId,
+    });
+    return {
+      occurrence: toOccurrenceRecord(
+        occurrence as unknown as Record<string, unknown>,
+      ),
+      workflowRunId: null,
+      idempotent: false,
+      skipReason: 'secret_readiness_failed',
+      autoPaused: true,
+      autoPauseReason: 'secret_readiness_failed',
+    };
   }
 
   private async resolveWorkspaceAccess(

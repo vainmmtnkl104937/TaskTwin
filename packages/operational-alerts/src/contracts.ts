@@ -131,6 +131,7 @@ export const ScheduleAutoPausedTemplateSchema = TemplateBaseSchema.extend({
     'policy_review_required',
     'source_version_unavailable',
     'ambiguous_outcome',
+    'secret_readiness_failed',
   ]),
   autoPausedAt: SafeTimestampSchema,
   occurrenceId: AlertUuidSchema.optional(),

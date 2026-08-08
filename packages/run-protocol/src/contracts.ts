@@ -21,6 +21,7 @@ import {
   SecureRunInputManifestSchema,
 } from '@tasktwin/secure-run-inputs';
 import { z } from 'zod';
+import { LocalSecretInventoryPinSchema } from '@tasktwin/local-secret-store';
 
 import {
   DEFAULT_JOB_POLL_SECONDS,
@@ -216,10 +217,19 @@ export const RunnerJobClaimRequestSchema = z.strictObject({
     .max(32)
     .regex(/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/),
   claimAttemptId: UuidSchema,
+  secretInventory: LocalSecretInventoryPinSchema.optional(),
 });
 
 export const ClaimedRunInputSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('none') }),
+  z.strictObject({
+    kind: z.literal('local_secret_store'),
+    inventory: LocalSecretInventoryPinSchema,
+    secrets: z.array(z.strictObject({
+      secretName: z.string().trim().min(1).max(80),
+      usageCount: z.number().int().positive(),
+    })).max(100),
+  }),
   z.strictObject({
     kind: z.literal('encrypted_envelope'),
     envelope: SecureRunInputEnvelopeSchema,

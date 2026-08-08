@@ -835,3 +835,7 @@ Durable domain transitions can call the API `OperationalAlertAppender` with thei
 Liveness is independent of PostgreSQL; readiness is a lightweight dependency/configuration check. Authorized Operations reads aggregate structured Workspace data directly and are not audit events. Audit integrity is distinct from process health: a chain is valid only after an authoritative full verification, and a later chain head returns it to `not_verified`.
 
 The Operations Dashboard is deliberately not a public metrics endpoint. IDs, workflow data, runtime values, secrets, locators, URLs and browser errors are not metric labels or snapshot fields. External telemetry vendors, distributed tracing and infrastructure alerting remain outside the architecture.
+
+# Local Secret Store
+
+Secret plaintext belongs exclusively to the Local Runner. `packages/local-secret-store` defines portable vault, inventory, AAD and pin contracts, while the Runner owns platform cryptography, no-echo input, file locking and atomic persistence. The Control Plane stores only alias/random-version inventory metadata and monotonic revision trust. Scheduled runs pin this safe inventory identity and are rejected before execution when it changes. See [ADR-030](../adr/ADR-030-local-secret-store.md).

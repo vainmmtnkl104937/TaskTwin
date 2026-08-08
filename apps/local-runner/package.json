@@ -12,6 +12,7 @@
     "runner": "node dist/index.js",
     "start": "node dist/index.js start",
     "status": "node dist/index.js status",
+    "secrets": "node dist/index.js secrets",
     "test": "vitest run --config vitest.config.ts",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit",
@@ -19,6 +20,7 @@
   },
   "dependencies": {
     "@tasktwin/locator-engine": "workspace:*",
+    "@tasktwin/local-secret-store": "workspace:*",
     "@tasktwin/privacy-engine": "workspace:*",
     "@tasktwin/run-protocol": "workspace:*",
     "@tasktwin/runner-protocol": "workspace:*",
@@ -34,11 +36,13 @@
     "@tasktwin/workflow-schema": "workspace:*",
     "@tasktwin/workflow-verification": "workspace:*",
     "playwright": "1.62.0",
+    "proper-lockfile": "4.1.2",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@tasktwin/config": "workspace:*",
     "@types/node": "22.19.1",
+    "@types/proper-lockfile": "4.1.4",
     "eslint": "9.39.5",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
