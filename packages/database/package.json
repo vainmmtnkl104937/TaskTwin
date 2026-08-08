@@ -19,12 +19,13 @@
     "db:status": "prisma migrate status",
     "lint": "eslint .",
     "test": "vitest run --exclude test/**/*.integration.spec.ts",
-    "test:integration": "pnpm db:generate && vitest run test/database.integration.spec.ts",
+    "test:integration": "pnpm db:generate && vitest run test/**/*.integration.spec.ts --maxWorkers=1 --no-file-parallelism",
     "typecheck": "tsc --project tsconfig.json --noEmit"
   },
   "dependencies": {
     "@tasktwin/locator-engine": "workspace:*",
     "@tasktwin/operational-alerts": "workspace:*",
+    "@tasktwin/operational-telemetry": "workspace:*",
     "@tasktwin/workflow-extraction": "workspace:*",
     "@tasktwin/workflow-approval": "workspace:*",
     "@prisma/adapter-pg": "7.9.1",

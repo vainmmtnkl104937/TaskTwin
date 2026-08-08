@@ -28,6 +28,7 @@
     "@tasktwin/audit-trail": "workspace:*",
     "@tasktwin/database": "workspace:*",
     "@tasktwin/operational-alerts": "workspace:*",
+    "@tasktwin/operational-telemetry": "workspace:*",
     "@tasktwin/recording-converter": "workspace:*",
     "@tasktwin/recording-schema": "workspace:*",
     "@tasktwin/run-protocol": "workspace:*",

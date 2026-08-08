@@ -52,6 +52,10 @@ import {
   NotificationReadAllResponseSchema,
 } from '../control-plane-contracts';
 import type { WorkspaceExecutionPolicyDefinition } from '@tasktwin/workflow-policy';
+import {
+  WorkspaceOperationsSnapshotSchema,
+  type MetricWindow,
+} from '@tasktwin/operational-telemetry';
 import { getControlPlaneOrigin } from './environment';
 
 export class ControlPlaneError extends Error {
@@ -97,24 +101,49 @@ export function login(email: string, password: string) {
 }
 
 export function listNotifications(accessToken: string, query = '') {
-  return request(`/me/notifications${query.length === 0 ? '' : `?${query}`}`, NotificationListResponseSchema, {
-    method: 'GET', headers: { authorization: `Bearer ${accessToken}` },
-  });
+  return request(
+    `/me/notifications${query.length === 0 ? '' : `?${query}`}`,
+    NotificationListResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
 }
 export function getNotificationUnreadCount(accessToken: string) {
-  return request('/me/notifications/unread-count', NotificationUnreadCountSchema, {
-    method: 'GET', headers: { authorization: `Bearer ${accessToken}` },
-  });
+  return request(
+    '/me/notifications/unread-count',
+    NotificationUnreadCountSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
 }
-export function markNotificationRead(accessToken: string, notificationId: string) {
-  return request(`/me/notifications/${encodeURIComponent(notificationId)}/read`, NotificationReadResponseSchema, {
-    method: 'POST', headers: { authorization: `Bearer ${accessToken}` }, body: '{}',
-  });
+export function markNotificationRead(
+  accessToken: string,
+  notificationId: string,
+) {
+  return request(
+    `/me/notifications/${encodeURIComponent(notificationId)}/read`,
+    NotificationReadResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: '{}',
+    },
+  );
 }
 export function markAllNotificationsRead(accessToken: string, cutoff: string) {
-  return request('/me/notifications/read-all', NotificationReadAllResponseSchema, {
-    method: 'POST', headers: { authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ cutoff }),
-  });
+  return request(
+    '/me/notifications/read-all',
+    NotificationReadAllResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ cutoff }),
+    },
+  );
 }
 
 export function listWorkspaces(accessToken: string) {
@@ -122,6 +151,18 @@ export function listWorkspaces(accessToken: string) {
     method: 'GET',
     headers: { authorization: `Bearer ${accessToken}` },
   });
+}
+
+export function getWorkspaceOperations(
+  accessToken: string,
+  workspaceId: string,
+  window: MetricWindow,
+) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/operations/overview?window=${encodeURIComponent(window)}`,
+    WorkspaceOperationsSnapshotSchema,
+    { method: 'GET', headers: { authorization: `Bearer ${accessToken}` } },
+  );
 }
 
 export function getExecutionPolicy(accessToken: string, workspaceId: string) {
@@ -594,21 +635,19 @@ export function applyLocatorRepairCandidate(
   );
 }
 
-function buildAuditQueryString(
-  filters: {
-    eventTypes?: string[];
-    actorKinds?: ('user' | 'runner' | 'system')[];
-    primaryEntityKind?: string;
-    primaryEntityId?: string;
-    correlationId?: string;
-    fromOccurredAt?: string;
-    toOccurredAt?: string;
-    fromSequence?: number;
-    toSequence?: number;
-    limit?: number;
-    cursor?: string;
-  },
-): string {
+function buildAuditQueryString(filters: {
+  eventTypes?: string[];
+  actorKinds?: ('user' | 'runner' | 'system')[];
+  primaryEntityKind?: string;
+  primaryEntityId?: string;
+  correlationId?: string;
+  fromOccurredAt?: string;
+  toOccurredAt?: string;
+  fromSequence?: number;
+  toSequence?: number;
+  limit?: number;
+  cursor?: string;
+}): string {
   const params = new URLSearchParams();
   if (filters.eventTypes) {
     for (const value of filters.eventTypes) {
@@ -764,10 +803,7 @@ export function listWorkflowSchedules(
   );
 }
 
-export function getWorkflowSchedule(
-  accessToken: string,
-  scheduleId: string,
-) {
+export function getWorkflowSchedule(accessToken: string, scheduleId: string) {
   return request(
     `/workflow-schedules/${encodeURIComponent(scheduleId)}`,
     WorkflowScheduleResponseSchema,
@@ -798,10 +834,7 @@ export function listScheduleOccurrences(
   );
 }
 
-export function pauseWorkflowSchedule(
-  accessToken: string,
-  scheduleId: string,
-) {
+export function pauseWorkflowSchedule(accessToken: string, scheduleId: string) {
   return request(
     `/workflow-schedules/${encodeURIComponent(scheduleId)}/pause`,
     WorkflowScheduleResponseSchema,

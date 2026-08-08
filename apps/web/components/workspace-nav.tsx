@@ -2,7 +2,14 @@ import Link from 'next/link';
 
 interface WorkspaceNavProps {
   workspaceId: string;
-  currentPage: 'workflows' | 'runs' | 'schedules' | 'approvals' | 'repairs' | 'audit';
+  currentPage:
+    | 'workflows'
+    | 'runs'
+    | 'schedules'
+    | 'approvals'
+    | 'repairs'
+    | 'audit'
+    | 'operations';
 }
 
 export function WorkspaceNav({ workspaceId, currentPage }: WorkspaceNavProps) {
@@ -37,6 +44,12 @@ export function WorkspaceNav({ workspaceId, currentPage }: WorkspaceNavProps) {
         className={currentPage === 'repairs' ? 'active' : undefined}
       >
         Repairs
+      </Link>
+      <Link
+        href={`/workspaces/${workspaceId}/operations`}
+        className={currentPage === 'operations' ? 'active' : undefined}
+      >
+        Operations
       </Link>
       <Link
         href={`/workspaces/${workspaceId}/audit`}

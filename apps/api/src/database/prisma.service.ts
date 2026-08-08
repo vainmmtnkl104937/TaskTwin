@@ -1,7 +1,7 @@
 import {
   Inject,
   Injectable,
-  type OnModuleDestroy,
+  type OnApplicationShutdown,
   type OnModuleInit,
 } from '@nestjs/common';
 import type { PrismaClient } from '@tasktwin/database';
@@ -9,7 +9,7 @@ import type { PrismaClient } from '@tasktwin/database';
 import { DATABASE_CLIENT } from './database.constants.js';
 
 @Injectable()
-export class PrismaService implements OnModuleInit, OnModuleDestroy {
+export class PrismaService implements OnModuleInit, OnApplicationShutdown {
   constructor(
     @Inject(DATABASE_CLIENT)
     private readonly client: PrismaClient,
@@ -32,7 +32,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy(): Promise<void> {
+  async onApplicationShutdown(): Promise<void> {
     await this.client.$disconnect();
   }
 }

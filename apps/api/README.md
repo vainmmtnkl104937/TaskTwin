@@ -120,6 +120,15 @@ only typed workflow-run lifecycle events. PostgreSQL triggers refuse
 chain and returns `ok`, `sequence_gap` or `tampered` with the first failure
 sequence and kind. Source identifiers are server-derived; collisions return
 HTTP 409 `AUDIT_SOURCE_CONFLICT`.
+
 # Notification API
 
 Authenticated users can list only their own delivered notifications at `GET /me/notifications`, read an unread count, mark one notification idempotently, or mark all notifications delivered before a supplied cutoff. List pagination is capped at 100 and supports Workspace, unread, severity and alert-type filters. Responses contain fixed safe summaries and typed entity targets; access to the target is still checked by its normal endpoint.
+
+# Operational health and Workspace metrics
+
+- `GET /health/live` is database-independent liveness.
+- `GET /health/ready` checks PostgreSQL and required configuration with stable safe codes.
+- `GET /workspaces/:workspaceId/operations/overview?window=24h` returns an authorized, strict aggregate snapshot for one fixed window.
+
+The operations query reads structured domain columns only. It does not scan workflow definitions, audit payloads, runtime inputs or outputs. Heartbeat and metric-read operations are deliberately excluded from the audit trail.

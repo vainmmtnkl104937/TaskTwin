@@ -131,10 +131,12 @@ export const AuditQuery = createParamDecorator(
   },
 );
 
-function readRole(
-  request: { [VERIFIED_ORGANIZATION_CONTEXT]?: VerifiedOrganizationContext },
-): OrganizationRole {
-  return request[VERIFIED_ORGANIZATION_CONTEXT]?.role ?? OrganizationRole.VIEWER;
+function readRole(request: {
+  [VERIFIED_ORGANIZATION_CONTEXT]?: VerifiedOrganizationContext;
+}): OrganizationRole {
+  return (
+    request[VERIFIED_ORGANIZATION_CONTEXT]?.role ?? OrganizationRole.VIEWER
+  );
 }
 
 @Controller()
@@ -178,8 +180,10 @@ export class AuditTrailController {
   @ResolveOrganizationResource('workspace', 'workspaceId')
   @RequireOrganizationRoles(...VERIFIER_ROLES)
   async verify(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('workspaceId') workspaceId: string,
-    @Req() request: { [VERIFIED_ORGANIZATION_CONTEXT]?: VerifiedOrganizationContext },
+    @Req()
+    request: { [VERIFIED_ORGANIZATION_CONTEXT]?: VerifiedOrganizationContext },
     @Body() body: unknown,
   ): Promise<AuditVerifyResponse> {
     const parsed = AuditVerifyRequestSchema.safeParse(body);
@@ -193,6 +197,7 @@ export class AuditTrailController {
     const requestBody: AuditVerifyRequest = parsed.data;
     return this.service.verifyChain({
       workspaceId,
+      actorUserId: user.id,
       role: readRole(request),
       request: requestBody,
     });

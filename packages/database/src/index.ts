@@ -2,6 +2,7 @@ export { createDatabaseClient } from './database-client.js';
 export { getRequiredDatabaseUrl } from './database-url.js';
 export {
   OrganizationRole,
+  Prisma,
   PrismaClient,
   RecordingSessionStatus,
   RunnerPairingStatus,
@@ -171,8 +172,18 @@ export {
   auditHasherForTrail,
   type CreateAuditAppenderDriverOptions,
 } from './audit-trail/audit-appender.repository.js';
-export type { AuditEventRecord, ListAuditEventsFilters, ListAuditEventsResult, WorkspaceAuditChainHeadRecord, AuditChainHeadSnapshot, VerifyAuditTrailRange } from './audit-trail/audit-trail-records.js';
-export { AuditTrailRepositoryError, AUDIT_TRAIL_ERROR_CODES } from './audit-trail/audit-trail-errors.js';
+export type {
+  AuditEventRecord,
+  ListAuditEventsFilters,
+  ListAuditEventsResult,
+  WorkspaceAuditChainHeadRecord,
+  AuditChainHeadSnapshot,
+  VerifyAuditTrailRange,
+} from './audit-trail/audit-trail-records.js';
+export {
+  AuditTrailRepositoryError,
+  AUDIT_TRAIL_ERROR_CODES,
+} from './audit-trail/audit-trail-errors.js';
 export type { AuditTrailErrorCode } from './audit-trail/audit-trail-errors.js';
 export type {
   DatabaseTransactionClient,
@@ -180,3 +191,8 @@ export type {
   OperationalAlertTransactionAppender,
   ResolveOperationalAlertInput,
 } from './operational-alerts/operational-alert-port.js';
+export { ComponentHeartbeatRepository } from './operational-telemetry/component-heartbeat.repository.js';
+export {
+  AuditVerificationStateRepository,
+  type AuditVerificationStateRecord,
+} from './operational-telemetry/audit-verification-state.repository.js';
