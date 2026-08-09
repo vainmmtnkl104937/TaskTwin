@@ -34,8 +34,11 @@ surfaces. Sessions 26 through 30 add safe scheduling, operational alerts and
 telemetry, the Local Secret Store, and the production Windows Runner service
 with native secret auto-unlock. Session 31 adds immutable Windows x64 Runner
 release archives, canonical signed manifests, local verification/preflight and
-protocol/schema compatibility gates. It still does not provide automatic
-updates, remote installation, browser-profile reuse or screenshots.
+protocol/schema compatibility gates. Session 32 adds a local operator-invoked
+Windows x64 update/rollback controller with verify-before-mutate staging,
+active-run drain, versioned installed releases, local startup health and
+crash-safe recovery. It still does not provide release downloading, remote or
+silent updates, schema migration, browser-profile reuse or screenshots.
 
 ## Browser-first MVP
 
@@ -68,6 +71,7 @@ general-purpose operating-system control are not part of the browser-first MVP.
 | `packages/runner-protocol`      | Local Runner pairing and heartbeat contracts            |
 | `packages/run-protocol`         | Persisted run, lease, progress and completion contracts |
 | `packages/runner-release`       | Signed release and compatibility contracts              |
+| `packages/runner-update`        | Pure update, rollback, health and recovery decisions    |
 | `packages/audit-trail`          | Append-only, hash-chained audit events and verification |
 
 The architectural direction is documented in
@@ -80,6 +84,11 @@ Runner release operations are documented in
 [`docs/runner-compatibility.md`](docs/runner-compatibility.md),
 [`docs/runner-upgrade-preflight.md`](docs/runner-upgrade-preflight.md), and
 [`docs/runner-release-pipeline.md`](docs/runner-release-pipeline.md).
+Local update operations are documented in
+[`docs/runner-update.md`](docs/runner-update.md),
+[`docs/windows-runner-update-layout.md`](docs/windows-runner-update-layout.md),
+[`docs/runner-update-rollback.md`](docs/runner-update-rollback.md), and
+[`docs/runner-update-recovery.md`](docs/runner-update-recovery.md).
 
 ## Requirements
 

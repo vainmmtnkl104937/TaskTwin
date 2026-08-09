@@ -1,6 +1,8 @@
 import {
+  RUNNER_COMPATIBILITY_HEADER,
   PairingPollingResponseSchema,
   PairingSessionCreateResponseSchema,
+  RunnerCompatibilityAcknowledgementSchema,
   RunnerHeartbeatResponseSchema,
   type PairingPollingResponse,
   type PairingSessionCreateRequest,
@@ -8,6 +10,7 @@ import {
   type RunnerHeartbeatResponse,
   type StoredRunnerCredential,
   type RunnerCapability,
+  type RunnerCompatibilityAcknowledgement,
 } from '@tasktwin/runner-protocol';
 import type { RunnerRuntimeReport } from '@tasktwin/runner-service-runtime';
 import type { RunnerSoftwareIdentity } from '@tasktwin/runner-release';
@@ -83,7 +86,7 @@ export interface RunnerControlPlaneTransport {
     capabilities?: RunnerCapability[],
     runtime?: RunnerRuntimeReport,
     softwareIdentity?: RunnerSoftwareIdentity,
-  ): Promise<RunnerHeartbeatResponse>;
+  ): Promise<RunnerHeartbeatTransportResult>;
   registerEncryptionKey(
     credential: StoredRunnerCredential,
     request: RunnerEncryptionKeyRegistrationRequest,
@@ -92,6 +95,11 @@ export interface RunnerControlPlaneTransport {
     credential: StoredRunnerCredential,
     request: LocalSecretInventorySyncRequest,
   ): Promise<LocalSecretInventorySyncResponse>;
+}
+
+export interface RunnerHeartbeatTransportResult {
+  readonly response: RunnerHeartbeatResponse;
+  readonly compatibilityAcknowledgement?: RunnerCompatibilityAcknowledgement;
 }
 
 export interface RunnerJobTransport {
@@ -201,14 +209,14 @@ export class HttpRunnerControlPlaneTransport
     );
   }
 
-  heartbeat(
+  async heartbeat(
     credential: StoredRunnerCredential,
     runnerVersion: string,
     capabilities: RunnerCapability[] = [],
     runtime?: RunnerRuntimeReport,
     softwareIdentity?: RunnerSoftwareIdentity,
-  ): Promise<RunnerHeartbeatResponse> {
-    return this.request(
+  ): Promise<RunnerHeartbeatTransportResult> {
+    const result = await this.requestWithHeaders(
       `${credential.controlPlaneOrigin}/runner/heartbeat`,
       RunnerHeartbeatResponseSchema,
       {
@@ -226,6 +234,17 @@ export class HttpRunnerControlPlaneTransport
         }),
       },
     );
+    const header = result.headers.get(RUNNER_COMPATIBILITY_HEADER);
+    const acknowledgement =
+      header === null
+        ? undefined
+        : RunnerCompatibilityAcknowledgementSchema.safeParse(header);
+    return {
+      response: result.data,
+      ...(acknowledgement === undefined || !acknowledgement.success
+        ? {}
+        : { compatibilityAcknowledgement: acknowledgement.data }),
+    };
   }
 
   registerEncryptionKey(
@@ -473,6 +492,14 @@ export class HttpRunnerControlPlaneTransport
     schema: { safeParse(input: unknown): { success: boolean; data?: Result } },
     init: RequestInit,
   ): Promise<Result> {
+    return (await this.requestWithHeaders(url, schema, init)).data;
+  }
+
+  private async requestWithHeaders<Result>(
+    url: string,
+    schema: { safeParse(input: unknown): { success: boolean; data?: Result } },
+    init: RequestInit,
+  ): Promise<{ data: Result; headers: Headers }> {
     let response: globalThis.Response;
     try {
       response = await fetch(url, {
@@ -499,6 +526,6 @@ export class HttpRunnerControlPlaneTransport
     if (!parsed.success || parsed.data === undefined) {
       throw new ControlPlaneClientError(response.status);
     }
-    return parsed.data;
+    return { data: parsed.data, headers: response.headers };
   }
 }

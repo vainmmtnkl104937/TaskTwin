@@ -54,3 +54,33 @@ Stop enters draining, removes claim capabilities, waits up to 60 seconds for
 the active run, then aborts through the existing safe cleanup path if needed.
 Crashes leave no resumable browser or run state. On restart the old lease is
 never reused; only a new server-authorized job can be claimed.
+
+## Update maintenance and startup health
+
+A Session 32 managed activation supplies the service with strict activation,
+update-journal and startup-status paths. A nonterminal update journal makes
+the service enter local update maintenance: it pauses the claim loop and sends
+heartbeats with `serviceStatus: draining` and no execution capabilities. The
+Control Plane claim transaction independently rejects a persisted draining
+Runner.
+
+Update drain is distinct from ordinary service shutdown. `runner update apply`
+waits up to 15 minutes for an existing run—including Approval and Repair
+waits—to become terminal and does not cancel it or close its BrowserContext.
+On timeout the journal becomes `failed_before_switch`, maintenance clears and
+the active run continues. The service is stopped only after staging reaches
+`ready_to_switch`.
+
+Every managed service start writes a strict safe startup record with a fresh
+attempt ID and the selected activation ID. Health requires exact packaged
+software identity, instance lock, Workflow Engine, Policy runtime, a real
+headless Chromium open/close probe, Local Secret Store health and required
+native unlock. During target verification claim admission must remain closed
+and no work may be active. The record contains no credential, local path,
+vault identifier/value or protected key metadata.
+
+The optional heartbeat compatibility acknowledgement adds confidence. An
+absent/offline Control Plane does not make local startup unhealthy; explicit
+`update_required` or `unsupported` does. See the
+[local update guide](runner-update.md) and
+[scheduling maintenance behavior](scheduling-restart-resilience.md).

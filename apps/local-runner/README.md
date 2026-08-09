@@ -25,6 +25,36 @@ manifest signature plus exact artifact name, size and SHA-256. Preflight does
 not migrate or rewrite local state. See `docs/runner-release-packaging.md`,
 `docs/runner-upgrade-preflight.md` and `docs/runner-compatibility.md`.
 
+## Local update and rollback
+
+Session 32 accepts only a previously downloaded signed Windows x64 release and
+operates entirely on the local machine:
+
+```powershell
+runner.cmd update status [--data-root <absolute-path>]
+runner.cmd update apply --manifest <path> --signature <path> --artifact <path> [--data-root <absolute-path>]
+runner.cmd update rollback [--data-root <absolute-path>]
+runner.cmd update recover [--data-root <absolute-path>]
+```
+
+`apply` verifies integrity before the update lease or maintenance, requires
+forward and proven rollback compatibility, drains without cancelling active
+work, stages into the controlled ProgramData installation root and verifies
+the target's actual startup health. Failed target health rolls back only when
+the retained source is still verified and compatible. Control Plane outage
+does not by itself make a locally healthy target fail.
+
+The production trusted-key registry is currently empty. Pre-Session-32/manual
+Session 31 installations also lack the managed active-release record and
+retained proof required by the controller. Production trust provisioning and a
+separately reviewed out-of-band managed-installation bootstrap are therefore
+prerequisites; no automatic adoption command exists.
+
+There is no release discovery/download, remote update/rollback, force or
+integrity/compatibility bypass. See `docs/runner-update.md`,
+`docs/windows-runner-update-layout.md`, `docs/runner-update-rollback.md` and
+`docs/runner-update-recovery.md`.
+
 ## Local Secret Store
 
 After pairing, use `pnpm runner -- secrets init`, `pnpm runner -- secrets status`, `pnpm runner -- secrets set <alias>`, `pnpm runner -- secrets remove <alias>`, and `pnpm runner -- secrets list`. Passphrases and values are prompted locally without echo and are never accepted through argv. See `docs/local-runner-secret-management.md` and ADR-030 for the storage and threat model.
@@ -45,8 +75,8 @@ pnpm --filter @tasktwin/local-runner runner -- service status
 ```
 
 Pass `--data-root <absolute-path>` to each `service` operation when pairing and
-local state live outside the current user's default data root. Manual upgrades
-must reuse the same path.
+local state live outside the current user's default data root. Update,
+rollback and recovery commands must reuse the same path.
 
 Service operations are local-only and privileged. Service mode is headless,
 rejects interactive secret providers, uses a per-Runner filesystem lock,

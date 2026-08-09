@@ -1,6 +1,7 @@
 import { arch, platform } from 'node:process';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
   MAX_EXECUTION_TIMEOUT_MS,
@@ -30,7 +31,14 @@ import {
   WindowsNativeMasterKeyProtector,
 } from './platform/windows/windows-native-master-key-protector.js';
 import { WindowsRunnerServiceManager } from './platform/windows/windows-service-manager.js';
-import { readWindowsRunnerServiceConfig } from './platform/windows/windows-service-manager.js';
+import {
+  readWindowsRunnerServiceActivationConfig,
+  readWindowsRunnerServiceConfig,
+} from './platform/windows/windows-service-manager.js';
+import {
+  WindowsRunnerInstallationAclBoundary,
+  runnerInstallationRootFromActivationPath,
+} from './platform/windows/windows-runner-installation-acl.js';
 import { runServiceCli } from './service/service-cli.js';
 import { FileRunnerInstanceLock } from './runtime/runner-instance-lock.js';
 import type { RunnerRuntimeMode } from '@tasktwin/runner-service-runtime';
@@ -41,6 +49,13 @@ import {
 } from './release/build-identity.js';
 import { runReleaseCli } from './release/release-cli.js';
 import type { TrustedReleaseKey } from '@tasktwin/runner-release';
+import { TRUSTED_RUNNER_RELEASE_KEYS } from './release/trusted-release-keys.js';
+import { runUpdateCli } from './update/update-cli.js';
+import { createLocalRunnerUpdateController } from './update/update-runtime.js';
+import type { RunnerUpdateController } from './update/update-controller.js';
+import { FileRunnerUpdateJournalStore } from './update/update-record-stores.js';
+import { FileRunnerStartupStatusStore } from './runtime/startup-status-store.js';
+import { LocalRunnerStartupHealthProbe } from './service/startup-health.js';
 
 function optionalFixtureWait(value: string | undefined): number | undefined {
   if (value === undefined) {
@@ -98,6 +113,13 @@ export async function runCli(
   dependencies: {
     readBuildIdentity?: typeof readEmbeddedBuildIdentity;
     trustedReleaseKeys?: readonly TrustedReleaseKey[] | undefined;
+    createUpdateController?: (
+      dataRoot: string,
+    ) => RunnerUpdateController | Promise<RunnerUpdateController>;
+    validateRunnerInstallationAcl?: (input: {
+      activationConfigPath: string;
+      runnerDeviceId: string;
+    }) => Promise<void>;
   } = {},
 ): Promise<number> {
   const readBuildIdentity =
@@ -117,11 +139,34 @@ export async function runCli(
       trustedKeys: dependencies.trustedReleaseKeys,
     });
   }
+  if (command === 'update') {
+    return runUpdateCli({
+      argv,
+      output,
+      createController: async (requestedDataRoot) => {
+        const dataRoot = requestedDataRoot ?? homedir();
+        if (dependencies.createUpdateController !== undefined) {
+          return dependencies.createUpdateController(dataRoot);
+        }
+        return createLocalRunnerUpdateController({
+          dataRoot,
+          runnerEntryPoint: fileURLToPath(
+            new URL('./index.js', import.meta.url),
+          ),
+          trustedKeys:
+            dependencies.trustedReleaseKeys ?? TRUSTED_RUNNER_RELEASE_KEYS,
+        });
+      },
+    });
+  }
   const serviceBootstrap =
     command === 'service-run'
       ? parseArgs({
           args: argv.slice(1),
-          options: { 'service-config': { type: 'string' } },
+          options: {
+            'service-config': { type: 'string' },
+            'service-activation': { type: 'string' },
+          },
           strict: true,
         })
       : null;
@@ -133,6 +178,51 @@ export async function runCli(
       : await readWindowsRunnerServiceConfig(
           serviceBootstrap.values['service-config'] ?? '',
         );
+  const serviceActivation =
+    serviceBootstrap === null ||
+    serviceBootstrap.values['service-activation'] === undefined
+      ? null
+      : await readWindowsRunnerServiceActivationConfig(
+          serviceBootstrap.values['service-activation'],
+        );
+  if (
+    serviceActivation !== null &&
+    (serviceBootstrap?.values['service-config'] === undefined ||
+      resolve(serviceActivation.serviceConfigPath).toLowerCase() !==
+        resolve(serviceBootstrap.values['service-config']).toLowerCase() ||
+      serviceConfig === null ||
+      serviceActivation.runnerDeviceId !== serviceConfig.runnerDeviceId ||
+      serviceActivation.dataRoot !== serviceConfig.dataRoot ||
+      serviceActivation.nodeExecutable !== serviceConfig.nodeExecutable ||
+      serviceActivation.runnerEntryPoint !== serviceConfig.runnerEntryPoint)
+  ) {
+    throw new Error('The managed Windows service activation is invalid.');
+  }
+  if (serviceActivation !== null) {
+    const activationConfigPath =
+      serviceBootstrap?.values['service-activation'] ?? '';
+    if (dependencies.validateRunnerInstallationAcl !== undefined) {
+      await dependencies.validateRunnerInstallationAcl({
+        activationConfigPath,
+        runnerDeviceId: serviceActivation.runnerDeviceId,
+      });
+    } else {
+      const root = runnerInstallationRootFromActivationPath(
+        activationConfigPath,
+        serviceActivation.runnerDeviceId,
+      );
+      await new WindowsRunnerInstallationAclBoundary({
+        root,
+        runnerDeviceId: serviceActivation.runnerDeviceId,
+        scriptPath: fileURLToPath(
+          new URL(
+            './platform/windows/windows-runner-installation-acl.ps1',
+            import.meta.url,
+          ),
+        ),
+      }).validate();
+    }
+  }
   if (
     serviceConfig !== null &&
     (serviceConfig.nodeExecutable !== process.execPath ||
@@ -223,7 +313,10 @@ export async function runCli(
   const serviceVerified =
     serviceConfig === null
       ? false
-      : await serviceManager!.verifyRunning(serviceConfig);
+      : await serviceManager!.verifyRunning(
+          serviceConfig,
+          serviceActivation?.serviceExecutablePath,
+        );
   const keyManager = new RunnerKeyManager(
     new FileRunnerEncryptionKeyStore(dataRoot),
     transport,
@@ -238,6 +331,7 @@ export async function runCli(
     output,
     runtimeMode,
   );
+  const browserSessions = new PlaywrightBrowserSessionFactory();
   const service = new LocalRunnerService(
     credentialStore,
     transport,
@@ -245,7 +339,7 @@ export async function runCli(
     systemClock,
     buildIdentity.version,
     transport,
-    new PlaywrightBrowserSessionFactory(),
+    browserSessions,
     keyManager,
     secretProvider,
     {
@@ -261,6 +355,24 @@ export async function runCli(
       drainTimeoutMilliseconds: 60_000,
     },
     reportedSoftwareIdentity(buildIdentity),
+    serviceActivation === null
+      ? undefined
+      : {
+          activationId: serviceActivation.activationId,
+          expectedSoftwareIdentity: serviceActivation.softwareIdentity,
+          instanceLockHeld: true,
+          requireNativeSecretAutoUnlock:
+            serviceActivation.requireNativeSecretAutoUnlock,
+          maintenanceSource: new FileRunnerUpdateJournalStore(
+            serviceActivation.updateJournalPath,
+          ),
+          startupStatusWriter: new FileRunnerStartupStatusStore(
+            serviceActivation.startupStatusPath,
+          ),
+          startupHealthProbe: new LocalRunnerStartupHealthProbe(
+            browserSessions,
+          ),
+        },
   );
   switch (command) {
     case 'pair': {

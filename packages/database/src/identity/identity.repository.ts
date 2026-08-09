@@ -189,6 +189,9 @@ export class IdentityRepository {
           },
           select: workspaceSelect,
         });
+        await transaction.workspaceAuditChainHead.create({
+          data: { workspaceId: workspace.id },
+        });
         const defaultPolicy = canonicalizePolicyDefinition(
           DEFAULT_WORKSPACE_EXECUTION_POLICY,
         );

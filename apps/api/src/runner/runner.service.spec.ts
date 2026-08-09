@@ -17,6 +17,19 @@ const runner = {
   credentialId: 'a550b35f-fb4c-4a74-bdbe-e306a2f2070b',
 };
 
+const compatiblePersistence = (runtime: unknown = null) => ({
+  runtime,
+  compatibility: { status: 'compatible', reasons: [] },
+});
+
+const incompletePersistence = (runtime: unknown = null) => ({
+  runtime,
+  compatibility: {
+    status: 'update_required',
+    reasons: ['software_identity_missing'],
+  },
+});
+
 describe('RunnerService heartbeat', () => {
   it('persists only strict software identity metadata', async () => {
     const softwareIdentity = {
@@ -28,15 +41,17 @@ describe('RunnerService heartbeat', () => {
       platform: 'windows',
       architecture: 'x64',
     } as const;
-    const heartbeat = vi.fn().mockResolvedValue(null);
+    const heartbeat = vi.fn().mockResolvedValue(compatiblePersistence());
     const service = new RunnerService({
       heartbeat,
     } as unknown as RunnerRepository);
-    await service.heartbeat(runner, {
-      schemaVersion: 1,
-      runnerVersion: softwareIdentity.version,
-      softwareIdentity,
-    });
+    await expect(
+      service.heartbeat(runner, {
+        schemaVersion: 1,
+        runnerVersion: softwareIdentity.version,
+        softwareIdentity,
+      }),
+    ).resolves.toMatchObject({ compatibilityStatus: 'compatible' });
     expect(heartbeat).toHaveBeenCalledWith(
       expect.objectContaining({ softwareIdentity }),
     );
@@ -46,7 +61,7 @@ describe('RunnerService heartbeat', () => {
   });
 
   it('updates through the repository and returns a bounded interval', async () => {
-    const heartbeat = vi.fn().mockResolvedValue(undefined);
+    const heartbeat = vi.fn().mockResolvedValue(incompletePersistence());
     const service = new RunnerService({
       heartbeat,
     } as unknown as RunnerRepository);
@@ -56,9 +71,12 @@ describe('RunnerService heartbeat', () => {
         runnerVersion: '0.1.0',
       }),
     ).resolves.toMatchObject({
-      runnerDeviceId: runner.runnerDeviceId,
-      connectionStatus: 'online',
-      nextHeartbeatInSeconds: 30,
+      response: {
+        runnerDeviceId: runner.runnerDeviceId,
+        connectionStatus: 'online',
+        nextHeartbeatInSeconds: 30,
+      },
+      compatibilityStatus: 'update_required',
     });
     expect(heartbeat).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -121,7 +139,9 @@ describe('RunnerService heartbeat', () => {
       ...runtimeReport,
       runtimeMetadataRevision: 2,
     };
-    const heartbeat = vi.fn().mockResolvedValue(runtimeMetadata);
+    const heartbeat = vi
+      .fn()
+      .mockResolvedValue(incompletePersistence(runtimeMetadata));
     const service = new RunnerService({
       heartbeat,
     } as unknown as RunnerRepository);
@@ -132,7 +152,10 @@ describe('RunnerService heartbeat', () => {
         capabilities: ['runner_service_v1', 'os_native_secret_unlock_v1'],
         runtime: runtimeReport,
       }),
-    ).resolves.toMatchObject({ runtime: runtimeMetadata });
+    ).resolves.toMatchObject({
+      response: { runtime: runtimeMetadata },
+      compatibilityStatus: 'update_required',
+    });
     expect(heartbeat).toHaveBeenCalledWith(
       expect.objectContaining({ runtime: runtimeReport }),
     );

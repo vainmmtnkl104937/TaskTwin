@@ -15,3 +15,24 @@ revision and digest. A rotation after run creation still blocks the stale run
 before Chromium and conservatively pauses its schedule. Restart does not resume
 old runs or browser state; lease expiry supplies the existing Interrupted and
 ambiguous-outcome safeguards.
+
+Session 32 update maintenance is a temporary capacity state, not a policy or
+secret-readiness failure. Once the assigned Runner reports `draining` in
+`serviceStatus`, the Control Plane creates a single `SKIPPED` occurrence with
+reason `runner_maintenance`, creates no WorkflowRun, and emits only the strict
+occurrence-skipped audit event. It does not auto-pause or alert. Recurring
+schedules advance from the scheduler's current time to their next future
+instant and are never backfilled; one-time schedules complete. After the
+Runner returns healthy and reports normal capacity, later recurring
+occurrences use the same policy, vault-inventory, compatibility, lease and
+one-active-run gates as before.
+
+Repeated draining heartbeats keep that maintenance observation fresh for long
+bounded updates. If the service is temporarily stopped for activation, the
+last accepted maintenance report remains valid for a bounded 20-minute
+post-heartbeat window; older stale metadata falls back to ordinary offline
+handling. Fresh maintenance takes precedence over a transient incompatible
+target heartbeat so the scheduler does not auto-pause while the local
+controller is still able to restore the source. The Runner emits another
+best-effort heartbeat as soon as maintenance becomes terminal to clear the
+draining state promptly.

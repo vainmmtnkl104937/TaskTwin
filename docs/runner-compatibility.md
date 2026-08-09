@@ -52,6 +52,20 @@ Only `compatible` and `update_recommended` may claim. Revocation, Workspace,
 lease, policy, capability and secret-inventory checks still apply. Matching or
 new SemVer never overrides an incompatible protocol/schema.
 
+An accepted heartbeat acknowledges this derived status in the optional
+`TaskTwin-Runner-Compatibility` response header. The strict response JSON is
+unchanged so existing Runners remain compatible. A new Runner validates the
+header independently; an absent header or temporarily unreachable Control
+Plane is not a local startup-health failure. An explicit `update_required` or
+`unsupported` acknowledgement can fail target verification. The header cannot
+request, download, install, roll back or otherwise execute an update.
+
+While a locally initiated update is draining, the Runner continues safe
+heartbeats with its existing `serviceStatus: draining` metadata and advertises
+no execution capabilities. The claim transaction independently rejects new
+claims from a persisted draining Runner. Existing revocation, lease and
+completion behavior still takes precedence.
+
 Scheduled occurrences use the same evaluator transactionally. An assigned
 Runner that is update-required or unsupported creates no executable run; the
 occurrence is skipped, the Schedule auto-pauses with
@@ -59,6 +73,12 @@ occurrence is skipped, the Schedule auto-pauses with
 path is used.
 `update_recommended` remains dispatch-eligible, just as it remains
 claim-eligible.
+
+A due occurrence assigned to a draining Runner is instead skipped with the
+strict `runner_maintenance` reason. It creates no WorkflowRun and no Schedule
+Auto-Paused alert. Recurring schedules remain active and advance directly to
+the next future instant, so maintenance does not create catch-up or backfill
+runs. A one-time schedule completes after its skipped occurrence.
 
 ## Runner defense
 

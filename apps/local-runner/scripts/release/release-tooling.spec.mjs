@@ -23,6 +23,8 @@ async function stagingFixture(version = '1.4.0') {
   const root = join(parent, `tasktwin-runner-${version}-windows-x64`);
   for (const directory of [
     'dist/release',
+    'dist/platform/windows',
+    'dist/update',
     'runtime',
     'windows/vendor/winsw-2.12.0',
     'browsers/chromium-1234',
@@ -43,6 +45,21 @@ async function stagingFixture(version = '1.4.0') {
     ),
     writeFile(join(root, 'dist/index.js'), 'export {};\n'),
     writeFile(join(root, 'dist/release/build-identity.json'), '{}\n'),
+    writeFile(
+      join(root, 'dist/platform/windows/windows-native-bridge.ps1'),
+      '# bridge\n',
+    ),
+    writeFile(
+      join(
+        root,
+        'dist/platform/windows/windows-runner-installation-acl.ps1',
+      ),
+      '# acl\n',
+    ),
+    writeFile(
+      join(root, 'dist/update/windows-release-archive.ps1'),
+      '# archive\n',
+    ),
     writeFile(join(root, 'runtime/node.exe'), 'test node'),
     writeFile(join(root, 'runtime/LICENSE'), 'test license'),
     writeFile(
@@ -59,14 +76,14 @@ describe('Windows x64 release safety tooling', () => {
     await expect(
       inspectReleaseStaging(await stagingFixture()),
     ).resolves.toEqual({
-      fileCount: 8,
+      fileCount: 11,
     });
   });
 
   it('accepts canonical stable SemVer build metadata in the staged name', async () => {
     await expect(
       inspectReleaseStaging(await stagingFixture('1.4.0+build.7')),
-    ).resolves.toEqual({ fileCount: 8 });
+    ).resolves.toEqual({ fileCount: 11 });
   });
 
   it.each([
@@ -74,6 +91,9 @@ describe('Windows x64 release safety tooling', () => {
     ['.tasktwin/local-secret-vault.v1.json', '{}'],
     ['dist/credential.js', 'RUNNER_CREDENTIAL_LEAK_31'],
     ['dist/signing.js', 'RELEASE_PRIVATE_KEY_LEAK_31'],
+    ['dist/update-leak.js', 'UPDATE_SECRET_LEAK_32'],
+    ['dist/credential-leak.js', 'UPDATE_CREDENTIAL_LEAK_32'],
+    ['dist/protected-key-leak.js', 'UPDATE_PROTECTED_KEY_LEAK_32'],
   ])(
     'rejects prohibited path/content fixture %s',
     async (relativePath, marker) => {

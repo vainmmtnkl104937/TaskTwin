@@ -24,16 +24,35 @@
 7. Confirm Runner Detail reports Service mode, OS-native unlock and boot
    resilience before relying on reboot execution.
 
-For a packaged Session 31 release, first run `runner release verify` and
+For a packaged release, first run `runner release verify` and
 `runner upgrade preflight` against the versioned ZIP, manifest and detached
-signature while the old service remains active. Require a `compatible`
-decision. Extract into a new immutable version directory, then explicitly stop
-and uninstall the old service and install/start from the new directory. The
-service stores absolute packaged Node and Runner entry-point paths, so an
-in-place path switch is not supported.
-If the service uses a non-default data root, reinstall with
-`runner service install --data-root <runner-data-root>` so the preserved
-credential, vault and service ACL bind to the same local state.
+signature while the old service remains active. Session 32 can then apply the
+same already-downloaded files only when the current installation already has a
+verified managed base:
+
+```powershell
+runner.cmd update apply --manifest <path> --signature <path> --artifact <path> [--data-root <runner-data-root>]
+```
+
+The production trusted-key registry is currently empty, so a reviewed compiled
+production public key and matching protected CI signer are prerequisites.
+Pre-Session-32/manual Session 31 installations—including a service installed
+by the source-oriented sequence above—lack a managed active-release record,
+retained signed proof and per-release activation. The controller refuses them
+with `update_current_release_unverified`; Session 32 provides no automatic
+adoption command. Establish the initial managed installation only through a
+separately reviewed out-of-band bootstrap procedure.
+
+The managed controller stores immutable versioned software and retained proof
+under `%ProgramData%\TaskTwin\RunnerInstallations\<runner-device-id>` and keeps
+the selected `.tasktwin` data root separate. It prepares an adjacent WinSW
+executable/XML pair per release and explicitly rebinds SCM after staging; it
+does not overwrite running bytes or require a symlink. See the
+[managed layout](windows-runner-update-layout.md).
+
+When the service uses a non-default data root, pass the same absolute
+`--data-root` to update, rollback and recovery so preserved credential, vault
+and native protector binding remain on that root.
 
 The service uses `LocalService` plus a unique service SID and grants that SID
 modify access only to the selected `.tasktwin` data directory. The executable,
@@ -47,11 +66,26 @@ reboot check must confirm automatic start, native unlock, inventory sync and a
 new scheduled run without a passphrase. Forced termination must leave the old
 run to normal Control Plane lease-expiry/Interrupted handling.
 
-Uninstall the service locally to roll back service management; Runner data is
-preserved. Native-to-passphrase downgrade is not available. Restore from the
-last independently protected operational backup only under the organization's
-recovery policy; TaskTwin provides no vault backup feature.
+For a managed installation, `runner.cmd update rollback` may select only the
+retained verified previous release and requires an idle Runner. The controller
+revalidates signed proof, current compatibility and restored startup health.
+A failed target apply attempts the same rollback automatically only while those
+proofs remain safe. It never downgrades local state or the vault.
 
-A rollback artifact must itself have a trusted signed manifest and pass
-preflight against the current local-state and vault schema/protection profile.
-TaskTwin does not download, install, migrate or roll back a Runner automatically.
+`runner.cmd update recover` reconciles an interrupted journal with SCM,
+active-release and health evidence. Ambiguous selection or unsafe rollback
+enters `manual_recovery_required`; there is no force path. Preserve the
+installation evidence and use a reviewed out-of-band recovery procedure. See
+the [rollback guide](runner-update-rollback.md) and
+[recovery guide](runner-update-recovery.md).
+
+Native-to-passphrase downgrade is not available. Restore from the last
+independently protected operational backup only under the organization's
+recovery policy; TaskTwin provides no vault backup feature. TaskTwin also does
+not discover or download releases, expose remote update/rollback, or migrate
+local/vault schemas.
+
+The full privileged version-A to version-B SCM rebind, native-secret scheduled
+workflow and deliberately broken-target rollback scenario has not been run in
+this working environment. The included unit and opt-in Windows adapter suites
+do not substitute for testing it on a dedicated service host.

@@ -7,7 +7,10 @@ import type {
 import type { OrganizationRole } from '../generated/prisma/client.js';
 import type { LocalSecretStoreStatus } from '@tasktwin/local-secret-store';
 import type { RunnerRuntimeMetadata } from '@tasktwin/runner-service-runtime';
-import type { RunnerSoftwareIdentity } from '@tasktwin/runner-release';
+import type {
+  RunnerCompatibilityEvaluation,
+  RunnerSoftwareIdentity,
+} from '@tasktwin/runner-release';
 
 export interface RunnerOrganizationAccess {
   organizationId: string;
@@ -56,6 +59,11 @@ export interface RunnerAuthenticationRecord {
   credentialHash: string;
   deviceRevokedAt: Date | null;
   credentialRevokedAt: Date | null;
+}
+
+export interface RunnerHeartbeatPersistenceResult {
+  runtime: RunnerRuntimeMetadata | null;
+  compatibility: RunnerCompatibilityEvaluation;
 }
 
 export type RunnerPollingResult =

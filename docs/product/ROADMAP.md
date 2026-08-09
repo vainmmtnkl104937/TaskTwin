@@ -423,3 +423,26 @@ Automatic download/install/update, automatic rollback or state migration,
 remote update execution, MSI, Authenticode, macOS/Linux/ARM artifacts, delta
 updates, SBOM, SLSA provenance and Control Plane release-catalog synchronization
 remain out of scope.
+
+# Session 32: Secure local Runner update and rollback
+
+Implemented a framework-independent update decision package and a local
+Windows x64 controller that verifies signed release proof before mutation,
+requires forward and projected rollback compatibility, blocks schema migration,
+uses an exclusive update lease, drains active work without cancellation,
+extracts into an allowlisted versioned staging layout, switches an explicit
+per-release service activation, verifies actual local startup health and
+recovers deterministically from an atomic journal.
+
+The previous verified release is retained. Failed target health triggers
+automatic rollback only after proof and compatibility are rechecked against
+current state; ambiguous or unsafe cases enter `manual_recovery_required`.
+Update maintenance blocks claims and skips one scheduled occurrence without
+backfill or unnecessary Schedule auto-pause. Control Plane outage alone does
+not invalidate local health.
+
+Automatic discovery/download, background or silent update, remote/fleet
+rollout, remote rollback/shell, forced update, schema or vault migration,
+arbitrary install scripts, MSI/Authenticode, delta patches and non-Windows-x64
+targets remain out of scope. Existing unmanaged installations require a
+separately controlled bootstrap before using this controller.

@@ -97,19 +97,9 @@ describe('Local Runner pairing integration', () => {
       await prisma.runnerPairingSession.deleteMany({
         where: { displayName: { startsWith: prefix } },
       });
-      const users = [owner, admin, member, viewer, outsider].filter(Boolean);
-      const userIds = users.map((identity) => identity.user.id);
-      const organizationIds = users.map((identity) => identity.organization.id);
-      await prisma.organizationMember.deleteMany({
-        where: { userId: { in: userIds } },
-      });
-      await prisma.workspace.deleteMany({
-        where: { organizationId: { in: organizationIds } },
-      });
-      await prisma.organization.deleteMany({
-        where: { id: { in: organizationIds } },
-      });
-      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+      // Software-version heartbeats append immutable workspace audit events.
+      // Keep their registration graph, matching the audit integration suite,
+      // rather than weakening the production immutability trigger for cleanup.
       await prisma.$disconnect();
     }
     await app?.close();
@@ -238,6 +228,7 @@ describe('Local Runner pairing integration', () => {
         capabilities: ['runner_service_v1', 'os_native_secret_unlock_v1'],
         runtime,
       })
+      .expect('TaskTwin-Runner-Compatibility', 'compatible')
       .expect(200);
     const firstSoftwareMetadata = await prisma.runnerDevice.findUniqueOrThrow({
       where: { id: runnerDeviceId },
@@ -256,6 +247,7 @@ describe('Local Runner pairing integration', () => {
         capabilities: ['runner_service_v1', 'os_native_secret_unlock_v1'],
         runtime,
       })
+      .expect('TaskTwin-Runner-Compatibility', 'compatible')
       .expect(200);
     const heartbeatDevice = await prisma.runnerDevice.findUniqueOrThrow({
       where: { id: runnerDeviceId },
@@ -283,14 +275,14 @@ describe('Local Runner pairing integration', () => {
       firstSoftwareMetadata.softwareMetadataUpdatedAt,
     );
     expect(
-      await prisma.auditEvent.count({
+      await prisma.workspaceAuditEvent.count({
         where: {
           workspaceId: owner.workspace.id,
           eventType: 'runner.runtime_mode.changed',
         },
       }),
     ).toBe(1);
-    const softwareVersionEvents = await prisma.auditEvent.findMany({
+    const softwareVersionEvents = await prisma.workspaceAuditEvent.findMany({
       where: {
         workspaceId: owner.workspace.id,
         eventType: 'runner.software_version.changed',
@@ -305,7 +297,7 @@ describe('Local Runner pairing integration', () => {
       localStateSchemaVersion: 1,
     });
     expect(
-      await prisma.auditEvent.count({
+      await prisma.workspaceAuditEvent.count({
         where: {
           workspaceId: owner.workspace.id,
           eventType: 'runner.secret_protector.changed',

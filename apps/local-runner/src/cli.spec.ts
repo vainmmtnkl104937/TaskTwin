@@ -13,6 +13,7 @@ import {
   parseServiceCommandArguments,
   runCli,
 } from './cli.js';
+import type { RunnerUpdateController } from './update/update-controller.js';
 
 describe('Local Runner execution CLI cancellation', () => {
   beforeEach(() => {
@@ -86,6 +87,23 @@ describe('Local Runner runtime mode parsing', () => {
     ).resolves.toBe(0);
     expect(messages.join('\n')).toContain('tasktwin-runner 1.4.0');
     expect(messages.join('\n')).toContain('source commit:');
+  });
+
+  it('routes update status before constructing secret or browser runtime state', async () => {
+    const messages: string[] = [];
+    const status = vi.fn(async () => ({ activeRelease: null, update: null }));
+    const controller = { status } as unknown as RunnerUpdateController;
+    await expect(
+      runCli(
+        ['update', 'status', '--data-root', 'D:\\TaskTwinData'],
+        { write: (message) => messages.push(message) },
+        { createUpdateController: async () => controller },
+      ),
+    ).resolves.toBe(0);
+    expect(status).toHaveBeenCalledOnce();
+    expect(messages).toEqual([
+      JSON.stringify({ activeRelease: null, update: null }),
+    ]);
   });
 
   it('derives explicit modes and rejects interactive service components', () => {

@@ -128,6 +128,7 @@ describe('persisted job Chromium dispatch', () => {
     let claimCount = 0;
     let approvalCreateCount = 0;
     let approvalPollCount = 0;
+    let approvalWasActiveDuringMaintenance = false;
     const approvalRequestId = randomUUID();
     const approvalRequestedAt = new Date().toISOString();
     const approvalExpiresAt = new Date(Date.now() + 10_000).toISOString();
@@ -199,6 +200,8 @@ describe('persisted job Chromium dispatch', () => {
       },
       createApprovalRequest: async () => {
         approvalCreateCount += 1;
+        worker.pauseClaims();
+        approvalWasActiveDuringMaintenance = worker.hasUnsettledWork();
         return {
           approvalRequestId,
           status: 'PENDING',
@@ -231,17 +234,19 @@ describe('persisted job Chromium dispatch', () => {
     };
     const output: string[] = [];
 
-    await new RunJobWorker(
+    const worker = new RunJobWorker(
       transport,
       new PlaywrightBrowserSessionFactory(),
       systemClock,
       { write: (message) => output.push(message) },
       '0.1.0',
-    ).runLoop(credential, controller.signal);
+    );
+    await worker.runLoop(credential, controller.signal);
 
     expect(claimCount).toBe(1);
     expect(approvalCreateCount).toBe(1);
     expect(approvalPollCount).toBe(1);
+    expect(approvalWasActiveDuringMaintenance).toBe(true);
     expect(completion?.result.status, JSON.stringify(completion?.result)).toBe(
       'succeeded',
     );

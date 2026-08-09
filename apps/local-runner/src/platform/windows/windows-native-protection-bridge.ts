@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { isAbsolute, join, resolve } from 'node:path';
 
 import { LocalSecretStoreError } from '@tasktwin/local-secret-store';
 
@@ -10,10 +11,24 @@ const NATIVE_BRIDGE_TIMEOUT_MS = 30_000;
 
 export class PowerShellWindowsNativeProtectionBridge
   implements WindowsNativeProtectionBridge {
-  constructor(private readonly scriptPath: string) {}
+  private readonly platform: NodeJS.Platform;
+  private readonly powershellExecutable: string;
+
+  constructor(
+    private readonly scriptPath: string,
+    dependencies: {
+      readonly platform?: NodeJS.Platform;
+      readonly systemRoot?: string;
+    } = {},
+  ) {
+    this.platform = dependencies.platform ?? process.platform;
+    this.powershellExecutable = nativeBridgePowerShellExecutable(
+      dependencies.systemRoot ?? process.env['SystemRoot'] ?? 'C:\\Windows',
+    );
+  }
 
   async available(): Promise<boolean> {
-    if (process.platform !== 'win32') return false;
+    if (this.platform !== 'win32') return false;
     return access(this.scriptPath).then(() => true, () => false);
   }
 
@@ -32,7 +47,7 @@ export class PowerShellWindowsNativeProtectionBridge
   }): Promise<Uint8Array> {
     return new Promise((resolve, reject) => {
       const child = spawn(
-        'powershell.exe',
+        this.powershellExecutable,
         ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', this.scriptPath],
         { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] },
       );
@@ -93,4 +108,17 @@ export class PowerShellWindowsNativeProtectionBridge
       child.stdin.end(request, 'utf8');
     });
   }
+}
+
+export function nativeBridgePowerShellExecutable(systemRoot: string): string {
+  if (!isAbsolute(systemRoot) || systemRoot.includes('\0')) {
+    throw new LocalSecretStoreError('NATIVE_PROTECTOR_UNAVAILABLE');
+  }
+  return join(
+    resolve(systemRoot),
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe',
+  );
 }

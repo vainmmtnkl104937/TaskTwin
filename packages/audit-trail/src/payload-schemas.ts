@@ -441,6 +441,7 @@ export const ScheduleOccurrenceSkippedPayloadSchema = z
       'runner_busy',
       'runner_unavailable',
       'runner_update_required',
+      'runner_maintenance',
       'policy_denied',
       'source_version_unavailable',
       'missed_start_window',

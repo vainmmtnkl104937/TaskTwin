@@ -17,3 +17,10 @@ Execution features are explicit bounded capabilities. A Local Runner advertises
 `workflow_verification_v1` only when its Playwright workflow adapter supports
 the Session 19 verification contract; the Control Plane uses that capability
 to reject incompatible dispatch before a run starts.
+
+The strict heartbeat response body remains unchanged for deployed Runners.
+After accepting and persisting a heartbeat, a Control Plane may return the
+optional `TaskTwin-Runner-Compatibility` response header. Its value is strictly
+one of `compatible`, `update_recommended`, `update_required`, or `unsupported`.
+The header is an acknowledgement of the reported software identity, not a
+remote update command, release location, or compatibility override.

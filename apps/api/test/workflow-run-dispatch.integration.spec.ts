@@ -214,8 +214,6 @@ describe('workflow run dispatch integration', () => {
   let approvalVersionId: string;
   let runnerDeviceId: string;
   let runnerCredential: string;
-  const userIds: string[] = [];
-  const organizationIds: string[] = [];
 
   const auth = (identity: Identity) => ({
     Authorization: `Bearer ${identity.accessToken}`,
@@ -235,8 +233,6 @@ describe('workflow run dispatch integration', () => {
       })
       .expect(201);
     const identity = response.body as Identity;
-    userIds.push(identity.user.id);
-    organizationIds.push(identity.organization.id);
     return identity;
   }
 
@@ -489,16 +485,9 @@ describe('workflow run dispatch integration', () => {
     await prisma.runnerPairingSession.deleteMany({
       where: { displayName: { startsWith: 'session17-runner-' } },
     });
-    await prisma.organizationMember.deleteMany({
-      where: { userId: { in: userIds } },
-    });
-    await prisma.workspace.deleteMany({
-      where: { organizationId: { in: organizationIds } },
-    });
-    await prisma.organization.deleteMany({
-      where: { id: { in: organizationIds } },
-    });
-    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    // Workflow lifecycle operations append immutable workspace audit events.
+    // Retain their registration graph rather than disabling the production
+    // immutability trigger merely to clean the integration database.
     await prisma.$disconnect();
     await app?.close();
   });
@@ -733,6 +722,8 @@ describe('workflow run dispatch integration', () => {
     const reportSoftware = async (
       version: string,
       runnerProtocolVersion: number,
+      expectedCompatibility: 'compatible' | 'update_required' | 'unsupported',
+      serviceStatus?: 'running' | 'draining',
     ) => {
       await request(app.getHttpServer())
         .post('/runner/heartbeat')
@@ -745,7 +736,20 @@ describe('workflow run dispatch integration', () => {
             version,
             runnerProtocolVersion,
           },
+          ...(serviceStatus === undefined
+            ? {}
+            : {
+                runtime: {
+                  schemaVersion: 1,
+                  runtimeMode: 'service',
+                  autonomyLevel: 'boot_resilient',
+                  serviceStatus,
+                  secretUnlockMode: 'os_native',
+                  restartResilient: true,
+                },
+              }),
         })
+        .expect('TaskTwin-Runner-Compatibility', expectedCompatibility)
         .expect(200);
     };
     const createQueuedRun = async () => {
@@ -776,7 +780,7 @@ describe('workflow run dispatch integration', () => {
         });
 
     try {
-      await reportSoftware('0.1.0', 2);
+      await reportSoftware('0.1.0', 2, 'compatible');
       const compatibleRunId = await createQueuedRun();
       await claim('0.1.0')
         .expect(200)
@@ -789,6 +793,31 @@ describe('workflow run dispatch integration', () => {
 
       await prisma.workflowRun.update({
         where: { id: compatibleRunId },
+        data: {
+          status: 'CANCELLED',
+          finishedAt: new Date(),
+          leaseTokenHash: null,
+          leaseExpiresAt: null,
+        },
+      });
+
+      const maintenanceRunId = await createQueuedRun();
+      await reportSoftware('0.1.0', 2, 'compatible', 'draining');
+      await claim('0.1.0')
+        .expect(200)
+        .expect(({ body }) => expect(body.status).toBe('no_job'));
+      expect(
+        await prisma.workflowRun.findUniqueOrThrow({
+          where: { id: maintenanceRunId },
+        }),
+      ).toMatchObject({ status: 'QUEUED', claimedAt: null });
+
+      await reportSoftware('0.1.0', 2, 'compatible', 'running');
+      await claim('0.1.0')
+        .expect(200)
+        .expect(({ body }) => expect(body.status).toBe('claimed'));
+      await prisma.workflowRun.update({
+        where: { id: maintenanceRunId },
         data: {
           status: 'CANCELLED',
           finishedAt: new Date(),
@@ -815,7 +844,7 @@ describe('workflow run dispatch integration', () => {
         claimedAt: null,
       });
 
-      await reportSoftware('0.0.4', 2);
+      await reportSoftware('0.0.4', 2, 'update_required');
       const blockedRunId = await createQueuedRun();
       await claim('0.0.4')
         .expect(200)
@@ -826,7 +855,7 @@ describe('workflow run dispatch integration', () => {
         }),
       ).toMatchObject({ status: 'QUEUED', claimedAt: null });
 
-      await reportSoftware('0.1.0', 99);
+      await reportSoftware('0.1.0', 99, 'unsupported');
       await claim('0.1.0')
         .expect(200)
         .expect(({ body }) => expect(body.status).toBe('no_job'));
@@ -835,6 +864,7 @@ describe('workflow run dispatch integration', () => {
         .post('/runner/heartbeat')
         .set(runnerAuth())
         .send({ schemaVersion: 1, runnerVersion: '0.1.0' })
+        .expect('TaskTwin-Runner-Compatibility', 'update_required')
         .expect(200);
       await request(app.getHttpServer())
         .post('/runner/jobs/claim')
@@ -849,7 +879,7 @@ describe('workflow run dispatch integration', () => {
         .expect(200)
         .expect(({ body }) => expect(body.status).toBe('no_job'));
 
-      await reportSoftware('0.1.0', 2);
+      await reportSoftware('0.1.0', 2, 'compatible');
       await prisma.runnerDevice.update({
         where: { id: runnerDeviceId },
         data: { revokedAt: new Date() },

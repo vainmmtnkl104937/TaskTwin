@@ -6,12 +6,14 @@ import {
   HttpStatus,
   Param,
   Post,
+  Res,
   UseGuards,
 } from '@nestjs/common';
-import type {
-  RunnerDeviceListResponse,
-  RunnerDeviceRevokeResponse,
-  RunnerHeartbeatResponse,
+import {
+  RUNNER_COMPATIBILITY_HEADER,
+  type RunnerDeviceListResponse,
+  type RunnerDeviceRevokeResponse,
+  type RunnerHeartbeatResponse,
 } from '@tasktwin/runner-protocol';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -24,6 +26,10 @@ import type { AuthenticatedRunner } from '../runner-auth/runner-authenticated-re
 import { RunnerCredentialGuard } from '../runner-auth/runner-credential.guard.js';
 import { RunnerService } from './runner.service.js';
 
+interface HeaderResponse {
+  setHeader(name: string, value: string): void;
+}
+
 @Controller()
 export class RunnerController {
   constructor(private readonly service: RunnerService) {}
@@ -31,11 +37,14 @@ export class RunnerController {
   @Post('runner/heartbeat')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RunnerCredentialGuard)
-  heartbeat(
+  async heartbeat(
     @CurrentRunner() runner: AuthenticatedRunner,
     @Body() body: unknown,
+    @Res({ passthrough: true }) response: HeaderResponse,
   ): Promise<RunnerHeartbeatResponse> {
-    return this.service.heartbeat(runner, body);
+    const result = await this.service.heartbeat(runner, body);
+    response.setHeader(RUNNER_COMPATIBILITY_HEADER, result.compatibilityStatus);
+    return result.response;
   }
 
   @Post('runner/secret-inventory')

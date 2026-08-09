@@ -31,6 +31,7 @@
     "@tasktwin/runner-protocol": "workspace:*",
     "@tasktwin/runner-release": "workspace:*",
     "@tasktwin/runner-service-runtime": "workspace:*",
+    "@tasktwin/runner-update": "workspace:*",
     "@tasktwin/secure-run-inputs": "workspace:*",
     "@tasktwin/shared-types": "workspace:*",
     "@tasktwin/workflow-engine": "workspace:*",

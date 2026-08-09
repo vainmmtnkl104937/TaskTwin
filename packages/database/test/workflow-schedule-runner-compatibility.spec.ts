@@ -95,17 +95,30 @@ const activePolicy = {
   },
 } as const;
 
-function createRepository(runner: {
-  runnerVersion: string;
-  platform: string;
-  architecture: string;
-  runProtocolVersion: number | null;
-  workflowSchemaVersion: number | null;
-  localStateSchemaVersion: number | null;
-}) {
+function createRepository(
+  runner: {
+    runnerVersion: string;
+    platform: string;
+    architecture: string;
+    runProtocolVersion: number | null;
+    workflowSchemaVersion: number | null;
+    localStateSchemaVersion: number | null;
+    serviceStatus?: 'running' | 'draining' | null;
+    lastSeenAt?: Date | null;
+    runtimeMetadataUpdatedAt?: Date | null;
+  },
+  scheduleOverride: Omit<Partial<typeof schedule>, 'definition'> & {
+    definition?: unknown;
+  } = {},
+) {
+  const selectedSchedule = { ...schedule, ...scheduleOverride };
   let storedOccurrence: Record<string, unknown> | null = null;
   const workflowRunCreate = vi.fn(async () => ({ id: workflowRunId }));
-  const scheduleUpdate = vi.fn(async () => schedule);
+  const activeRunFind = vi.fn(async (_input: unknown) => {
+    void _input;
+    return null;
+  });
+  const scheduleUpdate = vi.fn(async () => selectedSchedule);
   const alertAppend = vi.fn(async () => undefined);
   const occurrenceCreate = vi.fn(
     async ({ data }: { data: Record<string, unknown> }) => {
@@ -125,7 +138,7 @@ function createRepository(runner: {
   const transaction = {
     $queryRaw: vi.fn(async () => [{ id: scheduleId }]),
     workflowSchedule: {
-      findUnique: vi.fn(async () => schedule),
+      findUnique: vi.fn(async () => selectedSchedule),
       update: scheduleUpdate,
     },
     workflowScheduleOccurrence: {
@@ -138,6 +151,9 @@ function createRepository(runner: {
         revokedAt: null,
         lastSeenAt: now,
         capabilities: ['scheduled_execution_v1'],
+        serviceStatus: runner.serviceStatus ?? 'running',
+        runtimeMetadataUpdatedAt:
+          runner.runtimeMetadataUpdatedAt ?? runner.lastSeenAt ?? now,
         secretInventory: null,
         ...runner,
       })),
@@ -146,7 +162,7 @@ function createRepository(runner: {
       findFirst: vi.fn(async () => activePolicy),
     },
     workflowRun: {
-      findFirst: vi.fn(async () => null),
+      findFirst: activeRunFind,
       create: workflowRunCreate,
     },
   };
@@ -163,7 +179,9 @@ function createRepository(runner: {
     repository,
     workflowRunCreate,
     scheduleUpdate,
+    activeRunFind,
     alertAppend,
+    occurrenceCreate,
   };
 }
 
@@ -185,6 +203,193 @@ describe('scheduled Runner software compatibility', () => {
       idempotent: false,
     });
     expect(test.workflowRunCreate).toHaveBeenCalledOnce();
+    expect(test.alertAppend).not.toHaveBeenCalled();
+    for (const call of test.activeRunFind.mock.calls) {
+      expect(call[0]).toEqual(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: {
+              in: expect.arrayContaining([
+                'QUEUED',
+                'CLAIMED',
+                'RUNNING',
+                'WAITING_FOR_APPROVAL',
+                'WAITING_FOR_REPAIR',
+                'CANCEL_REQUESTED',
+              ]),
+            },
+          }),
+        }),
+      );
+    }
+  });
+
+  it('skips maintenance without auto-pause and advances past missed recurring instants', async () => {
+    appendAuditEventTransactional.mockClear();
+    const maintenanceNow = new Date('2026-08-12T08:30:00.000Z');
+    const test = createRepository(
+      {
+        runnerVersion: '0.1.0',
+        platform: 'win32',
+        architecture: 'x64',
+        runProtocolVersion: 2,
+        workflowSchemaVersion: 1,
+        localStateSchemaVersion: 1,
+        serviceStatus: 'draining',
+        lastSeenAt: maintenanceNow,
+      },
+      {
+        definition: {
+          schemaVersion: 1,
+          type: 'daily',
+          timezone: 'UTC',
+          startDate: '2026-08-09',
+          time: '08:00',
+          intervalDays: 1,
+        },
+      },
+    );
+
+    const result = await test.repository.processOccurrence({
+      scheduleId,
+      now: maintenanceNow,
+    });
+
+    expect(result).toMatchObject({
+      workflowRunId: null,
+      skipReason: 'runner_maintenance',
+      autoPaused: false,
+    });
+    expect(test.workflowRunCreate).not.toHaveBeenCalled();
+    expect(test.scheduleUpdate).toHaveBeenCalledWith({
+      where: { id: scheduleId },
+      data: {
+        nextOccurrenceAt: new Date('2026-08-13T08:00:00.000Z'),
+        lastOccurrenceAt: now,
+      },
+    });
+    expect(appendAuditEventTransactional).toHaveBeenCalledOnce();
+    expect(appendAuditEventTransactional.mock.calls[0]?.[2]).toMatchObject({
+      eventType: 'schedule.occurrence.skipped',
+      payload: { skipReason: 'runner_maintenance' },
+    });
+    expect(test.alertAppend).not.toHaveBeenCalled();
+  });
+
+  it('completes a one-time maintenance occurrence without creating a run', async () => {
+    const test = createRepository({
+      runnerVersion: '0.1.0',
+      platform: 'win32',
+      architecture: 'x64',
+      runProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      serviceStatus: 'draining',
+    });
+
+    const result = await test.repository.processOccurrence({ scheduleId, now });
+
+    expect(result?.skipReason).toBe('runner_maintenance');
+    expect(test.scheduleUpdate).toHaveBeenCalledWith({
+      where: { id: scheduleId },
+      data: {
+        nextOccurrenceAt: null,
+        lastOccurrenceAt: now,
+        status: 'COMPLETED',
+        completedAt: now,
+      },
+    });
+    expect(test.alertAppend).not.toHaveBeenCalled();
+  });
+
+  it('does not treat stale draining metadata as current maintenance', async () => {
+    const test = createRepository({
+      runnerVersion: '0.1.0',
+      platform: 'win32',
+      architecture: 'x64',
+      runProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      serviceStatus: 'draining',
+      lastSeenAt: new Date('2026-08-09T07:00:00.000Z'),
+      runtimeMetadataUpdatedAt: new Date('2026-08-09T07:00:00.000Z'),
+    });
+
+    await expect(
+      test.repository.processOccurrence({ scheduleId, now }),
+    ).rejects.toMatchObject({ code: 'RUNNER_BUSY' });
+    expect(test.occurrenceCreate).not.toHaveBeenCalled();
+    expect(test.workflowRunCreate).not.toHaveBeenCalled();
+  });
+
+  it('skips a fresh bounded maintenance report after the heartbeat goes offline', async () => {
+    const test = createRepository({
+      runnerVersion: '0.1.0',
+      platform: 'win32',
+      architecture: 'x64',
+      runProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      serviceStatus: 'draining',
+      lastSeenAt: new Date('2026-08-09T07:58:00.000Z'),
+      runtimeMetadataUpdatedAt: new Date('2026-08-09T07:58:00.000Z'),
+    });
+
+    await expect(
+      test.repository.processOccurrence({ scheduleId, now }),
+    ).resolves.toMatchObject({
+      workflowRunId: null,
+      skipReason: 'runner_maintenance',
+      autoPaused: false,
+    });
+    expect(test.workflowRunCreate).not.toHaveBeenCalled();
+    expect(test.alertAppend).not.toHaveBeenCalled();
+  });
+
+  it('keeps maintenance fresh through repeated heartbeats after twenty minutes', async () => {
+    const test = createRepository({
+      runnerVersion: '0.1.0',
+      platform: 'win32',
+      architecture: 'x64',
+      runProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      serviceStatus: 'draining',
+      lastSeenAt: now,
+      runtimeMetadataUpdatedAt: new Date('2026-08-09T07:30:00.000Z'),
+    });
+
+    await expect(
+      test.repository.processOccurrence({ scheduleId, now }),
+    ).resolves.toMatchObject({
+      workflowRunId: null,
+      skipReason: 'runner_maintenance',
+      autoPaused: false,
+    });
+    expect(test.workflowRunCreate).not.toHaveBeenCalled();
+  });
+
+  it('lets maintenance win over transient incompatible target metadata', async () => {
+    const test = createRepository({
+      runnerVersion: '0.1.0',
+      platform: 'win32',
+      architecture: 'x64',
+      runProtocolVersion: null,
+      workflowSchemaVersion: null,
+      localStateSchemaVersion: null,
+      serviceStatus: 'draining',
+      lastSeenAt: now,
+      runtimeMetadataUpdatedAt: now,
+    });
+
+    await expect(
+      test.repository.processOccurrence({ scheduleId, now }),
+    ).resolves.toMatchObject({
+      workflowRunId: null,
+      skipReason: 'runner_maintenance',
+      autoPaused: false,
+    });
+    expect(test.workflowRunCreate).not.toHaveBeenCalled();
     expect(test.alertAppend).not.toHaveBeenCalled();
   });
 

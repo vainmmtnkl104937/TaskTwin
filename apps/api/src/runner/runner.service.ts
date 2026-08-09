@@ -25,6 +25,7 @@ import {
   RUNNER_OFFLINE_AFTER_SECONDS,
   RunnerDeviceListResponseSchema,
   RunnerDeviceRevokeResponseSchema,
+  type RunnerCompatibilityAcknowledgement,
   RunnerHeartbeatRequestSchema,
   RunnerHeartbeatResponseSchema,
   deriveRunnerConnectionStatus,
@@ -78,6 +79,11 @@ function safeDevice(record: RunnerDeviceRecord, now: Date) {
   };
 }
 
+export interface RunnerHeartbeatResult {
+  response: RunnerHeartbeatResponse;
+  compatibilityStatus: RunnerCompatibilityAcknowledgement;
+}
+
 @Injectable()
 export class RunnerService {
   constructor(
@@ -129,13 +135,13 @@ export class RunnerService {
   async heartbeat(
     runner: AuthenticatedRunner,
     input: unknown,
-  ): Promise<RunnerHeartbeatResponse> {
+  ): Promise<RunnerHeartbeatResult> {
     const request = RunnerHeartbeatRequestSchema.safeParse(input);
     if (!request.success) {
       throw new ForbiddenException();
     }
     try {
-      const runtime = await this.repository.heartbeat({
+      const persisted = await this.repository.heartbeat({
         ...runner,
         runnerVersion: request.data.runnerVersion,
         ...(request.data.softwareIdentity === undefined
@@ -147,15 +153,18 @@ export class RunnerService {
           : { runtime: request.data.runtime }),
         now: new Date(),
       });
-      return RunnerHeartbeatResponseSchema.parse({
-        schemaVersion: 1,
-        runnerDeviceId: runner.runnerDeviceId,
-        workspaceId: runner.workspaceId,
-        connectionStatus: 'online',
-        capabilities: request.data.capabilities,
-        ...(runtime === null ? {} : { runtime }),
-        nextHeartbeatInSeconds: DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
-      });
+      return {
+        response: RunnerHeartbeatResponseSchema.parse({
+          schemaVersion: 1,
+          runnerDeviceId: runner.runnerDeviceId,
+          workspaceId: runner.workspaceId,
+          connectionStatus: 'online',
+          capabilities: request.data.capabilities,
+          ...(persisted.runtime === null ? {} : { runtime: persisted.runtime }),
+          nextHeartbeatInSeconds: DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
+        }),
+        compatibilityStatus: persisted.compatibility.status,
+      };
     } catch (error: unknown) {
       if (
         error instanceof RunnerRepositoryError &&

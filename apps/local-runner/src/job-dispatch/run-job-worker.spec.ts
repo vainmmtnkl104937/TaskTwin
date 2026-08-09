@@ -99,6 +99,81 @@ describe('RunJobWorker service lifecycle', () => {
     expect(claimJob).toHaveBeenCalledOnce();
   });
 
+  it('includes an in-flight claim in the maintenance quiescence barrier', async () => {
+    let settleClaim: ((value: {
+      schemaVersion: 1;
+      status: 'no_job';
+      pollAfterSeconds: number;
+    }) => void) | undefined;
+    const pendingClaim = new Promise<{
+      schemaVersion: 1;
+      status: 'no_job';
+      pollAfterSeconds: number;
+    }>((resolve) => {
+      settleClaim = resolve;
+    });
+    const claimJob = vi.fn().mockReturnValue(pendingClaim);
+    const worker = new RunJobWorker(
+      { claimJob } as unknown as RunnerJobTransport,
+      {} as BrowserSessionFactory,
+      abortableClock(),
+      { write: vi.fn() },
+      '0.1.0',
+    );
+    const shutdown = new AbortController();
+    const running = worker.runLoop(credential, shutdown.signal);
+    await vi.waitFor(() => expect(claimJob).toHaveBeenCalledOnce());
+
+    worker.pauseClaims();
+    expect(worker.acceptsNewJobs()).toBe(false);
+    expect(worker.hasUnsettledWork()).toBe(true);
+    let quiescent = false;
+    const waiting = worker.waitForQuiescence().then(() => {
+      quiescent = true;
+    });
+    await Promise.resolve();
+    expect(quiescent).toBe(false);
+
+    settleClaim?.({
+      schemaVersion: 1,
+      status: 'no_job',
+      pollAfterSeconds: 30,
+    });
+    await waiting;
+    expect(worker.hasUnsettledWork()).toBe(false);
+    expect(claimJob).toHaveBeenCalledOnce();
+
+    shutdown.abort();
+    await expect(running).resolves.toBeUndefined();
+  });
+
+  it('can reopen claim admission after a maintenance attempt is abandoned', async () => {
+    const claimJob = vi.fn().mockResolvedValue({
+      schemaVersion: 1,
+      status: 'no_job',
+      pollAfterSeconds: 30,
+    });
+    const worker = new RunJobWorker(
+      { claimJob } as unknown as RunnerJobTransport,
+      {} as BrowserSessionFactory,
+      abortableClock(),
+      { write: vi.fn() },
+      '0.1.0',
+    );
+    const shutdown = new AbortController();
+    const running = worker.runLoop(credential, shutdown.signal);
+    await vi.waitFor(() => expect(claimJob).toHaveBeenCalledOnce());
+    worker.pauseClaims();
+    await worker.waitForQuiescence();
+
+    worker.resumeClaims();
+    await vi.waitFor(() => expect(claimJob).toHaveBeenCalledTimes(2));
+    worker.pauseClaims();
+    await worker.waitForQuiescence();
+    shutdown.abort();
+    await expect(running).resolves.toBeUndefined();
+  });
+
   it('creates a fresh non-durable claim attempt after process restart', async () => {
     const claimAttemptIds: string[] = [];
     const runOnce = async () => {
