@@ -6,7 +6,11 @@ Session 28 introduces deterministic component health, fixed-window Workspace ope
 
 The API exposes `/health/live` without a database dependency and `/health/ready` with a lightweight PostgreSQL/configuration check. API, enabled Scheduler and Notification Worker processes report every approximately 30 seconds with a random boot identifier. No hostname, IP address, OS username, path, environment or credential is stored. Graceful shutdown marks a stopped timestamp; a crash is represented by freshness ageing from healthy to degraded to unavailable.
 
-Heartbeat writes and health/metrics reads do not create audit events or operational alerts.
+Component heartbeat writes and health/metrics reads do not create audit events
+or operational alerts. Session 31 adds one narrow Runner-device exception:
+an accepted product-version transition emits
+`runner.software_version.changed`; repeated identical Runner heartbeats remain
+audit-silent.
 
 ## Workspace metrics
 

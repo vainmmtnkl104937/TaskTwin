@@ -8,7 +8,11 @@ vi.mock('./execution/fixture-command.js', () => ({
   executeFixtureCommand: fixture.execute,
 }));
 
-import { determineRuntimeMode, runCli } from './cli.js';
+import {
+  determineRuntimeMode,
+  parseServiceCommandArguments,
+  runCli,
+} from './cli.js';
 
 describe('Local Runner execution CLI cancellation', () => {
   beforeEach(() => {
@@ -46,6 +50,44 @@ describe('Local Runner execution CLI cancellation', () => {
 });
 
 describe('Local Runner runtime mode parsing', () => {
+  it('keeps a custom service data root local to service installation', () => {
+    expect(
+      parseServiceCommandArguments([
+        'install',
+        '--data-root',
+        'D:\\TaskTwinData',
+      ]),
+    ).toEqual({
+      operations: ['install'],
+      dataRoot: 'D:\\TaskTwinData',
+    });
+  });
+
+  it('prints the embedded Runner identity', async () => {
+    const messages: string[] = [];
+    await expect(
+      runCli(
+        ['version'],
+        { write: (message) => messages.push(message) },
+        {
+          readBuildIdentity: async () => ({
+            product: 'tasktwin-runner',
+            version: '1.4.0',
+            sourceCommit: 'a'.repeat(40),
+            platform: 'windows',
+            architecture: 'x64',
+            runnerProtocolVersion: 2,
+            workflowSchemaVersion: 1,
+            localStateSchemaVersion: 1,
+            localSecretVaultSchemaVersion: 1,
+          }),
+        },
+      ),
+    ).resolves.toBe(0);
+    expect(messages.join('\n')).toContain('tasktwin-runner 1.4.0');
+    expect(messages.join('\n')).toContain('source commit:');
+  });
+
   it('derives explicit modes and rejects interactive service components', () => {
     expect(
       determineRuntimeMode({

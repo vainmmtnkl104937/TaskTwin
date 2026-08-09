@@ -405,5 +405,21 @@ strict safe runtime metadata in Runner Detail.
 Added explicit passphrase-to-Windows-native protector migration with candidate
 reopen verification and DPAPI-NG startup auto-unlock. Existing Session 29
 process-unattended schedules remain compatible. macOS/Linux services and native
-protectors, MSI/signing, auto-update, durable run resume, remote service
+protectors, MSI/Authenticode, auto-update, durable run resume, remote service
 management, master-key rotation and secret backup remain out of scope.
+
+# Session 31: Signed production Runner releases
+
+Implemented framework-independent release identity, explicit protocol/schema
+compatibility and non-mutating upgrade preflight; controlled Windows x64
+allowlist packaging; canonical SHA-256 release manifests with detached Ed25519
+signatures and a rotation-ready trusted public-key registry; local
+version/verify/preflight
+commands; safe heartbeat identity, claim and Schedule compatibility gates;
+Runner Detail status; idempotent software-version audit; and immutable
+tag-triggered release plus secret-free dry-run workflows.
+
+Automatic download/install/update, automatic rollback or state migration,
+remote update execution, MSI, Authenticode, macOS/Linux/ARM artifacts, delta
+updates, SBOM, SLSA provenance and Control Plane release-catalog synchronization
+remain out of scope.

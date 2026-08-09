@@ -4,7 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { RunnerJobTransport } from '../control-plane-client.js';
 import type { BrowserSessionFactory } from '../execution/browser-session.js';
 import type { RunnerClock } from '../runner-service.js';
-import { RunJobWorker } from './run-job-worker.js';
+import {
+  RunJobWorker,
+  assertClaimedJobCompatibility,
+} from './run-job-worker.js';
 
 const credential: StoredRunnerCredential = {
   schemaVersion: 1,
@@ -34,6 +37,48 @@ function abortableClock(): RunnerClock {
 }
 
 describe('RunJobWorker service lifecycle', () => {
+  it('rejects unsupported protocol and Workflow schemas before execution', () => {
+    expect(() =>
+      assertClaimedJobCompatibility({
+        runProtocolVersion: 999,
+        workflowSchemaVersion: 1,
+      }),
+    ).toThrow('Runner protocol version is unsupported');
+    expect(() =>
+      assertClaimedJobCompatibility({
+        runProtocolVersion: 2,
+        workflowSchemaVersion: 999,
+      }),
+    ).toThrow('Workflow schema version is unsupported');
+  });
+
+  it.each([
+    { runProtocolVersion: 999, workflowSchemaVersion: 1 },
+    { runProtocolVersion: 2, workflowSchemaVersion: 999 },
+  ])(
+    'rejects an incompatible claimed job before creating a browser session',
+    async (versions) => {
+      const create = vi.fn();
+      const worker = new RunJobWorker(
+        {
+          claimJob: vi.fn().mockResolvedValue({
+            schemaVersion: 1,
+            status: 'claimed',
+            job: versions,
+          }),
+        } as unknown as RunnerJobTransport,
+        { create } as unknown as BrowserSessionFactory,
+        abortableClock(),
+        { write: vi.fn() },
+        '0.1.0',
+      );
+      await expect(
+        worker.runLoop(credential, new AbortController().signal),
+      ).rejects.toThrow('unsupported');
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
+
   it('stops polling and makes no new claim after drain begins', async () => {
     const claimJob = vi.fn().mockResolvedValue({
       schemaVersion: 1,

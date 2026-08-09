@@ -7,6 +7,7 @@ import type {
 import type { OrganizationRole } from '../generated/prisma/client.js';
 import type { LocalSecretStoreStatus } from '@tasktwin/local-secret-store';
 import type { RunnerRuntimeMetadata } from '@tasktwin/runner-service-runtime';
+import type { RunnerSoftwareIdentity } from '@tasktwin/runner-release';
 
 export interface RunnerOrganizationAccess {
   organizationId: string;
@@ -27,6 +28,7 @@ export interface RunnerDeviceRecord {
   id: string;
   workspaceId: string;
   metadata: RunnerDeviceMetadata;
+  softwareIdentity: RunnerSoftwareIdentity | null;
   capabilities: RunnerCapability[];
   lastSeenAt: Date | null;
   revokedAt: Date | null;

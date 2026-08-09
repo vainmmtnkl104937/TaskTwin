@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import {
   RunnerJobClaimResponseSchema,
@@ -10,6 +10,12 @@ import {
   type StoredRunnerCredential,
 } from '@tasktwin/runner-protocol';
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
+import {
+  DEFAULT_WORKSPACE_EXECUTION_POLICY,
+  canonicalPolicyJson,
+  evaluateWorkflowPolicy,
+  serializeCanonicalJson,
+} from '@tasktwin/workflow-policy';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { RunnerJobTransport } from '../control-plane-client.js';
@@ -125,6 +131,25 @@ describe('persisted job Chromium dispatch', () => {
     const approvalRequestId = randomUUID();
     const approvalRequestedAt = new Date().toISOString();
     const approvalExpiresAt = new Date(Date.now() + 10_000).toISOString();
+    const claimedWorkflow = workflow(server.origin);
+    const definitionDigest = createHash('sha256')
+      .update(
+        serializeCanonicalJson(
+          JSON.parse(JSON.stringify(claimedWorkflow)) as Parameters<
+            typeof serializeCanonicalJson
+          >[0],
+        ),
+      )
+      .digest('hex');
+    const policyDigest = createHash('sha256')
+      .update(canonicalPolicyJson(DEFAULT_WORKSPACE_EXECUTION_POLICY))
+      .digest('hex');
+    const policyEvaluation = evaluateWorkflowPolicy({
+      policy: DEFAULT_WORKSPACE_EXECUTION_POLICY,
+      workflow: claimedWorkflow,
+      policyDigest,
+      workflowDigest: definitionDigest,
+    });
 
     const transport: RunnerJobTransport = {
       claimJob: async () => {
@@ -134,8 +159,17 @@ describe('persisted job Chromium dispatch', () => {
           status: 'claimed',
           job: {
             runId,
-            definitionDigest: 'a'.repeat(64),
-            workflow: workflow(server.origin),
+            runProtocolVersion: 2,
+            workflowSchemaVersion: 1,
+            definitionDigest,
+            workflow: claimedWorkflow,
+            policy: {
+              versionId: randomUUID(),
+              revision: 1,
+              digest: policyDigest,
+              definition: DEFAULT_WORKSPACE_EXECUTION_POLICY,
+              evaluation: policyEvaluation,
+            },
             runtimeInput: { kind: 'none' },
             allowedOrigins: [server.origin],
             options: { totalTimeoutMs: 30_000, stepTimeoutMs: 10_000 },

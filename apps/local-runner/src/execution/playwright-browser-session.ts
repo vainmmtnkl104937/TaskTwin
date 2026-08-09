@@ -1,10 +1,9 @@
-import {
-  chromium,
-  type Browser,
-  type BrowserContext,
-  type BrowserType,
-  type ChromiumBrowser,
-  type Page,
+import type {
+  Browser,
+  BrowserContext,
+  BrowserType,
+  ChromiumBrowser,
+  Page,
 } from 'playwright';
 import type { SafeExecutionError } from '@tasktwin/workflow-engine';
 
@@ -57,12 +56,13 @@ class OwnedPlaywrightBrowserSession implements BrowserSession {
 }
 
 export class PlaywrightBrowserSessionFactory implements BrowserSessionFactory {
-  constructor(private readonly launcher: ChromiumLauncher = chromium) {}
+  constructor(private readonly launcher?: ChromiumLauncher) {}
 
   async create(options: BrowserExecutionOptions): Promise<BrowserSession> {
     let browser: Browser;
     try {
-      browser = await this.launcher.launch({
+      const launcher = this.launcher ?? (await import('playwright')).chromium;
+      browser = await launcher.launch({
         headless: options.headless,
         handleSIGHUP: false,
         handleSIGINT: false,

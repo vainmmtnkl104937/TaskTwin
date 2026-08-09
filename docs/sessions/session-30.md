@@ -47,6 +47,8 @@ capabilities.
 Windows is the only service/native-protector implementation. The native key
 blob is machine-scoped; the service SID ACL is therefore an essential second
 boundary. Local administrators, endpoint compromise and an already-compromised
-unlocked Runner remain outside the protection claim. There is no MSI, signing,
-auto-update, remote service control, durable run resume, macOS/Linux adapter,
+unlocked Runner remain outside the protection claim. Session 30 added no MSI
+or release signing. Session 31 later adds a signed ZIP manifest, not MSI or
+Authenticode. There is no auto-update, remote service control, durable run
+resume, macOS/Linux adapter,
 key rotation or secret backup.

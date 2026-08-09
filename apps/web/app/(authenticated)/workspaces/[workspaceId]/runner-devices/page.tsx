@@ -8,6 +8,7 @@ import {
 } from '@/lib/server/control-plane';
 
 import { RevokeRunnerButton } from './revoke-runner-button';
+import { RunnerSoftwareDetails } from './runner-software-details';
 
 export default async function RunnerDevicesPage({
   params,
@@ -59,29 +60,51 @@ export default async function RunnerDevicesPage({
                 Status: {device.connectionStatus} · Last seen:{' '}
                 {device.lastSeenAt ?? 'Never'}
               </p>
+              <RunnerSoftwareDetails device={device} />
               <section aria-label="Runner runtime">
                 <h3>Runtime</h3>
                 {device.runtime ? (
                   <dl>
-                    <div><dt>Mode</dt><dd>{runtimeModeLabel(device.runtime.runtimeMode)}</dd></div>
-                    <div><dt>Service status</dt><dd>{labelWords(device.runtime.serviceStatus)}</dd></div>
-                    <div><dt>Autonomy</dt><dd>{labelWords(device.runtime.autonomyLevel)}</dd></div>
-                    <div><dt>Secret unlock</dt><dd>{secretUnlockLabel(device.runtime.secretUnlockMode)}</dd></div>
+                    <div>
+                      <dt>Mode</dt>
+                      <dd>{runtimeModeLabel(device.runtime.runtimeMode)}</dd>
+                    </div>
+                    <div>
+                      <dt>Service status</dt>
+                      <dd>{labelWords(device.runtime.serviceStatus)}</dd>
+                    </div>
+                    <div>
+                      <dt>Autonomy</dt>
+                      <dd>{labelWords(device.runtime.autonomyLevel)}</dd>
+                    </div>
+                    <div>
+                      <dt>Secret unlock</dt>
+                      <dd>
+                        {secretUnlockLabel(device.runtime.secretUnlockMode)}
+                      </dd>
+                    </div>
                     <div>
                       <dt>Scheduled execution</dt>
-                      <dd>{device.capabilities.includes('scheduled_execution_v1')
-                        ? 'Available'
-                        : 'Unavailable'}</dd>
+                      <dd>
+                        {device.capabilities.includes('scheduled_execution_v1')
+                          ? 'Available'
+                          : 'Unavailable'}
+                      </dd>
                     </div>
                     <div>
                       <dt>Restart resilience</dt>
-                      <dd>{device.runtime.restartResilient
-                        ? 'Available after reboot'
-                        : 'Process lifetime only'}</dd>
+                      <dd>
+                        {device.runtime.restartResilient
+                          ? 'Available after reboot'
+                          : 'Process lifetime only'}
+                      </dd>
                     </div>
                   </dl>
                 ) : (
-                  <p>Runtime metadata has not been reported by this Runner version.</p>
+                  <p>
+                    Runtime metadata has not been reported by this Runner
+                    version.
+                  </p>
                 )}
               </section>
               <section aria-label="Local Secret Store status">
@@ -90,7 +113,8 @@ export default async function RunnerDevicesPage({
                   <>
                     <p>
                       Status: {device.localSecretStore.status} · Revision:{' '}
-                      {device.localSecretStore.vaultRevision ?? 'none'} · Configured aliases:{' '}
+                      {device.localSecretStore.vaultRevision ?? 'none'} ·
+                      Configured aliases:{' '}
                       {device.localSecretStore.configuredSecretCount}
                     </p>
                     <p className="metadata">
@@ -108,7 +132,9 @@ export default async function RunnerDevicesPage({
                     )}
                   </>
                 ) : (
-                  <p>Unavailable. Configure locally with runner secrets init.</p>
+                  <p>
+                    Unavailable. Configure locally with runner secrets init.
+                  </p>
                 )}
               </section>
             </div>

@@ -35,6 +35,11 @@ import {
 } from '@tasktwin/runner-service-runtime';
 import { appendAuditEventTransactional } from '../audit-trail/audit-appender.repository.js';
 import { WorkspaceAuditTrailRepository } from '../audit-trail/audit-trail.repository.js';
+import type { RunnerSoftwareIdentity } from '@tasktwin/runner-release';
+import {
+  toPersistedRunnerSoftwareIdentity,
+  toRunnerReleasePlatform,
+} from './runner-software-compatibility.js';
 
 const MANAGER_ROLES = [OrganizationRole.OWNER, OrganizationRole.ADMIN] as const;
 const SERIALIZATION_RETRY_COUNT = 3;
@@ -80,6 +85,9 @@ function toDeviceRecord(row: {
   platform: string;
   architecture: string;
   runnerVersion: string;
+  runProtocolVersion?: number | null;
+  workflowSchemaVersion?: number | null;
+  localStateSchemaVersion?: number | null;
   installationId: string;
   lastSeenAt: Date | null;
   revokedAt: Date | null;
@@ -109,16 +117,29 @@ function toDeviceRecord(row: {
       runnerVersion: row.runnerVersion,
       installationId: row.installationId,
     },
+    softwareIdentity: toPersistedRunnerSoftwareIdentity({
+      runnerVersion: row.runnerVersion,
+      platform: row.platform,
+      architecture: row.architecture,
+      runProtocolVersion: row.runProtocolVersion ?? null,
+      workflowSchemaVersion: row.workflowSchemaVersion ?? null,
+      localStateSchemaVersion: row.localStateSchemaVersion ?? null,
+    }),
     capabilities: row.capabilities as RunnerCapability[],
     lastSeenAt: row.lastSeenAt,
     revokedAt: row.revokedAt,
     createdAt: row.createdAt,
     runtime:
-      row.runtimeMode === null || row.runtimeMode === undefined ||
-      row.autonomyLevel === null || row.autonomyLevel === undefined ||
-      row.serviceStatus === null || row.serviceStatus === undefined ||
-      row.secretUnlockMode === null || row.secretUnlockMode === undefined ||
-      row.restartResilient === null || row.restartResilient === undefined
+      row.runtimeMode === null ||
+      row.runtimeMode === undefined ||
+      row.autonomyLevel === null ||
+      row.autonomyLevel === undefined ||
+      row.serviceStatus === null ||
+      row.serviceStatus === undefined ||
+      row.secretUnlockMode === null ||
+      row.secretUnlockMode === undefined ||
+      row.restartResilient === null ||
+      row.restartResilient === undefined
         ? null
         : RunnerRuntimeMetadataSchema.parse({
             schemaVersion: 1,
@@ -487,6 +508,9 @@ export class RunnerRepository {
         platform: true,
         architecture: true,
         runnerVersion: true,
+        runProtocolVersion: true,
+        workflowSchemaVersion: true,
+        localStateSchemaVersion: true,
         installationId: true,
         lastSeenAt: true,
         revokedAt: true,
@@ -550,6 +574,7 @@ export class RunnerRepository {
     runnerDeviceId: string;
     credentialId: string;
     runnerVersion: string;
+    softwareIdentity?: RunnerSoftwareIdentity;
     capabilities: RunnerCapability[];
     runtime?: RunnerRuntimeReport;
     now: Date;
@@ -560,6 +585,13 @@ export class RunnerRepository {
         select: {
           revokedAt: true,
           workspaceId: true,
+          runnerVersion: true,
+          platform: true,
+          architecture: true,
+          runProtocolVersion: true,
+          workflowSchemaVersion: true,
+          localStateSchemaVersion: true,
+          softwareMetadataRevision: true,
           runtimeMode: true,
           autonomyLevel: true,
           serviceStatus: true,
@@ -579,25 +611,59 @@ export class RunnerRepository {
       ) {
         throw new RunnerRepositoryError('RUNNER_REVOKED');
       }
-      const databaseNow = (await transaction.$queryRaw<Array<{ now: Date }>>`
+      if (
+        input.softwareIdentity !== undefined &&
+        (input.softwareIdentity.version !== input.runnerVersion ||
+          input.softwareIdentity.platform !==
+            toRunnerReleasePlatform(device.platform) ||
+          input.softwareIdentity.architecture !== device.architecture)
+      ) {
+        throw new RunnerRepositoryError('RUNNER_SOFTWARE_IDENTITY_CONFLICT');
+      }
+      const databaseNow = (
+        await transaction.$queryRaw<Array<{ now: Date }>>`
         SELECT clock_timestamp() AS "now"
-      `)[0]?.now;
-      if (databaseNow === undefined) throw new RunnerRepositoryError('RUNNER_REVOKED');
-      const runtimeChanged = input.runtime !== undefined && (
-        device.runtimeMode !== input.runtime.runtimeMode ||
-        device.autonomyLevel !== input.runtime.autonomyLevel ||
-        device.serviceStatus !== input.runtime.serviceStatus ||
-        device.secretUnlockMode !== input.runtime.secretUnlockMode ||
-        device.restartResilient !== input.runtime.restartResilient
-      );
+      `
+      )[0]?.now;
+      if (databaseNow === undefined)
+        throw new RunnerRepositoryError('RUNNER_REVOKED');
+      const runtimeChanged =
+        input.runtime !== undefined &&
+        (device.runtimeMode !== input.runtime.runtimeMode ||
+          device.autonomyLevel !== input.runtime.autonomyLevel ||
+          device.serviceStatus !== input.runtime.serviceStatus ||
+          device.secretUnlockMode !== input.runtime.secretUnlockMode ||
+          device.restartResilient !== input.runtime.restartResilient);
       const nextRuntimeRevision = runtimeChanged
         ? device.runtimeMetadataRevision + 1
         : device.runtimeMetadataRevision;
+      const reportedRunProtocolVersion =
+        input.softwareIdentity?.runnerProtocolVersion ?? null;
+      const reportedWorkflowSchemaVersion =
+        input.softwareIdentity?.workflowSchemaVersion ?? null;
+      const reportedLocalStateSchemaVersion =
+        input.softwareIdentity?.localStateSchemaVersion ?? null;
+      const softwareChanged =
+        device.runnerVersion !== input.runnerVersion ||
+        device.runProtocolVersion !== reportedRunProtocolVersion ||
+        device.workflowSchemaVersion !== reportedWorkflowSchemaVersion ||
+        device.localStateSchemaVersion !== reportedLocalStateSchemaVersion;
+      const versionChanged = device.runnerVersion !== input.runnerVersion;
+      const nextSoftwareRevision = softwareChanged
+        ? device.softwareMetadataRevision + 1
+        : device.softwareMetadataRevision;
       await transaction.runnerDevice.update({
         where: { id: input.runnerDeviceId },
         data: {
           lastSeenAt: databaseNow,
           runnerVersion: input.runnerVersion,
+          runProtocolVersion: reportedRunProtocolVersion,
+          workflowSchemaVersion: reportedWorkflowSchemaVersion,
+          localStateSchemaVersion: reportedLocalStateSchemaVersion,
+          softwareMetadataRevision: nextSoftwareRevision,
+          ...(softwareChanged
+            ? { softwareMetadataUpdatedAt: databaseNow }
+            : {}),
           capabilities: input.capabilities,
           capabilitiesUpdatedAt: databaseNow,
           ...(input.runtime === undefined
@@ -609,7 +675,9 @@ export class RunnerRepository {
                 secretUnlockMode: input.runtime.secretUnlockMode,
                 restartResilient: input.runtime.restartResilient,
                 runtimeMetadataRevision: nextRuntimeRevision,
-                ...(runtimeChanged ? { runtimeMetadataUpdatedAt: databaseNow } : {}),
+                ...(runtimeChanged
+                  ? { runtimeMetadataUpdatedAt: databaseNow }
+                  : {}),
               }),
         },
       });
@@ -617,6 +685,23 @@ export class RunnerRepository {
         where: { id: input.credentialId },
         data: { lastUsedAt: databaseNow },
       });
+      if (versionChanged) {
+        await appendAuditEventTransactional(transaction, this.auditTrail, {
+          workspaceId: device.workspaceId,
+          eventType: 'runner.software_version.changed',
+          actor: { type: 'runner', runnerDeviceId: input.runnerDeviceId },
+          primaryEntity: { kind: 'runner_device', id: input.runnerDeviceId },
+          occurredAt: databaseNow,
+          sourceId: `runner-software:${input.runnerDeviceId}:${nextSoftwareRevision}`,
+          payload: {
+            runnerDeviceId: input.runnerDeviceId,
+            previousVersion: device.runnerVersion,
+            newVersion: input.runnerVersion,
+            runnerProtocolVersion: reportedRunProtocolVersion,
+            localStateSchemaVersion: reportedLocalStateSchemaVersion,
+          },
+        });
+      }
       if (runtimeChanged && input.runtime !== undefined) {
         if (
           device.runtimeMode !== input.runtime.runtimeMode ||
@@ -680,6 +765,9 @@ export class RunnerRepository {
           platform: true,
           architecture: true,
           runnerVersion: true,
+          runProtocolVersion: true,
+          workflowSchemaVersion: true,
+          localStateSchemaVersion: true,
           installationId: true,
           lastSeenAt: true,
           revokedAt: true,
@@ -720,6 +808,9 @@ export class RunnerRepository {
           platform: true,
           architecture: true,
           runnerVersion: true,
+          runProtocolVersion: true,
+          workflowSchemaVersion: true,
+          localStateSchemaVersion: true,
           installationId: true,
           lastSeenAt: true,
           revokedAt: true,
@@ -733,10 +824,18 @@ export class RunnerRepository {
           runtimeMetadataRevision: true,
         },
       });
-      const invalidatedApprovals = await transaction.workflowApprovalRequest.findMany({
-        where: { runnerDeviceId, status: WorkflowApprovalRequestStatus.PENDING },
-        select: { id: true, workflowRunId: true, workflowRun: { select: { workspaceId: true } } },
-      });
+      const invalidatedApprovals =
+        await transaction.workflowApprovalRequest.findMany({
+          where: {
+            runnerDeviceId,
+            status: WorkflowApprovalRequestStatus.PENDING,
+          },
+          select: {
+            id: true,
+            workflowRunId: true,
+            workflowRun: { select: { workspaceId: true } },
+          },
+        });
       await transaction.workflowApprovalRequest.updateMany({
         where: {
           runnerDeviceId,
@@ -749,14 +848,21 @@ export class RunnerRepository {
       });
       for (const approval of invalidatedApprovals) {
         await this.operationalAlerts?.resolve(transaction, {
-          workspaceId: approval.workflowRun.workspaceId, type: 'approval_required',
-          sourceType: 'approval_request', sourceId: approval.id, reason: 'invalidated',
+          workspaceId: approval.workflowRun.workspaceId,
+          type: 'approval_required',
+          sourceType: 'approval_request',
+          sourceId: approval.id,
+          reason: 'invalidated',
         });
       }
-      const invalidatedRepairs = await transaction.workflowRepairRequest.findMany({
-        where: { runnerDeviceId, status: WorkflowRepairRequestStatus.PENDING },
-        select: { id: true, workspaceId: true },
-      });
+      const invalidatedRepairs =
+        await transaction.workflowRepairRequest.findMany({
+          where: {
+            runnerDeviceId,
+            status: WorkflowRepairRequestStatus.PENDING,
+          },
+          select: { id: true, workspaceId: true },
+        });
       await transaction.workflowRepairRequest.updateMany({
         where: {
           runnerDeviceId,
@@ -769,8 +875,11 @@ export class RunnerRepository {
       });
       for (const repair of invalidatedRepairs) {
         await this.operationalAlerts?.resolve(transaction, {
-          workspaceId: repair.workspaceId, type: 'repair_required',
-          sourceType: 'repair_request', sourceId: repair.id, reason: 'invalidated',
+          workspaceId: repair.workspaceId,
+          type: 'repair_required',
+          sourceType: 'repair_request',
+          sourceId: repair.id,
+          reason: 'invalidated',
         });
       }
       await transaction.workflowRunStepAttempt.updateMany({
@@ -842,12 +951,24 @@ export class RunnerRepository {
         });
         for (const run of activeRuns) {
           await this.operationalAlerts?.append(transaction, {
-            schemaVersion: 1, workspaceId: run.workspaceId, type: 'run_interrupted',
+            schemaVersion: 1,
+            workspaceId: run.workspaceId,
+            type: 'run_interrupted',
             source: { type: 'workflow_run', id: run.id },
-            primaryEntity: { type: 'workflow_run', id: run.id }, relatedEntities: [],
-            template: { schemaVersion: 1, templateKey: 'run_interrupted.v1',
-              workflowRunId: run.id, interruptedAt: now.toISOString() },
-            actionTarget: { schemaVersion: 1, kind: 'run', workspaceId: run.workspaceId, workflowRunId: run.id },
+            primaryEntity: { type: 'workflow_run', id: run.id },
+            relatedEntities: [],
+            template: {
+              schemaVersion: 1,
+              templateKey: 'run_interrupted.v1',
+              workflowRunId: run.id,
+              interruptedAt: now.toISOString(),
+            },
+            actionTarget: {
+              schemaVersion: 1,
+              kind: 'run',
+              workspaceId: run.workspaceId,
+              workflowRunId: run.id,
+            },
             creatorUserId: run.createdByUserId,
           });
         }

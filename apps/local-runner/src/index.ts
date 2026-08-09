@@ -1,6 +1,11 @@
-import { runCli } from './cli.js';
+import { bootstrapRunner } from './bootstrap.js';
+import { configurePackagedBrowserPath } from './release/runtime-layout.js';
 
-void runCli(process.argv.slice(2))
+void bootstrapRunner({
+  argv: process.argv.slice(2),
+  configureBrowserPath: configurePackagedBrowserPath,
+  loadCli: () => import('./cli.js'),
+})
   .then((exitCode) => {
     process.exitCode = exitCode;
   })

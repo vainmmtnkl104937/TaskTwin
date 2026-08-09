@@ -132,6 +132,7 @@ export const ScheduleAutoPausedTemplateSchema = TemplateBaseSchema.extend({
     'source_version_unavailable',
     'ambiguous_outcome',
     'secret_readiness_failed',
+    'runner_update_required',
   ]),
   autoPausedAt: SafeTimestampSchema,
   occurrenceId: AlertUuidSchema.optional(),
@@ -169,14 +170,21 @@ export const TrustedOperationalAlertInputSchema = z
     type: OperationalAlertTypeSchema,
     source: OperationalAlertSourceBindingSchema,
     primaryEntity: OperationalAlertEntityRefSchema,
-    relatedEntities: z.array(OperationalAlertEntityRefSchema).max(8).default([]),
+    relatedEntities: z
+      .array(OperationalAlertEntityRefSchema)
+      .max(8)
+      .default([]),
     template: OperationalAlertTemplateSchema,
     actionTarget: OperationalAlertActionTargetSchema,
     creatorUserId: AlertUuidSchema.optional(),
   })
   .superRefine((input, context) => {
     const expected = {
-      approval_required: ['approval_request', 'approval_required.v1', 'approval'],
+      approval_required: [
+        'approval_request',
+        'approval_required.v1',
+        'approval',
+      ],
       repair_required: ['repair_request', 'repair_required.v1', 'repair'],
       run_failed: ['workflow_run', 'run_failed.v1', 'run'],
       run_timed_out: ['workflow_run', 'run_timed_out.v1', 'run'],
@@ -193,7 +201,11 @@ export const TrustedOperationalAlertInputSchema = z
       ],
     } as const;
     const [sourceType, templateKey, actionKind] = expected[input.type];
-    if (input.source.type !== sourceType) {
+    const sourceTypeMatches =
+      input.source.type === sourceType ||
+      (input.type === 'schedule_auto_paused' &&
+        input.source.type === 'workflow_schedule_occurrence');
+    if (!sourceTypeMatches) {
       context.addIssue({
         code: 'custom',
         path: ['source', 'type'],
@@ -226,48 +238,80 @@ export const TrustedOperationalAlertInputSchema = z
     };
     switch (input.type) {
       case 'approval_required':
-        if (input.template.templateKey !== 'approval_required.v1' ||
+        if (
+          input.template.templateKey !== 'approval_required.v1' ||
           input.actionTarget.kind !== 'approval' ||
           input.source.id !== input.template.approvalRequestId ||
           input.source.id !== input.actionTarget.approvalRequestId ||
-          input.primaryEntity.type !== 'approval_request' || input.primaryEntity.id !== input.source.id) {
+          input.primaryEntity.type !== 'approval_request' ||
+          input.primaryEntity.id !== input.source.id
+        ) {
           mismatch(['source', 'id'], 'Approval alert identities must match.');
         }
         break;
       case 'repair_required':
-        if (input.template.templateKey !== 'repair_required.v1' ||
+        if (
+          input.template.templateKey !== 'repair_required.v1' ||
           input.actionTarget.kind !== 'repair' ||
           input.source.id !== input.template.repairRequestId ||
           input.source.id !== input.actionTarget.repairRequestId ||
-          input.primaryEntity.type !== 'repair_request' || input.primaryEntity.id !== input.source.id) {
+          input.primaryEntity.type !== 'repair_request' ||
+          input.primaryEntity.id !== input.source.id
+        ) {
           mismatch(['source', 'id'], 'Repair alert identities must match.');
         }
         break;
       case 'run_failed':
       case 'run_timed_out':
       case 'run_interrupted':
-        if (!['run_failed.v1', 'run_timed_out.v1', 'run_interrupted.v1'].includes(input.template.templateKey) ||
+        if (
+          !['run_failed.v1', 'run_timed_out.v1', 'run_interrupted.v1'].includes(
+            input.template.templateKey,
+          ) ||
           input.actionTarget.kind !== 'run' ||
           !('workflowRunId' in input.template) ||
           input.source.id !== input.template.workflowRunId ||
           input.source.id !== input.actionTarget.workflowRunId ||
-          input.primaryEntity.type !== 'workflow_run' || input.primaryEntity.id !== input.source.id) {
+          input.primaryEntity.type !== 'workflow_run' ||
+          input.primaryEntity.id !== input.source.id
+        ) {
           mismatch(['source', 'id'], 'Run alert identities must match.');
         }
         break;
-      case 'schedule_auto_paused':
-        if (input.template.templateKey !== 'schedule_auto_paused.v1' ||
-          input.actionTarget.kind !== 'schedule' ||
-          input.source.id !== input.template.workflowScheduleId ||
-          input.source.id !== input.actionTarget.workflowScheduleId ||
-          input.primaryEntity.type !== 'workflow_schedule' || input.primaryEntity.id !== input.source.id) {
+      case 'schedule_auto_paused': {
+        if (
+          input.template.templateKey !== 'schedule_auto_paused.v1' ||
+          input.actionTarget.kind !== 'schedule'
+        ) {
+          mismatch(['source', 'id'], 'Schedule alert identities must match.');
+          break;
+        }
+        const sourceIdentityMatches =
+          (input.source.type === 'workflow_schedule' &&
+            input.source.id === input.template.workflowScheduleId) ||
+          (input.source.type === 'workflow_schedule_occurrence' &&
+            input.template.occurrenceId !== undefined &&
+            input.source.id === input.template.occurrenceId);
+        if (
+          !sourceIdentityMatches ||
+          input.template.workflowScheduleId !==
+            input.actionTarget.workflowScheduleId ||
+          input.primaryEntity.type !== 'workflow_schedule' ||
+          input.primaryEntity.id !== input.template.workflowScheduleId
+        ) {
           mismatch(['source', 'id'], 'Schedule alert identities must match.');
         }
         break;
+      }
       case 'audit_integrity_failed':
-        if (input.primaryEntity.type !== 'workspace_audit_chain' ||
-          input.primaryEntity.id !== input.workspaceId) {
-          mismatch(['primaryEntity'], 'Audit integrity alerts must bind the Workspace audit chain.');
+        if (
+          input.primaryEntity.type !== 'workspace_audit_chain' ||
+          input.primaryEntity.id !== input.workspaceId
+        ) {
+          mismatch(
+            ['primaryEntity'],
+            'Audit integrity alerts must bind the Workspace audit chain.',
+          );
         }
         break;
     }
@@ -277,7 +321,9 @@ export type OperationalAlertType = z.infer<typeof OperationalAlertTypeSchema>;
 export type OperationalAlertSeverity = z.infer<
   typeof OperationalAlertSeveritySchema
 >;
-export type OperationalAlertStatus = z.infer<typeof OperationalAlertStatusSchema>;
+export type OperationalAlertStatus = z.infer<
+  typeof OperationalAlertStatusSchema
+>;
 export type OperationalAlertSourceType = z.infer<
   typeof OperationalAlertSourceTypeSchema
 >;

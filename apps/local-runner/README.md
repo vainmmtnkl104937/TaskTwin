@@ -1,5 +1,30 @@
 # TaskTwin Local Runner
 
+## Installed version and release verification
+
+Production builds read immutable `build-identity.json` metadata generated from
+this package version, exact source commit and the existing protocol/schema
+constants. `.env`, `.tasktwin`, Runner configuration and service configuration
+cannot override the installed product version.
+
+See `docs/runner-version.md` for the complete identity, tag binding and the
+distinction between product SemVer and compatibility versions.
+
+Before stopping an installed service, inspect and verify release files and run
+read-only compatibility preflight:
+
+```powershell
+runner version
+runner release verify <manifest> <signature> <artifact>
+runner upgrade preflight <manifest> <signature> <artifact>
+```
+
+Only Windows x64 ZIP releases exist in Session 31. Verification resolves the
+manifest key ID from the compiled trusted public-key set and checks canonical
+manifest signature plus exact artifact name, size and SHA-256. Preflight does
+not migrate or rewrite local state. See `docs/runner-release-packaging.md`,
+`docs/runner-upgrade-preflight.md` and `docs/runner-compatibility.md`.
+
 ## Local Secret Store
 
 After pairing, use `pnpm runner -- secrets init`, `pnpm runner -- secrets status`, `pnpm runner -- secrets set <alias>`, `pnpm runner -- secrets remove <alias>`, and `pnpm runner -- secrets list`. Passphrases and values are prompted locally without echo and are never accepted through argv. See `docs/local-runner-secret-management.md` and ADR-030 for the storage and threat model.
@@ -18,6 +43,10 @@ pnpm --filter @tasktwin/local-runner runner -- service install
 pnpm --filter @tasktwin/local-runner runner -- service start
 pnpm --filter @tasktwin/local-runner runner -- service status
 ```
+
+Pass `--data-root <absolute-path>` to each `service` operation when pairing and
+local state live outside the current user's default data root. Manual upgrades
+must reuse the same path.
 
 Service operations are local-only and privileged. Service mode is headless,
 rejects interactive secret providers, uses a per-Runner filesystem lock,
@@ -84,8 +113,9 @@ Verification results contain no observed or expected value.
 Execution requires an explicit HTTP/HTTPS origin allowlist. Navigation rejects
 credential-bearing URLs, unsafe schemes, disallowed destinations, and a final
 redirect outside the allowlist. Locators must match exactly one element and
-use normal Playwright actionability without force. Secret references fail
-closed because secret resolution is not implemented.
+use normal Playwright actionability without force. Secret references resolve
+only through the explicit attended provider or the Session 29/30 Local Secret
+Store boundary and fail closed when neither approved source is available.
 
 Reports contain only safe step metadata and fixed error codes. Runtime values,
 full URLs, query parameters, cookies, HTML, browser console payloads, and raw

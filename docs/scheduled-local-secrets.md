@@ -11,3 +11,11 @@ process lives. Session 30 adds `boot_resilient` only for a verified Windows
 service with successful native unlock and inventory synchronization. Restart
 never resumes an old scheduled run; existing lease expiry and Interrupted
 handling protect ambiguous outcomes.
+
+Session 31 compatibility is evaluated before occurrence dispatch and remains
+conjunctive with these secret-readiness rules. An update-required or unsupported
+assigned Runner creates no executable run; the occurrence is skipped and the
+Schedule auto-pauses with `runner_update_required` through the existing safe
+audit and operational-alert path.
+Compatible and update-recommended Runners continue through the existing
+capability, online, policy and secret-readiness checks.

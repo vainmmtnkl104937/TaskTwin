@@ -22,7 +22,9 @@ describe('definitions', () => {
     });
 
     it('accepts America/New_York', () => {
-      expect(IanaTimezoneSchema.parse('America/New_York')).toBe('America/New_York');
+      expect(IanaTimezoneSchema.parse('America/New_York')).toBe(
+        'America/New_York',
+      );
     });
 
     it('rejects invalid timezone', () => {
@@ -270,7 +272,13 @@ describe('definitions', () => {
 describe('schedule-status', () => {
   describe('WorkflowScheduleStatusSchema', () => {
     it('accepts all valid statuses', () => {
-      const statuses = ['ACTIVE', 'PAUSED', 'AUTO_PAUSED', 'COMPLETED', 'ARCHIVED'];
+      const statuses = [
+        'ACTIVE',
+        'PAUSED',
+        'AUTO_PAUSED',
+        'COMPLETED',
+        'ARCHIVED',
+      ];
       for (const s of statuses) {
         expect(WorkflowScheduleStatusSchema.parse(s)).toBe(s);
       }
@@ -283,7 +291,14 @@ describe('schedule-status', () => {
 
   describe('WorkflowScheduleOccurrenceStatusSchema', () => {
     it('accepts all valid statuses', () => {
-      const statuses = ['PENDING', 'DISPATCHED', 'SUCCEEDED', 'SKIPPED', 'TIMED_OUT', 'CANCELLED'];
+      const statuses = [
+        'PENDING',
+        'DISPATCHED',
+        'SUCCEEDED',
+        'SKIPPED',
+        'TIMED_OUT',
+        'CANCELLED',
+      ];
       for (const s of statuses) {
         expect(WorkflowScheduleOccurrenceStatusSchema.parse(s)).toBe(s);
       }
@@ -296,6 +311,7 @@ describe('schedule-status', () => {
         'schedule_overlap',
         'runner_busy',
         'runner_unavailable',
+        'runner_update_required',
         'policy_denied',
         'source_version_unavailable',
         'missed_start_window',
@@ -314,6 +330,7 @@ describe('schedule-status', () => {
         'policy_review_required',
         'source_version_unavailable',
         'ambiguous_outcome',
+        'runner_update_required',
       ];
       for (const r of reasons) {
         expect(ScheduleAutoPauseReasonSchema.parse(r)).toBe(r);

@@ -28,13 +28,13 @@ export const OPERATIONAL_ALERT_SOURCE_TYPES = [
   'repair_request',
   'workflow_run',
   'workflow_schedule',
+  'workflow_schedule_occurrence',
   'audit_verification_failure',
 ] as const;
 
 export const OPERATIONAL_ALERT_ENTITY_TYPES = [
   ...OPERATIONAL_ALERT_SOURCE_TYPES,
   'workflow_version',
-  'workflow_schedule_occurrence',
   'workspace_audit_chain',
 ] as const;
 

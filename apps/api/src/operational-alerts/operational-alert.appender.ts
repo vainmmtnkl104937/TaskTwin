@@ -18,9 +18,7 @@ import {
 } from '@tasktwin/operational-alerts';
 
 @Injectable()
-export class OperationalAlertAppender
-  implements OperationalAlertTransactionAppender
-{
+export class OperationalAlertAppender implements OperationalAlertTransactionAppender {
   async append(
     tx: DatabaseTransactionClient,
     rawInput: TrustedOperationalAlertInput,
@@ -34,13 +32,18 @@ export class OperationalAlertAppender
           select: {
             members: {
               where: { user: { isActive: true } },
-              select: { userId: true, role: true, user: { select: { isActive: true } } },
+              select: {
+                userId: true,
+                role: true,
+                user: { select: { isActive: true } },
+              },
             },
           },
         },
       },
     });
-    if (workspace === null) throw new OperationalAlertError('OPERATIONAL_ALERT_WORKSPACE_NOT_FOUND');
+    if (workspace === null)
+      throw new OperationalAlertError('OPERATIONAL_ALERT_WORKSPACE_NOT_FOUND');
 
     const recipients = resolveOperationalAlertRecipients({
       type: input.type,
@@ -49,7 +52,9 @@ export class OperationalAlertAppender
         role: member.role,
         isActive: member.user.isActive,
       })),
-      ...(input.creatorUserId === undefined ? {} : { creatorUserId: input.creatorUserId }),
+      ...(input.creatorUserId === undefined
+        ? {}
+        : { creatorUserId: input.creatorUserId }),
     });
     const severity = deriveOperationalAlertSeverity(input.type);
     const status = deriveInitialOperationalAlertStatus(input.type);
@@ -94,9 +99,14 @@ export class OperationalAlertAppender
       }),
     }));
     if (outbox.length > 0) {
-      await tx.notificationOutboxMessage.createMany({ data: outbox, skipDuplicates: true });
+      await tx.notificationOutboxMessage.createMany({
+        data: outbox,
+        skipDuplicates: true,
+      });
     }
-    const recipientCount = await tx.notificationOutboxMessage.count({ where: { alertId: alert.id } });
+    const recipientCount = await tx.notificationOutboxMessage.count({
+      where: { alertId: alert.id },
+    });
     const audit = await appendAuditEventTransactional(
       tx,
       new WorkspaceAuditTrailRepository(tx),
@@ -109,8 +119,12 @@ export class OperationalAlertAppender
         occurredAt: alert.createdAt.toISOString(),
         sourceId: `notification-alert-created:${alert.id}`,
         payload: {
-          alertId: alert.id, alertType: input.type, severity,
-          sourceType: input.source.type, sourceId: input.source.id, recipientCount,
+          alertId: alert.id,
+          alertType: input.type,
+          severity,
+          sourceType: input.source.type,
+          sourceId: input.source.id,
+          recipientCount,
         },
       },
     );
@@ -122,35 +136,62 @@ export class OperationalAlertAppender
     input: ResolveOperationalAlertInput,
   ): Promise<{ alertId: string; idempotent: boolean } | null> {
     const alert = await tx.operationalAlert.findUnique({
-      where: { workspaceId_type_sourceType_sourceId: {
-        workspaceId: input.workspaceId, type: input.type,
-        sourceType: input.sourceType, sourceId: input.sourceId,
-      } },
+      where: {
+        workspaceId_type_sourceType_sourceId: {
+          workspaceId: input.workspaceId,
+          type: input.type,
+          sourceType: input.sourceType,
+          sourceId: input.sourceId,
+        },
+      },
     });
     if (alert === null) return null;
-    if (alert.status === 'informational') return { alertId: alert.id, idempotent: true };
+    if (alert.status === 'informational')
+      return { alertId: alert.id, idempotent: true };
+    if (alert.status === 'resolved' && input.ignoreAlreadyResolved === true) {
+      return { alertId: alert.id, idempotent: true };
+    }
     const resolvedAt = alert.resolvedAt ?? new Date();
     if (alert.status === 'active') {
-      await tx.operationalAlert.update({ where: { id: alert.id }, data: {
-        status: 'resolved', resolvedAt, resolutionReason: input.reason,
-        resolvedByUserId: input.resolvedByUserId ?? null,
-      } });
+      await tx.operationalAlert.update({
+        where: { id: alert.id },
+        data: {
+          status: 'resolved',
+          resolvedAt,
+          resolutionReason: input.reason,
+          resolvedByUserId: input.resolvedByUserId ?? null,
+        },
+      });
     } else if (alert.resolutionReason !== input.reason) {
       throw new OperationalAlertError('OPERATIONAL_ALERT_RESOLUTION_CONFLICT');
     }
-    const recipientCount = await tx.notificationOutboxMessage.count({ where: { alertId: alert.id } });
-    const audit = await appendAuditEventTransactional(tx, new WorkspaceAuditTrailRepository(tx), {
-      workspaceId: input.workspaceId,
-      eventType: 'notification.alert.resolved',
-      actor: input.resolvedByUserId === undefined
-        ? { type: 'system', reason: 'automatic' }
-        : { type: 'user', userId: input.resolvedByUserId },
-      primaryEntity: { kind: 'operational_alert', id: alert.id },
-      relatedEntities: [], occurredAt: resolvedAt.toISOString(),
-      sourceId: `notification-alert-resolved:${alert.id}`,
-      payload: { alertId: alert.id, alertType: alert.type, severity: alert.severity,
-        sourceType: alert.sourceType, sourceId: alert.sourceId, recipientCount },
+    const recipientCount = await tx.notificationOutboxMessage.count({
+      where: { alertId: alert.id },
     });
+    const audit = await appendAuditEventTransactional(
+      tx,
+      new WorkspaceAuditTrailRepository(tx),
+      {
+        workspaceId: input.workspaceId,
+        eventType: 'notification.alert.resolved',
+        actor:
+          input.resolvedByUserId === undefined
+            ? { type: 'system', reason: 'automatic' }
+            : { type: 'user', userId: input.resolvedByUserId },
+        primaryEntity: { kind: 'operational_alert', id: alert.id },
+        relatedEntities: [],
+        occurredAt: resolvedAt.toISOString(),
+        sourceId: `notification-alert-resolved:${alert.id}`,
+        payload: {
+          alertId: alert.id,
+          alertType: alert.type,
+          severity: alert.severity,
+          sourceType: alert.sourceType,
+          sourceId: alert.sourceId,
+          recipientCount,
+        },
+      },
+    );
     return { alertId: alert.id, idempotent: audit.idempotent };
   }
 }

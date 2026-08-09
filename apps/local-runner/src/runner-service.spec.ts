@@ -68,6 +68,59 @@ function setup(polls: PairingPollingResponse[] = [paired]) {
 }
 
 describe('LocalRunnerService', () => {
+  it('reports safe immutable software identity in heartbeat', async () => {
+    const context = setup();
+    const credential: StoredRunnerCredential = {
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    };
+    await context.store.save(credential);
+    const softwareIdentity = {
+      product: 'tasktwin-runner' as const,
+      version: '1.4.0',
+      runnerProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      platform: 'windows' as const,
+      architecture: 'x64' as const,
+    };
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      context.clock,
+      softwareIdentity.version,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { headed: false, attended: false },
+      undefined,
+      undefined,
+      {
+        runtimeMode: 'unattended_process',
+        serviceVerified: false,
+        nativeProtectorAvailable: false,
+        drainTimeoutMilliseconds: 60_000,
+      },
+      softwareIdentity,
+    );
+    await service.status();
+    expect(context.transport.heartbeat).toHaveBeenCalledWith(
+      credential,
+      '1.4.0',
+      [],
+      expect.objectContaining({ schemaVersion: 1 }),
+      softwareIdentity,
+    );
+    expect(JSON.stringify(softwareIdentity)).not.toMatch(/path|commit|vault/i);
+  });
+
   it('handles pending, slow-down, and paired without printing secrets', async () => {
     const context = setup([
       { schemaVersion: 1, status: 'authorization_pending', intervalSeconds: 5 },
@@ -299,9 +352,7 @@ describe('LocalRunnerService', () => {
       secretUnlockMode: 'os_native',
       restartResilient: true,
     });
-    expect(runtime.prepare).toHaveBeenCalledBefore(
-      context.transport.heartbeat,
-    );
+    expect(runtime.prepare).toHaveBeenCalledBefore(context.transport.heartbeat);
     expect(runtime.dispose).toHaveBeenCalledOnce();
   });
 

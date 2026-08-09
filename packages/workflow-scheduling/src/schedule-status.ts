@@ -54,6 +54,8 @@ export const ScheduleSkipReasonSchema = z.enum([
   'runner_busy',
   /** The assigned Runner is offline or revoked. */
   'runner_unavailable',
+  /** The assigned Runner cannot safely execute new work with the Control Plane. */
+  'runner_update_required',
   /** The current Active Policy denies or requires approval for the workflow. */
   'policy_denied',
   /** The pinned WorkflowVersion is no longer published or available. */
@@ -84,6 +86,8 @@ export const ScheduleAutoPauseReasonSchema = z.enum([
    */
   'ambiguous_outcome',
   'secret_readiness_failed',
+  /** The assigned Runner must be updated before scheduled work can resume. */
+  'runner_update_required',
 ]);
 
 export type ScheduleAutoPauseReason = z.infer<

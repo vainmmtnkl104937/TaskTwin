@@ -49,6 +49,7 @@ export const AUDIT_EVENT_TYPES = [
   'notification.alert.resolved',
   'notification.delivery.dead_lettered',
   'runner.secret_inventory.updated',
+  'runner.software_version.changed',
   'runner.runtime_mode.changed',
   'runner.secret_protector.changed',
 ] as const;

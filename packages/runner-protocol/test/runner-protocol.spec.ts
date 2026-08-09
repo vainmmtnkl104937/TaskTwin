@@ -21,6 +21,43 @@ const metadata = {
 } as const;
 
 describe('runner capabilities', () => {
+  it('accepts only matching safe software identity metadata', () => {
+    const heartbeat = {
+      schemaVersion: 1,
+      runnerVersion: '0.1.0',
+      softwareIdentity: {
+        product: 'tasktwin-runner',
+        version: '0.1.0',
+        runnerProtocolVersion: 2,
+        workflowSchemaVersion: 1,
+        localStateSchemaVersion: 1,
+        platform: 'windows',
+        architecture: 'x64',
+      },
+    } as const;
+    expect(
+      RunnerHeartbeatRequestSchema.parse(heartbeat).softwareIdentity,
+    ).toEqual(heartbeat.softwareIdentity);
+    expect(
+      RunnerHeartbeatRequestSchema.safeParse({
+        ...heartbeat,
+        softwareIdentity: {
+          ...heartbeat.softwareIdentity,
+          version: '0.1.1',
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      RunnerHeartbeatRequestSchema.safeParse({
+        ...heartbeat,
+        softwareIdentity: {
+          ...heartbeat.softwareIdentity,
+          installationPath: 'C:\\private\\runner',
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it('accepts workflow_verification_v1 and rejects duplicates', () => {
     expect(
       RunnerHeartbeatRequestSchema.parse({
@@ -48,10 +85,7 @@ describe('runner capabilities', () => {
     const valid = {
       schemaVersion: 1,
       runnerVersion: '0.1.0',
-      capabilities: [
-        'runner_service_v1',
-        'os_native_secret_unlock_v1',
-      ],
+      capabilities: ['runner_service_v1', 'os_native_secret_unlock_v1'],
       runtime: {
         schemaVersion: 1,
         runtimeMode: 'service',

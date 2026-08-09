@@ -46,6 +46,43 @@ describe('operational alert contracts', () => {
     );
   });
 
+  it('accepts the safe Runner update-required schedule auto-pause reason', () => {
+    const workflowScheduleId = '00000000-0000-4000-8000-000000000020';
+    const occurrenceId = '00000000-0000-4000-8000-000000000021';
+    expect(
+      TrustedOperationalAlertInputSchema.safeParse({
+        schemaVersion: 1,
+        workspaceId,
+        type: 'schedule_auto_paused',
+        source: {
+          type: 'workflow_schedule_occurrence',
+          id: occurrenceId,
+        },
+        primaryEntity: {
+          type: 'workflow_schedule',
+          id: workflowScheduleId,
+        },
+        relatedEntities: [
+          { type: 'workflow_schedule_occurrence', id: occurrenceId },
+        ],
+        template: {
+          schemaVersion: 1,
+          templateKey: 'schedule_auto_paused.v1',
+          workflowScheduleId,
+          reason: 'runner_update_required',
+          autoPausedAt: '2026-08-09T01:00:00.000Z',
+          occurrenceId,
+        },
+        actionTarget: {
+          schemaVersion: 1,
+          kind: 'schedule',
+          workspaceId,
+          workflowScheduleId,
+        },
+      }).success,
+    ).toBe(true);
+  });
+
   it('rejects invalid alert types and unexpected properties', () => {
     expect(
       TrustedOperationalAlertInputSchema.safeParse({
@@ -68,7 +105,10 @@ describe('operational alert contracts', () => {
     expect(
       TrustedOperationalAlertInputSchema.safeParse({
         ...approvalAlert,
-        actionTarget: { ...approvalAlert.actionTarget, approvalRequestId: workflowRunId },
+        actionTarget: {
+          ...approvalAlert.actionTarget,
+          approvalRequestId: workflowRunId,
+        },
       }).success,
     ).toBe(false);
   });
@@ -81,8 +121,12 @@ describe('operational alert contracts', () => {
     expect(deriveInitialOperationalAlertStatus('run_failed')).toBe(
       'informational',
     );
-    expect(deriveInitialOperationalAlertStatus('repair_required')).toBe('active');
-    expect(deriveInitialOperationalAlertStatus('audit_integrity_failed')).toBe('active');
+    expect(deriveInitialOperationalAlertStatus('repair_required')).toBe(
+      'active',
+    );
+    expect(deriveInitialOperationalAlertStatus('audit_integrity_failed')).toBe(
+      'active',
+    );
     expect(canTransitionOperationalAlert('active', 'resolved')).toBe(true);
     expect(canTransitionOperationalAlert('informational', 'resolved')).toBe(
       false,

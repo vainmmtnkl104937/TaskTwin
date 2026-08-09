@@ -55,6 +55,7 @@ function rethrowRepositoryError(error: unknown): never {
         'Pairing is temporarily unavailable.',
       );
     case 'RUNNER_REVOKED':
+    case 'RUNNER_SOFTWARE_IDENTITY_CONFLICT':
       throw new ForbiddenException();
   }
 }

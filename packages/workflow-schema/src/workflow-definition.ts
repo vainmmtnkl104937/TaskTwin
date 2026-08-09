@@ -4,6 +4,8 @@ import { NonEmptyStringSchema } from './primitives.js';
 import { WorkflowStepSchema } from './workflow-step.js';
 import { WorkflowVariableSchema } from './workflow-variable.js';
 
+export const WORKFLOW_SCHEMA_VERSION = 1;
+
 export const WorkflowLifecycleStatusSchema = z.enum([
   'draft',
   'testing',
@@ -12,7 +14,7 @@ export const WorkflowLifecycleStatusSchema = z.enum([
 ]);
 
 const WorkflowDefinitionV1ObjectSchema = z.strictObject({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(WORKFLOW_SCHEMA_VERSION),
   workflowId: NonEmptyStringSchema,
   version: z.number().int().positive(),
   name: NonEmptyStringSchema,

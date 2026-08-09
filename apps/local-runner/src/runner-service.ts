@@ -39,6 +39,7 @@ import { RunJobWorker } from './job-dispatch/run-job-worker.js';
 import type { RunnerKeyManager } from './secure-inputs/runner-key-manager.js';
 import type { LocalSecretRuntime } from './secrets/local-secret-runtime.js';
 import type { LocalVaultSecretProvider } from './secrets/local-vault-secret-provider.js';
+import type { RunnerSoftwareIdentity } from '@tasktwin/runner-release';
 
 export interface RunnerOutput {
   write(message: string): void;
@@ -123,6 +124,7 @@ export class LocalRunnerService {
       nativeProtectorAvailable: false,
       drainTimeoutMilliseconds: DEFAULT_RUNNER_DRAIN_TIMEOUT_MS,
     },
+    private readonly softwareIdentity?: RunnerSoftwareIdentity,
   ) {}
 
   async pair(input: {
@@ -228,9 +230,10 @@ export class LocalRunnerService {
             return;
           }
           if (this.draining) break;
-          const classification = error instanceof ControlPlaneClientError
-            ? classifyHttpConnectionFailure(error.status)
-            : 'retryable';
+          const classification =
+            error instanceof ControlPlaneClientError
+              ? classifyHttpConnectionFailure(error.status)
+              : 'retryable';
           if (classification === 'permanent') {
             this.output.write('RUNNER_CONNECTION_PERMANENT_FAILURE');
             return;
@@ -374,12 +377,21 @@ export class LocalRunnerService {
     credential: StoredRunnerCredential,
   ): Promise<number> {
     try {
-      const response = await this.transport.heartbeat(
-        credential,
-        this.runnerVersion,
-        this.capabilities(),
-        this.runtimeReport(),
-      );
+      const response =
+        this.softwareIdentity === undefined
+          ? await this.transport.heartbeat(
+              credential,
+              this.runnerVersion,
+              this.capabilities(),
+              this.runtimeReport(),
+            )
+          : await this.transport.heartbeat(
+              credential,
+              this.runnerVersion,
+              this.capabilities(),
+              this.runtimeReport(),
+              this.softwareIdentity,
+            );
       return response.nextHeartbeatInSeconds;
     } catch (error: unknown) {
       if (
@@ -418,7 +430,9 @@ export class LocalRunnerService {
       }
     }
     if (this.initialized) {
-      for (const capability of deriveServiceCapabilities(this.capabilityState())) {
+      for (const capability of deriveServiceCapabilities(
+        this.capabilityState(),
+      )) {
         capabilities.push(capability);
       }
     }
@@ -432,13 +446,16 @@ export class LocalRunnerService {
       jobWorkerAvailable: this.jobTransport !== undefined,
       browserAvailable: this.browserSessions !== undefined,
       serviceVerified: this.runtimeConfiguration.serviceVerified,
-      nativeProtectorAvailable: this.runtimeConfiguration.nativeProtectorAvailable,
-      nativeUnlockVerified: this.localSecretRuntime?.isNativeUnlockVerified?.() === true,
+      nativeProtectorAvailable:
+        this.runtimeConfiguration.nativeProtectorAvailable,
+      nativeUnlockVerified:
+        this.localSecretRuntime?.isNativeUnlockVerified?.() === true,
       configuredUnlockMode:
         this.localSecretRuntime?.secretUnlockMode?.() ?? 'none',
       vaultReady: this.localSecretRuntime?.isReady() === true,
       localSecretProviderAvailable: this.localSecretProvider !== undefined,
-      inventorySynchronized: this.localSecretRuntime?.currentPin() !== undefined,
+      inventorySynchronized:
+        this.localSecretRuntime?.currentPin() !== undefined,
       draining: this.draining,
     };
   }

@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@tasktwin/local-secret-store": "workspace:*",
+    "@tasktwin/runner-release": "workspace:*",
     "@tasktwin/workflow-extraction": "workspace:*",
     "@tasktwin/workflow-approval": "workspace:*",
     "@tasktwin/secure-run-inputs": "workspace:*",

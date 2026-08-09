@@ -1,5 +1,20 @@
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
+import { DEFAULT_WORKSPACE_EXECUTION_POLICY } from '@tasktwin/workflow-policy';
 import { describe, expect, it, vi } from 'vitest';
+
+vi.mock(
+  '../src/audit-trail/audit-appender.repository.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('../src/audit-trail/audit-appender.repository.js')
+      >();
+    return {
+      ...actual,
+      appendAuditEventTransactional: vi.fn().mockResolvedValue(undefined),
+    };
+  },
+);
 
 import {
   OrganizationRole,
@@ -75,6 +90,11 @@ function createRepository(current = detailRow()) {
     },
     workflow: {
       update: vi.fn().mockResolvedValue({}),
+    },
+    workspaceExecutionPolicyVersion: {
+      findFirst: vi.fn().mockResolvedValue({
+        definition: DEFAULT_WORKSPACE_EXECUTION_POLICY,
+      }),
     },
   };
   const prisma = {

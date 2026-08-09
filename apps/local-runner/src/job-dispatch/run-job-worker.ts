@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  RUN_PROTOCOL_SCHEMA_VERSION,
+  RUN_PROTOCOL_VERSION,
   RunnerJobClaimRequestSchema,
   WorkflowRunCompletionRequestSchema,
   type ClaimedRunnerJob,
 } from '@tasktwin/run-protocol';
+import { WORKFLOW_ENGINE_SCHEMA_VERSION } from '@tasktwin/workflow-engine';
+import { WORKFLOW_SCHEMA_VERSION } from '@tasktwin/workflow-schema';
 import type { StoredRunnerCredential } from '@tasktwin/runner-protocol';
 import type { SecretProvider } from '@tasktwin/secure-run-inputs';
 import type { LocalSecretInventoryPin } from '@tasktwin/local-secret-store';
@@ -15,7 +19,10 @@ import { LocalWorkflowExecutor } from '../execution/workflow-executor.js';
 import type { RunnerClock, RunnerOutput } from '../runner-service.js';
 import { RunProgressSink } from './run-progress-sink.js';
 import type { RunnerKeyManager } from '../secure-inputs/runner-key-manager.js';
-import { acquireLocalSecretRuntime, acquireSecureRuntime } from '../secure-inputs/secure-runtime.js';
+import {
+  acquireLocalSecretRuntime,
+  acquireSecureRuntime,
+} from '../secure-inputs/secure-runtime.js';
 import type { LocalVaultSecretProvider } from '../secrets/local-vault-secret-provider.js';
 import { HttpApprovalCoordinator } from './http-approval-coordinator.js';
 import { HttpRecoveryCoordinator } from './http-recovery-coordinator.js';
@@ -40,7 +47,8 @@ export class RunJobWorker {
       attended: boolean;
     } = { headed: false, attended: false },
     private readonly localSecretProvider?: LocalVaultSecretProvider,
-    private readonly localInventoryPin?: () => LocalSecretInventoryPin | undefined,
+    private readonly localInventoryPin?: () =>
+      LocalSecretInventoryPin | undefined,
   ) {}
 
   async runLoop(
@@ -52,9 +60,10 @@ export class RunJobWorker {
     try {
       while (!signal.aborted && this.acceptingJobs) {
         const claimRequest = RunnerJobClaimRequestSchema.parse({
-          schemaVersion: 1,
-          runProtocolVersion: 2,
-          workflowEngineSchemaVersion: 1,
+          schemaVersion: RUN_PROTOCOL_SCHEMA_VERSION,
+          runProtocolVersion: RUN_PROTOCOL_VERSION,
+          workflowSchemaVersion: WORKFLOW_SCHEMA_VERSION,
+          workflowEngineSchemaVersion: WORKFLOW_ENGINE_SCHEMA_VERSION,
           runnerVersion: this.runnerVersion,
           claimAttemptId: randomUUID(),
           secretInventory: this.localInventoryPin?.(),
@@ -120,6 +129,7 @@ export class RunJobWorker {
     job: ClaimedRunnerJob,
     shutdownSignal: AbortSignal,
   ): Promise<void> {
+    assertClaimedJobCompatibility(job);
     const execution = new AbortController();
     const stopExecution = () => execution.abort();
     shutdownSignal.addEventListener('abort', stopExecution, { once: true });
@@ -302,5 +312,17 @@ export class RunJobWorker {
       }
     }
     throw latestError;
+  }
+}
+
+export function assertClaimedJobCompatibility(job: {
+  runProtocolVersion: number;
+  workflowSchemaVersion: number;
+}): void {
+  if (job.runProtocolVersion !== RUN_PROTOCOL_VERSION) {
+    throw new Error('The claimed job Runner protocol version is unsupported.');
+  }
+  if (job.workflowSchemaVersion !== WORKFLOW_SCHEMA_VERSION) {
+    throw new Error('The claimed job Workflow schema version is unsupported.');
   }
 }

@@ -71,6 +71,10 @@ import type {
   WorkflowRunRecord,
 } from './workflow-run-records.js';
 import type { OperationalAlertTransactionAppender } from '../operational-alerts/operational-alert-port.js';
+import {
+  canRunnerClaimJobs,
+  evaluatePersistedRunnerCompatibility,
+} from '../runner/runner-software-compatibility.js';
 
 const ACTIVE_STATUSES = [
   WorkflowRunStatus.CLAIMED,
@@ -343,9 +347,21 @@ function buildRunCancelRequestedInput(input: {
 
 function buildRunTerminalInput(input: {
   workspaceId: string;
-  actor: { type: 'runner' | 'user' | 'system'; userId?: string; runnerDeviceId?: string; reason?: 'automatic_expiry' | 'lease_expired' | 'completion_reconciliation' | 'policy_supersede' | 'run_cancelled' | 'secret_inventory_sync' };
+  actor: {
+    type: 'runner' | 'user' | 'system';
+    userId?: string;
+    runnerDeviceId?: string;
+    reason?:
+      | 'automatic_expiry'
+      | 'lease_expired'
+      | 'completion_reconciliation'
+      | 'policy_supersede'
+      | 'run_cancelled'
+      | 'secret_inventory_sync';
+  };
   runId: string;
-  terminalStatus: 'succeeded' | 'failed' | 'cancelled' | 'timed_out' | 'interrupted';
+  terminalStatus:
+    'succeeded' | 'failed' | 'cancelled' | 'timed_out' | 'interrupted';
   terminationCause?: string;
   finishedAt: Date;
   engineResultDigest?: string;
@@ -356,7 +372,8 @@ function buildRunTerminalInput(input: {
   const actor: AuditEventInput['actor'] =
     input.actor.type === 'user' && input.actor.userId !== undefined
       ? { type: 'user', userId: input.actor.userId }
-      : input.actor.type === 'runner' && input.actor.runnerDeviceId !== undefined
+      : input.actor.type === 'runner' &&
+          input.actor.runnerDeviceId !== undefined
         ? { type: 'runner', runnerDeviceId: input.actor.runnerDeviceId }
         : {
             type: 'system',
@@ -458,9 +475,7 @@ function buildAttemptStartedInput(input: {
       kind: 'workflow_run_step_attempt',
       id: input.attemptId,
     },
-    relatedEntities: [
-      { kind: 'workflow_run', id: input.runId },
-    ],
+    relatedEntities: [{ kind: 'workflow_run', id: input.runId }],
     occurredAt: input.occurredAt,
     sourceId: createAuditSourceId(
       RUN_EVENT_NAMESPACES.attemptStarted,
@@ -472,7 +487,9 @@ function buildAttemptStartedInput(input: {
       runStepAttemptId: input.attemptId,
       stepId: input.stepId,
       stepIndex: input.stepIndex,
-      stepType: input.stepType as Parameters<typeof createAuditSourceId>[1][0] extends string
+      stepType: input.stepType as Parameters<
+        typeof createAuditSourceId
+      >[1][0] extends string
         ? Parameters<typeof createAuditSourceId>[1][0]
         : never,
       attemptNumber: input.attemptNumber,
@@ -496,11 +513,7 @@ function buildAttemptTerminalInput(input: {
   attemptNumber: number;
   trigger: 'initial' | 'automatic_retry' | 'manual_retry';
   attemptStatus:
-    | 'succeeded'
-    | 'failed'
-    | 'cancelled'
-    | 'timed_out'
-    | 'interrupted';
+    'succeeded' | 'failed' | 'cancelled' | 'timed_out' | 'interrupted';
   effectCertainty:
     | 'not_started'
     | 'read_only'
@@ -1211,6 +1224,9 @@ export class WorkflowRunRepository {
 
   claim(input: {
     runnerDeviceId: string;
+    runnerVersion: string;
+    runProtocolVersion: number;
+    workflowSchemaVersion: number;
     claimAttemptId: string;
     leaseTokenHash: string;
     now: Date;
@@ -1222,6 +1238,12 @@ export class WorkflowRunRepository {
         where: { id: input.runnerDeviceId },
         select: {
           revokedAt: true,
+          runnerVersion: true,
+          platform: true,
+          architecture: true,
+          runProtocolVersion: true,
+          workflowSchemaVersion: true,
+          localStateSchemaVersion: true,
           secretInventory: {
             select: {
               vaultId: true,
@@ -1234,6 +1256,15 @@ export class WorkflowRunRepository {
       });
       if (runner === null || runner.revokedAt !== null) {
         throw new WorkflowRunRepositoryError('RUNNER_REVOKED');
+      }
+      const compatibility = evaluatePersistedRunnerCompatibility(runner);
+      if (
+        !canRunnerClaimJobs(compatibility) ||
+        input.runnerVersion !== runner.runnerVersion ||
+        input.runProtocolVersion !== runner.runProtocolVersion ||
+        input.workflowSchemaVersion !== runner.workflowSchemaVersion
+      ) {
+        return { status: 'no_job' };
       }
 
       const retried = await transaction.workflowRun.findUnique({
@@ -1248,12 +1279,18 @@ export class WorkflowRunRepository {
           status: true,
           leaseTokenHash: true,
           leaseExpiresAt: true,
+          runProtocolVersion: true,
           definitionDigest: true,
           allowedOrigins: true,
           executionOptions: true,
           workflowVersion: { select: { definition: true } },
           policyVersion: {
-            select: { id: true, revision: true, definition: true, digest: true },
+            select: {
+              id: true,
+              revision: true,
+              definition: true,
+              digest: true,
+            },
           },
           policyDigest: true,
           policyEvaluation: true,
@@ -1280,7 +1317,8 @@ export class WorkflowRunRepository {
             retried.status as (typeof ACTIVE_STATUSES)[number],
           ) ||
           retried.leaseTokenHash !== input.leaseTokenHash ||
-          retried.leaseExpiresAt === null
+          retried.leaseExpiresAt === null ||
+          retried.runProtocolVersion !== input.runProtocolVersion
         ) {
           throw new WorkflowRunRepositoryError('RUN_CONFLICT');
         }
@@ -1315,6 +1353,7 @@ export class WorkflowRunRepository {
         FROM "workflow_runs"
         WHERE "runner_device_id" = ${input.runnerDeviceId}::uuid
           AND "status" = 'QUEUED'
+          AND "run_protocol_version" = ${input.runProtocolVersion}
         ORDER BY "created_at" ASC, "id" ASC
         LIMIT 1
         FOR UPDATE SKIP LOCKED
@@ -1368,11 +1407,15 @@ export class WorkflowRunRepository {
         (input.secretInventory !== undefined &&
           currentInventory?.storeStatus === 'READY' &&
           input.secretInventory.vaultId === pinnedSecretInventory.vaultId &&
-          input.secretInventory.vaultRevision === pinnedSecretInventory.vaultRevision &&
-          input.secretInventory.inventoryDigest === pinnedSecretInventory.inventoryDigest &&
+          input.secretInventory.vaultRevision ===
+            pinnedSecretInventory.vaultRevision &&
+          input.secretInventory.inventoryDigest ===
+            pinnedSecretInventory.inventoryDigest &&
           currentInventory.vaultId === pinnedSecretInventory.vaultId &&
-          currentInventory.vaultRevision === pinnedSecretInventory.vaultRevision &&
-          currentInventory.inventoryDigest === pinnedSecretInventory.inventoryDigest);
+          currentInventory.vaultRevision ===
+            pinnedSecretInventory.vaultRevision &&
+          currentInventory.inventoryDigest ===
+            pinnedSecretInventory.inventoryDigest);
       if (queued !== null && !secretInventoryMatches) {
         await transaction.workflowRun.update({
           where: { id: runId },
@@ -1548,7 +1591,8 @@ export class WorkflowRunRepository {
       if (
         queued === null ||
         queued.policyVersionId === null ||
-        queued.workspace.executionPolicyVersions[0]?.id !== queued.policyVersionId
+        queued.workspace.executionPolicyVersions[0]?.id !==
+          queued.policyVersionId
       ) {
         await transaction.workflowRun.update({
           where: { id: runId },
@@ -1569,20 +1613,41 @@ export class WorkflowRunRepository {
           },
         });
         if (queued !== null) {
-          await appendAuditEventTransactional(transaction, this.auditTrail,
-            buildRunTerminalInput({ workspaceId: queued.workspaceId,
-              actor: { type: 'system', reason: 'policy_supersede' }, runId,
-              terminalStatus: 'failed', terminationCause: 'policy_changed_before_execution',
-              finishedAt: input.now, stepCount: queued.steps.length,
-              producedOutputCount: queued.outputs.filter((output) => output.status === WorkflowRunOutputStatus.PRODUCED).length,
-            }));
+          await appendAuditEventTransactional(
+            transaction,
+            this.auditTrail,
+            buildRunTerminalInput({
+              workspaceId: queued.workspaceId,
+              actor: { type: 'system', reason: 'policy_supersede' },
+              runId,
+              terminalStatus: 'failed',
+              terminationCause: 'policy_changed_before_execution',
+              finishedAt: input.now,
+              stepCount: queued.steps.length,
+              producedOutputCount: queued.outputs.filter(
+                (output) => output.status === WorkflowRunOutputStatus.PRODUCED,
+              ).length,
+            }),
+          );
           await this.operationalAlerts?.append(transaction, {
-            schemaVersion: 1, workspaceId: queued.workspaceId, type: 'run_failed',
+            schemaVersion: 1,
+            workspaceId: queued.workspaceId,
+            type: 'run_failed',
             source: { type: 'workflow_run', id: runId },
-            primaryEntity: { type: 'workflow_run', id: runId }, relatedEntities: [],
-            template: { schemaVersion: 1, templateKey: 'run_failed.v1', workflowRunId: runId,
-              failedAt: input.now.toISOString() },
-            actionTarget: { schemaVersion: 1, kind: 'run', workspaceId: queued.workspaceId, workflowRunId: runId },
+            primaryEntity: { type: 'workflow_run', id: runId },
+            relatedEntities: [],
+            template: {
+              schemaVersion: 1,
+              templateKey: 'run_failed.v1',
+              workflowRunId: runId,
+              failedAt: input.now.toISOString(),
+            },
+            actionTarget: {
+              schemaVersion: 1,
+              kind: 'run',
+              workspaceId: queued.workspaceId,
+              workflowRunId: runId,
+            },
             creatorUserId: queued.createdByUserId,
           });
         }
@@ -1603,12 +1668,18 @@ export class WorkflowRunRepository {
           status: true,
           leaseTokenHash: true,
           leaseExpiresAt: true,
+          runProtocolVersion: true,
           definitionDigest: true,
           allowedOrigins: true,
           executionOptions: true,
           workflowVersion: { select: { definition: true } },
           policyVersion: {
-            select: { id: true, revision: true, definition: true, digest: true },
+            select: {
+              id: true,
+              revision: true,
+              definition: true,
+              digest: true,
+            },
           },
           policyDigest: true,
           policyEvaluation: true,
@@ -2339,8 +2410,7 @@ export class WorkflowRunRepository {
               stepIndex: source.sourceStepIndex,
               verificationSequence: 1,
               verificationKind: verification.kind,
-              outcome:
-                verification.outcome === 'matched' ? 'passed' : 'failed',
+              outcome: verification.outcome === 'matched' ? 'passed' : 'failed',
               attemptCount: verification.attemptCount,
               occurredAt: new Date(step.finishedAt),
             }),
@@ -2408,21 +2478,53 @@ export class WorkflowRunRepository {
           ).length,
         }),
       );
-      if (result.status === 'failed' || result.status === 'timed_out' || result.status === 'interrupted') {
-        const type = result.status === 'failed' ? 'run_failed'
-          : result.status === 'timed_out' ? 'run_timed_out' : 'run_interrupted';
+      if (
+        result.status === 'failed' ||
+        result.status === 'timed_out' ||
+        result.status === 'interrupted'
+      ) {
+        const type =
+          result.status === 'failed'
+            ? 'run_failed'
+            : result.status === 'timed_out'
+              ? 'run_timed_out'
+              : 'run_interrupted';
         const terminalAt = new Date(result.finishedAt).toISOString();
-        const template = result.status === 'failed'
-          ? { schemaVersion: 1 as const, templateKey: 'run_failed.v1' as const, workflowRunId: run.id, failedAt: terminalAt }
-          : result.status === 'timed_out'
-            ? { schemaVersion: 1 as const, templateKey: 'run_timed_out.v1' as const, workflowRunId: run.id, timedOutAt: terminalAt }
-            : { schemaVersion: 1 as const, templateKey: 'run_interrupted.v1' as const, workflowRunId: run.id, interruptedAt: terminalAt };
+        const template =
+          result.status === 'failed'
+            ? {
+                schemaVersion: 1 as const,
+                templateKey: 'run_failed.v1' as const,
+                workflowRunId: run.id,
+                failedAt: terminalAt,
+              }
+            : result.status === 'timed_out'
+              ? {
+                  schemaVersion: 1 as const,
+                  templateKey: 'run_timed_out.v1' as const,
+                  workflowRunId: run.id,
+                  timedOutAt: terminalAt,
+                }
+              : {
+                  schemaVersion: 1 as const,
+                  templateKey: 'run_interrupted.v1' as const,
+                  workflowRunId: run.id,
+                  interruptedAt: terminalAt,
+                };
         await this.operationalAlerts?.append(transaction, {
-          schemaVersion: 1, workspaceId: run.workspaceId, type,
+          schemaVersion: 1,
+          workspaceId: run.workspaceId,
+          type,
           source: { type: 'workflow_run', id: run.id },
-          primaryEntity: { type: 'workflow_run', id: run.id }, relatedEntities: [],
+          primaryEntity: { type: 'workflow_run', id: run.id },
+          relatedEntities: [],
           template,
-          actionTarget: { schemaVersion: 1, kind: 'run', workspaceId: run.workspaceId, workflowRunId: run.id },
+          actionTarget: {
+            schemaVersion: 1,
+            kind: 'run',
+            workspaceId: run.workspaceId,
+            workflowRunId: run.id,
+          },
           creatorUserId: run.createdByUserId,
         });
       }
@@ -2502,18 +2604,22 @@ export class WorkflowRunRepository {
           }),
         );
         await this.operationalAlerts?.resolve(transaction, {
-          workspaceId: approval.workflowRun.workspaceId, type: 'approval_required',
-          sourceType: 'approval_request', sourceId: approval.id, reason: 'cancelled',
+          workspaceId: approval.workflowRun.workspaceId,
+          type: 'approval_required',
+          sourceType: 'approval_request',
+          sourceId: approval.id,
+          reason: 'cancelled',
         });
       }
-      const cancelledRepairs =
-        await transaction.workflowRepairRequest.findMany({
+      const cancelledRepairs = await transaction.workflowRepairRequest.findMany(
+        {
           where: {
             workflowRunId,
             status: WorkflowRepairRequestStatus.PENDING,
           },
           select: { id: true, workflowRunId: true, workspaceId: true },
-        });
+        },
+      );
       await transaction.workflowRepairRequest.updateMany({
         where: {
           workflowRunId,
@@ -2538,8 +2644,11 @@ export class WorkflowRunRepository {
           }),
         );
         await this.operationalAlerts?.resolve(transaction, {
-          workspaceId: repair.workspaceId, type: 'repair_required',
-          sourceType: 'repair_request', sourceId: repair.id, reason: 'cancelled',
+          workspaceId: repair.workspaceId,
+          type: 'repair_required',
+          sourceType: 'repair_request',
+          sourceId: repair.id,
+          reason: 'cancelled',
         });
       }
       if (run.status === WorkflowRunStatus.QUEUED) {
@@ -2574,8 +2683,7 @@ export class WorkflowRunRepository {
             finishedAt: now,
             stepCount: cancelled.steps.length,
             producedOutputCount: cancelled.outputs.filter(
-              (output) =>
-                output.status === WorkflowRunOutputStatus.PRODUCED,
+              (output) => output.status === WorkflowRunOutputStatus.PRODUCED,
             ).length,
           }),
         );
@@ -2663,6 +2771,7 @@ export class WorkflowRunRepository {
     row: {
       id: string;
       leaseExpiresAt: Date | null;
+      runProtocolVersion: number;
       definitionDigest: string;
       allowedOrigins: Prisma.JsonValue;
       executionOptions: Prisma.JsonValue;
@@ -2708,10 +2817,15 @@ export class WorkflowRunRepository {
     if (row.policyVersion === null || row.policyDigest === null) {
       throw new WorkflowRunRepositoryError('RUN_CONFLICT');
     }
+    const workflow = WorkflowDefinitionSchema.parse(
+      row.workflowVersion.definition,
+    );
     return {
       status: 'claimed',
       runId: row.id,
-      workflow: WorkflowDefinitionSchema.parse(row.workflowVersion.definition),
+      runProtocolVersion: row.runProtocolVersion,
+      workflowSchemaVersion: workflow.schemaVersion,
+      workflow,
       definitionDigest: row.definitionDigest,
       policy: {
         versionId: row.policyVersion.id,
@@ -2726,9 +2840,12 @@ export class WorkflowRunRepository {
       options: parseOptions(row.executionOptions),
       runtimeInput:
         row.secretResolutionMode === 'LOCAL_STORE' &&
-        row.secretVaultId !== null && row.secretVaultId !== undefined &&
-        row.secretInventoryRevision !== null && row.secretInventoryRevision !== undefined &&
-        row.secretInventoryDigest !== null && row.secretInventoryDigest !== undefined
+        row.secretVaultId !== null &&
+        row.secretVaultId !== undefined &&
+        row.secretInventoryRevision !== null &&
+        row.secretInventoryRevision !== undefined &&
+        row.secretInventoryDigest !== null &&
+        row.secretInventoryDigest !== undefined
           ? {
               kind: 'local_secret_store',
               inventory: {
@@ -2737,41 +2854,41 @@ export class WorkflowRunRepository {
                 vaultRevision: row.secretInventoryRevision,
                 inventoryDigest: row.secretInventoryDigest,
               },
-              secrets: analyzeWorkflowInputs(
-                WorkflowDefinitionSchema.parse(row.workflowVersion.definition),
-              ).secretRequirements.map((requirement) => ({
-                secretName: requirement.secretName,
-                usageCount: requirement.usageCount,
-              })),
+              secrets: analyzeWorkflowInputs(workflow).secretRequirements.map(
+                (requirement) => ({
+                  secretName: requirement.secretName,
+                  usageCount: requirement.usageCount,
+                }),
+              ),
             }
           : row.inputEnvelope === null
-          ? { kind: 'none' }
-          : {
-              kind: 'encrypted_envelope',
-              envelope: SecureRunInputEnvelopeSchema.parse({
-                schemaVersion: row.inputEnvelope.schemaVersion,
-                profile: row.inputEnvelope.profile,
-                contentEncryption: row.inputEnvelope.contentEncryption,
-                keyEncryption: row.inputEnvelope.keyEncryption,
-                preparationId: row.inputEnvelope.preparationId,
-                workflowRunId: row.inputEnvelope.workflowRunId,
-                keyId: row.inputEnvelope.keyId,
-                expiresAt: row.inputEnvelope.expiresAt.toISOString(),
-                aad: row.inputEnvelope.aad,
-                iv: row.inputEnvelope.iv,
-                wrappedKey: row.inputEnvelope.wrappedKey,
-                ciphertext: row.inputEnvelope.ciphertext,
-                ciphertextDigest: row.inputEnvelope.ciphertextDigest,
-              }),
-              aad: RunInputAdditionalAuthenticatedDataSchema.parse(
-                row.inputEnvelope.preparation.aad,
-              ),
-              manifest: SecureRunInputManifestSchema.parse({
-                schemaVersion: 1,
-                variables: row.inputEnvelope.preparation.variableManifest,
-                secrets: row.inputEnvelope.preparation.secretManifest,
-              }),
-            },
+            ? { kind: 'none' }
+            : {
+                kind: 'encrypted_envelope',
+                envelope: SecureRunInputEnvelopeSchema.parse({
+                  schemaVersion: row.inputEnvelope.schemaVersion,
+                  profile: row.inputEnvelope.profile,
+                  contentEncryption: row.inputEnvelope.contentEncryption,
+                  keyEncryption: row.inputEnvelope.keyEncryption,
+                  preparationId: row.inputEnvelope.preparationId,
+                  workflowRunId: row.inputEnvelope.workflowRunId,
+                  keyId: row.inputEnvelope.keyId,
+                  expiresAt: row.inputEnvelope.expiresAt.toISOString(),
+                  aad: row.inputEnvelope.aad,
+                  iv: row.inputEnvelope.iv,
+                  wrappedKey: row.inputEnvelope.wrappedKey,
+                  ciphertext: row.inputEnvelope.ciphertext,
+                  ciphertextDigest: row.inputEnvelope.ciphertextDigest,
+                }),
+                aad: RunInputAdditionalAuthenticatedDataSchema.parse(
+                  row.inputEnvelope.preparation.aad,
+                ),
+                manifest: SecureRunInputManifestSchema.parse({
+                  schemaVersion: 1,
+                  variables: row.inputEnvelope.preparation.variableManifest,
+                  secrets: row.inputEnvelope.preparation.secretManifest,
+                }),
+              },
       leaseExpiresAt: row.leaseExpiresAt,
       idempotent,
     };
@@ -2927,17 +3044,22 @@ export class WorkflowRunRepository {
         }),
       );
       await this.operationalAlerts?.resolve(transaction, {
-        workspaceId: approval.workflowRun.workspaceId, type: 'approval_required',
-        sourceType: 'approval_request', sourceId: approval.id, reason: 'invalidated',
+        workspaceId: approval.workflowRun.workspaceId,
+        type: 'approval_required',
+        sourceType: 'approval_request',
+        sourceId: approval.id,
+        reason: 'invalidated',
       });
     }
-    const invalidatedRepairs = await transaction.workflowRepairRequest.findMany({
-      where: {
-        workflowRunId: runId,
-        status: WorkflowRepairRequestStatus.PENDING,
+    const invalidatedRepairs = await transaction.workflowRepairRequest.findMany(
+      {
+        where: {
+          workflowRunId: runId,
+          status: WorkflowRepairRequestStatus.PENDING,
+        },
+        select: { id: true, workflowRunId: true, workspaceId: true },
       },
-      select: { id: true, workflowRunId: true, workspaceId: true },
-    });
+    );
     await transaction.workflowRepairRequest.updateMany({
       where: {
         workflowRunId: runId,
@@ -2962,8 +3084,11 @@ export class WorkflowRunRepository {
         }),
       );
       await this.operationalAlerts?.resolve(transaction, {
-        workspaceId: repair.workspaceId, type: 'repair_required',
-        sourceType: 'repair_request', sourceId: repair.id, reason: 'invalidated',
+        workspaceId: repair.workspaceId,
+        type: 'repair_required',
+        sourceType: 'repair_request',
+        sourceId: repair.id,
+        reason: 'invalidated',
       });
     }
     await transaction.workflowRunStepAttempt.updateMany({
@@ -3014,12 +3139,24 @@ export class WorkflowRunRepository {
       }),
     );
     await this.operationalAlerts?.append(transaction, {
-      schemaVersion: 1, workspaceId: updatedRun.workspaceId, type: 'run_interrupted',
+      schemaVersion: 1,
+      workspaceId: updatedRun.workspaceId,
+      type: 'run_interrupted',
       source: { type: 'workflow_run', id: updatedRun.id },
-      primaryEntity: { type: 'workflow_run', id: updatedRun.id }, relatedEntities: [],
-      template: { schemaVersion: 1, templateKey: 'run_interrupted.v1',
-        workflowRunId: updatedRun.id, interruptedAt: now.toISOString() },
-      actionTarget: { schemaVersion: 1, kind: 'run', workspaceId: updatedRun.workspaceId, workflowRunId: updatedRun.id },
+      primaryEntity: { type: 'workflow_run', id: updatedRun.id },
+      relatedEntities: [],
+      template: {
+        schemaVersion: 1,
+        templateKey: 'run_interrupted.v1',
+        workflowRunId: updatedRun.id,
+        interruptedAt: now.toISOString(),
+      },
+      actionTarget: {
+        schemaVersion: 1,
+        kind: 'run',
+        workspaceId: updatedRun.workspaceId,
+        workflowRunId: updatedRun.id,
+      },
       creatorUserId: updatedRun.createdByUserId,
     });
   }

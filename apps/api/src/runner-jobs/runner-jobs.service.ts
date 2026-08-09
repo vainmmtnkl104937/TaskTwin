@@ -377,6 +377,9 @@ export class RunnerJobsService {
     try {
       const result = await this.repository.claim({
         runnerDeviceId: runner.runnerDeviceId,
+        runnerVersion: request.data.runnerVersion,
+        runProtocolVersion: request.data.runProtocolVersion,
+        workflowSchemaVersion: request.data.workflowSchemaVersion,
         claimAttemptId: request.data.claimAttemptId,
         leaseTokenHash: this.crypto.hashToken(token),
         now: new Date(),
@@ -397,6 +400,8 @@ export class RunnerJobsService {
               status: 'claimed',
               job: {
                 runId: result.runId,
+                runProtocolVersion: result.runProtocolVersion,
+                workflowSchemaVersion: result.workflowSchemaVersion,
                 definitionDigest: result.definitionDigest,
                 workflow: result.workflow,
                 policy: result.policy,
