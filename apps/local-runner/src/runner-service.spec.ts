@@ -19,6 +19,7 @@ import {
 } from './runner-service.js';
 import type { LocalSecretRuntime } from './secrets/local-secret-runtime.js';
 import type { LocalVaultSecretProvider } from './secrets/local-vault-secret-provider.js';
+import type { RunnerStartupStatus } from '@tasktwin/runner-update';
 
 const paired: Extract<PairingPollingResponse, { status: 'paired' }> = {
   schemaVersion: 1,
@@ -43,11 +44,13 @@ function setup(polls: PairingPollingResponse[] = [paired]) {
     }),
     pollPairing: vi.fn(),
     heartbeat: vi.fn().mockResolvedValue({
-      schemaVersion: 1,
-      runnerDeviceId: paired.runnerDeviceId,
-      workspaceId: paired.workspaceId,
-      connectionStatus: 'online',
-      nextHeartbeatInSeconds: 30,
+      response: {
+        schemaVersion: 1,
+        runnerDeviceId: paired.runnerDeviceId,
+        workspaceId: paired.workspaceId,
+        connectionStatus: 'online',
+        nextHeartbeatInSeconds: 30,
+      },
     }),
   };
   for (const poll of polls) {
@@ -265,11 +268,13 @@ describe('LocalRunnerService', () => {
     });
     context.transport.heartbeat
       .mockResolvedValueOnce({
-        schemaVersion: 1,
-        runnerDeviceId: paired.runnerDeviceId,
-        workspaceId: paired.workspaceId,
-        connectionStatus: 'online',
-        nextHeartbeatInSeconds: 1,
+        response: {
+          schemaVersion: 1,
+          runnerDeviceId: paired.runnerDeviceId,
+          workspaceId: paired.workspaceId,
+          connectionStatus: 'online',
+          nextHeartbeatInSeconds: 1,
+        },
       })
       .mockRejectedValueOnce(new ControlPlaneClientError(401));
     await context.service.start(new AbortController().signal);
@@ -293,11 +298,13 @@ describe('LocalRunnerService', () => {
     context.transport.heartbeat.mockImplementation(async () => {
       controller.abort();
       return {
-        schemaVersion: 1,
-        runnerDeviceId: paired.runnerDeviceId,
-        workspaceId: paired.workspaceId,
-        connectionStatus: 'online',
-        nextHeartbeatInSeconds: 30,
+        response: {
+          schemaVersion: 1,
+          runnerDeviceId: paired.runnerDeviceId,
+          workspaceId: paired.workspaceId,
+          connectionStatus: 'online',
+          nextHeartbeatInSeconds: 30,
+        },
       };
     });
     const runtime = {
@@ -371,11 +378,13 @@ describe('LocalRunnerService', () => {
     context.transport.heartbeat.mockImplementation(async () => {
       controller.abort();
       return {
-        schemaVersion: 1,
-        runnerDeviceId: paired.runnerDeviceId,
-        workspaceId: paired.workspaceId,
-        connectionStatus: 'online',
-        nextHeartbeatInSeconds: 30,
+        response: {
+          schemaVersion: 1,
+          runnerDeviceId: paired.runnerDeviceId,
+          workspaceId: paired.workspaceId,
+          connectionStatus: 'online',
+          nextHeartbeatInSeconds: 30,
+        },
       };
     });
     const runtime = {
@@ -438,17 +447,1074 @@ describe('LocalRunnerService', () => {
       .mockImplementationOnce(async () => {
         controller.abort();
         return {
+          response: {
+            schemaVersion: 1,
+            runnerDeviceId: paired.runnerDeviceId,
+            workspaceId: paired.workspaceId,
+            connectionStatus: 'online',
+            nextHeartbeatInSeconds: 30,
+          },
+        };
+      });
+    await context.service.start(controller.signal);
+    expect(context.transport.heartbeat).toHaveBeenCalledTimes(3);
+    expect(context.clock.sleep).toHaveBeenCalledWith(
+      1_000,
+      expect.any(AbortSignal),
+    );
+    expect(context.output).toContain('CONTROL_PLANE_UNAVAILABLE');
+  });
+
+  it('keeps a verifying target locally healthy but claim-disabled while heartbeats continue', async () => {
+    const context = setup();
+    await context.store.save({
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    });
+    const controller = new AbortController();
+    context.transport.heartbeat.mockImplementation(async () => {
+      if (context.transport.heartbeat.mock.calls.length >= 2) {
+        controller.abort();
+      }
+      return {
+        response: {
+          schemaVersion: 1,
+          runnerDeviceId: paired.runnerDeviceId,
+          workspaceId: paired.workspaceId,
+          connectionStatus: 'online',
+          nextHeartbeatInSeconds: 1,
+        },
+        compatibilityAcknowledgement: 'compatible' as const,
+      };
+    });
+    const claimJob = vi.fn();
+    const statuses: RunnerStartupStatus[] = [];
+    const identity = {
+      product: 'tasktwin-runner' as const,
+      version: '1.4.0',
+      runnerProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      platform: 'windows' as const,
+      architecture: 'x64' as const,
+    };
+    const runtime = {
+      prepare: vi.fn(),
+      refresh: vi.fn(),
+      dispose: vi.fn(),
+      isReady: () => true,
+      isNativeUnlockVerified: () => true,
+      secretUnlockMode: () => 'os_native',
+      currentPin: () => undefined,
+    } as LocalSecretRuntime;
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      context.clock,
+      identity.version,
+      { claimJob } as never,
+      {} as never,
+      undefined,
+      undefined,
+      { headed: false, attended: false },
+      runtime,
+      {} as LocalVaultSecretProvider,
+      {
+        runtimeMode: 'service',
+        serviceVerified: true,
+        nativeProtectorAvailable: true,
+        drainTimeoutMilliseconds: 60_000,
+      },
+      identity,
+      {
+        activationId: 'release-b',
+        expectedSoftwareIdentity: identity,
+        instanceLockHeld: true,
+        requireNativeSecretAutoUnlock: true,
+        maintenanceSource: {
+          current: async () => ({ state: 'verifying_target' }),
+          waitForChange: (signal) =>
+            new Promise<void>((resolve) => {
+              if (signal.aborted) resolve();
+              else
+                signal.addEventListener('abort', () => resolve(), {
+                  once: true,
+                });
+            }),
+        },
+        startupStatusWriter: {
+          write: async (status) => {
+            statuses.push(status);
+          },
+        },
+        startupHealthProbe: {
+          run: async () => ({
+            identity: 'passed',
+            instanceLock: 'passed',
+            workflowEngine: 'passed',
+            policyRuntime: 'passed',
+            chromium: 'passed',
+            localSecretStore: 'passed',
+            nativeSecretAutoUnlock: 'passed',
+          }),
+        },
+        createStartupAttemptId: () => 'startup-b',
+      },
+    );
+    await service.start(controller.signal);
+    expect(claimJob).not.toHaveBeenCalled();
+    expect(
+      context.transport.heartbeat.mock.calls.length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(statuses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          activationId: 'release-b',
+          startupAttemptId: 'startup-b',
+          state: 'healthy',
+          acceptsNewJobs: false,
+          activeWork: false,
+          controlPlaneAcknowledgement: 'compatible',
+        }),
+      ]),
+    );
+    expect(JSON.stringify(statuses)).not.toMatch(
+      /path|credential|privateKey|vaultId/i,
+    );
+  });
+
+  it('fails manual-recovery startup before vault or browser health initialization', async () => {
+    const context = setup();
+    await context.store.save({
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    });
+    const prepare = vi.fn();
+    const startupHealth = vi.fn();
+    const statuses: RunnerStartupStatus[] = [];
+    const identity = {
+      product: 'tasktwin-runner' as const,
+      version: '1.4.0',
+      runnerProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      platform: 'windows' as const,
+      architecture: 'x64' as const,
+    };
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      context.clock,
+      identity.version,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { headed: false, attended: false },
+      {
+        prepare,
+        dispose: vi.fn(),
+      } as unknown as LocalSecretRuntime,
+      undefined,
+      {
+        runtimeMode: 'service',
+        serviceVerified: true,
+        nativeProtectorAvailable: true,
+        drainTimeoutMilliseconds: 60_000,
+      },
+      identity,
+      {
+        activationId: 'release-b',
+        expectedSoftwareIdentity: identity,
+        instanceLockHeld: true,
+        requireNativeSecretAutoUnlock: true,
+        maintenanceSource: {
+          current: async () => ({ state: 'manual_recovery_required' }),
+          waitForChange: async () => undefined,
+        },
+        startupStatusWriter: {
+          write: async (status) => {
+            statuses.push(status);
+          },
+        },
+        startupHealthProbe: { run: startupHealth },
+        createStartupAttemptId: () => 'startup-b',
+      },
+    );
+
+    await expect(service.start(new AbortController().signal)).rejects.toThrow(
+      'manual update recovery',
+    );
+    expect(prepare).not.toHaveBeenCalled();
+    expect(startupHealth).not.toHaveBeenCalled();
+    expect(context.transport.heartbeat).not.toHaveBeenCalled();
+    expect(statuses).toEqual([
+      expect.objectContaining({ state: 'failed', acceptsNewJobs: false }),
+    ]);
+  });
+
+  it('settles optional missing compatibility acknowledgement after bounded grace', async () => {
+    const context = setup();
+    await context.store.save({
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    });
+    const claimJob = vi.fn();
+    const statuses: RunnerStartupStatus[] = [];
+    const identity = {
+      product: 'tasktwin-runner' as const,
+      version: '1.4.0',
+      runnerProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      platform: 'windows' as const,
+      architecture: 'x64' as const,
+    };
+    const signal = new AbortController();
+    context.transport.heartbeat.mockImplementation(async () => {
+      if (context.transport.heartbeat.mock.calls.length >= 3) signal.abort();
+      return {
+        response: {
+          schemaVersion: 1,
+          runnerDeviceId: paired.runnerDeviceId,
+          workspaceId: paired.workspaceId,
+          connectionStatus: 'online',
+          nextHeartbeatInSeconds: 1,
+        },
+      };
+    });
+    const waitForChange = (waitSignal: AbortSignal) =>
+      new Promise<void>((resolve) => {
+        if (waitSignal.aborted) resolve();
+        else
+          waitSignal.addEventListener('abort', () => resolve(), { once: true });
+      });
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      context.clock,
+      identity.version,
+      { claimJob } as never,
+      {} as never,
+      undefined,
+      undefined,
+      { headed: false, attended: false },
+      {
+        prepare: vi.fn(),
+        refresh: vi.fn(),
+        dispose: vi.fn(),
+        isReady: () => true,
+        isNativeUnlockVerified: () => true,
+        secretUnlockMode: () => 'os_native',
+        currentPin: () => undefined,
+        startupHealth: () => 'ready',
+      } as unknown as LocalSecretRuntime,
+      undefined,
+      {
+        runtimeMode: 'service',
+        serviceVerified: true,
+        nativeProtectorAvailable: true,
+        drainTimeoutMilliseconds: 60_000,
+      },
+      identity,
+      {
+        activationId: 'release-b',
+        expectedSoftwareIdentity: identity,
+        instanceLockHeld: true,
+        requireNativeSecretAutoUnlock: true,
+        controlPlaneAcknowledgementGraceMilliseconds: 10,
+        maintenanceSource: {
+          current: async () => ({ state: 'verifying_target' }),
+          waitForChange,
+        },
+        startupStatusWriter: {
+          write: async (status) => {
+            statuses.push(status);
+          },
+        },
+        startupHealthProbe: {
+          run: async () => ({
+            identity: 'passed',
+            instanceLock: 'passed',
+            workflowEngine: 'passed',
+            policyRuntime: 'passed',
+            chromium: 'passed',
+            localSecretStore: 'passed',
+            nativeSecretAutoUnlock: 'passed',
+          }),
+        },
+        createStartupAttemptId: () => 'startup-b',
+      },
+    );
+
+    await service.start(signal.signal);
+    expect(
+      context.transport.heartbeat.mock.calls.length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(context.clock.sleep).toHaveBeenCalledWith(
+      10,
+      expect.any(AbortSignal),
+    );
+    expect(claimJob).not.toHaveBeenCalled();
+    expect(statuses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ state: 'starting' }),
+        expect.objectContaining({
+          state: 'healthy',
+          acceptsNewJobs: false,
+          controlPlaneAcknowledgement: 'not_attempted',
+        }),
+      ]),
+    );
+    expect(statuses.some((status) => status.state === 'failed')).toBe(false);
+    expect(context.output).not.toContain(
+      'RUNNER_STARTUP_COMPATIBILITY_ACK_FAILED',
+    );
+  });
+
+  it('accepts genuine transport-offline local health without opening claims', async () => {
+    const context = setup();
+    await context.store.save({
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    });
+    const controller = new AbortController();
+    const ensureRegistered = vi.fn(async () => {
+      controller.abort();
+      throw new ControlPlaneClientError(null);
+    });
+    context.transport.heartbeat
+      .mockRejectedValueOnce(new ControlPlaneClientError(null))
+      .mockImplementation(async () => {
+        return {
+          response: {
+            schemaVersion: 1,
+            runnerDeviceId: paired.runnerDeviceId,
+            workspaceId: paired.workspaceId,
+            connectionStatus: 'online',
+            nextHeartbeatInSeconds: 30,
+          },
+          compatibilityAcknowledgement: 'compatible' as const,
+        };
+      });
+    const statuses: RunnerStartupStatus[] = [];
+    const identity = {
+      product: 'tasktwin-runner' as const,
+      version: '1.4.0',
+      runnerProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      platform: 'windows' as const,
+      architecture: 'x64' as const,
+    };
+    const waitForChange = (waitSignal: AbortSignal) =>
+      new Promise<void>((resolve) => {
+        if (waitSignal.aborted) resolve();
+        else
+          waitSignal.addEventListener('abort', () => resolve(), { once: true });
+      });
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      context.clock,
+      identity.version,
+      undefined,
+      undefined,
+      { ensureRegistered } as never,
+      undefined,
+      { headed: false, attended: false },
+      {
+        prepare: vi.fn(),
+        refresh: vi.fn(),
+        dispose: vi.fn(),
+        isReady: () => true,
+        isNativeUnlockVerified: () => true,
+        secretUnlockMode: () => 'os_native',
+        currentPin: () => undefined,
+        startupHealth: () => 'ready',
+      } as unknown as LocalSecretRuntime,
+      undefined,
+      {
+        runtimeMode: 'service',
+        serviceVerified: true,
+        nativeProtectorAvailable: true,
+        drainTimeoutMilliseconds: 60_000,
+      },
+      identity,
+      {
+        activationId: 'release-b',
+        expectedSoftwareIdentity: identity,
+        instanceLockHeld: true,
+        requireNativeSecretAutoUnlock: true,
+        maintenanceSource: {
+          current: async () => ({ state: 'verifying_target' }),
+          waitForChange,
+        },
+        startupStatusWriter: {
+          write: async (status) => {
+            statuses.push(status);
+          },
+        },
+        startupHealthProbe: {
+          run: async () => ({
+            identity: 'passed',
+            instanceLock: 'passed',
+            workflowEngine: 'passed',
+            policyRuntime: 'passed',
+            chromium: 'passed',
+            localSecretStore: 'passed',
+            nativeSecretAutoUnlock: 'passed',
+          }),
+        },
+        createStartupAttemptId: () => 'startup-b',
+      },
+    );
+
+    await service.start(controller.signal);
+    expect(context.transport.heartbeat).toHaveBeenCalledBefore(
+      ensureRegistered,
+    );
+    expect(ensureRegistered).toHaveBeenCalledOnce();
+    expect(statuses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          state: 'healthy',
+          acceptsNewJobs: false,
+          controlPlaneAcknowledgement: 'offline',
+        }),
+      ]),
+    );
+    expect(context.clock.sleep).not.toHaveBeenCalledWith(
+      5_000,
+      expect.anything(),
+    );
+  });
+
+  it('treats repeated temporary Control Plane 503 responses as offline after acknowledgement grace', async () => {
+    const context = setup();
+    await context.store.save({
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    });
+    const controller = new AbortController();
+    context.transport.heartbeat
+      .mockRejectedValueOnce(new ControlPlaneClientError(503))
+      .mockRejectedValueOnce(new ControlPlaneClientError(503))
+      .mockImplementation(async () => {
+        controller.abort();
+        return {
+          response: {
+            schemaVersion: 1,
+            runnerDeviceId: paired.runnerDeviceId,
+            workspaceId: paired.workspaceId,
+            connectionStatus: 'online',
+            nextHeartbeatInSeconds: 30,
+          },
+          compatibilityAcknowledgement: 'compatible' as const,
+        };
+      });
+    const statuses: RunnerStartupStatus[] = [];
+    const identity = {
+      product: 'tasktwin-runner' as const,
+      version: '1.4.0',
+      runnerProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      platform: 'windows' as const,
+      architecture: 'x64' as const,
+    };
+    const waitForChange = (waitSignal: AbortSignal) =>
+      new Promise<void>((resolve) => {
+        if (waitSignal.aborted) resolve();
+        else
+          waitSignal.addEventListener('abort', () => resolve(), { once: true });
+      });
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      context.clock,
+      identity.version,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { headed: false, attended: false },
+      {
+        prepare: vi.fn(),
+        refresh: vi.fn(),
+        dispose: vi.fn(),
+        isReady: () => true,
+        isNativeUnlockVerified: () => true,
+        secretUnlockMode: () => 'os_native',
+        currentPin: () => undefined,
+        startupHealth: () => 'ready',
+      } as unknown as LocalSecretRuntime,
+      undefined,
+      {
+        runtimeMode: 'service',
+        serviceVerified: true,
+        nativeProtectorAvailable: true,
+        drainTimeoutMilliseconds: 60_000,
+      },
+      identity,
+      {
+        activationId: 'release-b',
+        expectedSoftwareIdentity: identity,
+        instanceLockHeld: true,
+        requireNativeSecretAutoUnlock: true,
+        controlPlaneAcknowledgementGraceMilliseconds: 10,
+        maintenanceSource: {
+          current: async () => ({ state: 'verifying_target' }),
+          waitForChange,
+        },
+        startupStatusWriter: {
+          write: async (status) => {
+            statuses.push(status);
+          },
+        },
+        startupHealthProbe: {
+          run: async () => ({
+            identity: 'passed',
+            instanceLock: 'passed',
+            workflowEngine: 'passed',
+            policyRuntime: 'passed',
+            chromium: 'passed',
+            localSecretStore: 'passed',
+            nativeSecretAutoUnlock: 'passed',
+          }),
+        },
+        createStartupAttemptId: () => 'startup-b',
+      },
+    );
+
+    await service.start(controller.signal);
+    expect(statuses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          state: 'healthy',
+          acceptsNewJobs: false,
+          controlPlaneAcknowledgement: 'offline',
+        }),
+      ]),
+    );
+    expect(statuses.some((status) => status.state === 'failed')).toBe(false);
+    expect(context.clock.sleep).toHaveBeenCalledWith(
+      10,
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('observes maintenance during reconnect backoff and heartbeats draining before acknowledgement', async () => {
+    const context = setup();
+    await context.store.save({
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    });
+    const controller = new AbortController();
+    let maintenanceState: 'inactive' | 'draining' = 'inactive';
+    let publishMaintenance: (() => void) | undefined;
+    const events: Array<
+      | { readonly type: 'heartbeat'; readonly serviceStatus: string }
+      | { readonly type: 'status'; readonly state: string }
+    > = [];
+    context.transport.heartbeat
+      .mockRejectedValueOnce(new ControlPlaneClientError(503))
+      .mockImplementation(
+        async (_credential, _version, _capabilities, runtime) => {
+          events.push({
+            type: 'heartbeat',
+            serviceStatus: runtime?.serviceStatus ?? 'missing',
+          });
+          controller.abort();
+          return {
+            response: {
+              schemaVersion: 1,
+              runnerDeviceId: paired.runnerDeviceId,
+              workspaceId: paired.workspaceId,
+              connectionStatus: 'online',
+              nextHeartbeatInSeconds: 30,
+            },
+            compatibilityAcknowledgement: 'compatible' as const,
+          };
+        },
+      );
+    const clock: RunnerClock = {
+      now: context.clock.now,
+      sleep: vi.fn((_milliseconds, waitSignal) => {
+        maintenanceState = 'draining';
+        publishMaintenance?.();
+        return new Promise<void>((resolve) => {
+          if (waitSignal?.aborted === true) resolve();
+          else
+            waitSignal?.addEventListener('abort', () => resolve(), {
+              once: true,
+            });
+        });
+      }),
+    };
+    const identity = {
+      product: 'tasktwin-runner' as const,
+      version: '1.4.0',
+      runnerProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      platform: 'windows' as const,
+      architecture: 'x64' as const,
+    };
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      clock,
+      identity.version,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { headed: false, attended: false },
+      {
+        prepare: vi.fn(),
+        refresh: vi.fn(),
+        dispose: vi.fn(),
+        isReady: () => true,
+        isNativeUnlockVerified: () => true,
+        secretUnlockMode: () => 'os_native',
+        currentPin: () => undefined,
+        startupHealth: () => 'ready',
+      } as unknown as LocalSecretRuntime,
+      undefined,
+      {
+        runtimeMode: 'service',
+        serviceVerified: true,
+        nativeProtectorAvailable: true,
+        drainTimeoutMilliseconds: 60_000,
+      },
+      identity,
+      {
+        activationId: 'release-a',
+        expectedSoftwareIdentity: identity,
+        instanceLockHeld: true,
+        requireNativeSecretAutoUnlock: true,
+        maintenanceSource: {
+          current: async () => ({ state: maintenanceState }),
+          waitForChange: (waitSignal) =>
+            new Promise<void>((resolve) => {
+              publishMaintenance = resolve;
+              if (waitSignal.aborted) resolve();
+              else
+                waitSignal.addEventListener('abort', () => resolve(), {
+                  once: true,
+                });
+            }),
+        },
+        startupStatusWriter: {
+          write: async (status) => {
+            events.push({ type: 'status', state: status.state });
+          },
+        },
+        startupHealthProbe: {
+          run: async () => ({
+            identity: 'passed',
+            instanceLock: 'passed',
+            workflowEngine: 'passed',
+            policyRuntime: 'passed',
+            chromium: 'passed',
+            localSecretStore: 'passed',
+            nativeSecretAutoUnlock: 'passed',
+          }),
+        },
+        createStartupAttemptId: () => 'startup-a',
+      },
+    );
+
+    await service.start(controller.signal);
+    const drainingHeartbeat = events.findIndex(
+      (event) =>
+        event.type === 'heartbeat' && event.serviceStatus === 'draining',
+    );
+    const drainingAcknowledgement = events.findIndex(
+      (event) => event.type === 'status' && event.state === 'draining',
+    );
+    expect(drainingHeartbeat).toBeGreaterThanOrEqual(0);
+    expect(drainingAcknowledgement).toBeGreaterThan(drainingHeartbeat);
+  });
+
+  it('refreshes maintenance immediately before each claim and closes admission', async () => {
+    const context = setup();
+    await context.store.save({
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    });
+    const controller = new AbortController();
+    let reads = 0;
+    const claimJob = vi.fn();
+    context.transport.heartbeat.mockImplementation(
+      async (_credential, _version, capabilities, runtime) => {
+        const heartbeatNumber = context.transport.heartbeat.mock.calls.length;
+        if (heartbeatNumber >= 2) {
+          controller.abort();
+        }
+        if (heartbeatNumber === 1) {
+          expect(capabilities).toEqual(
+            expect.arrayContaining(['runner_service_v1']),
+          );
+          expect(runtime?.serviceStatus).toBe('running');
+        } else {
+          expect(capabilities).toEqual([]);
+          expect(runtime?.serviceStatus).toBe('draining');
+        }
+        return {
+          response: {
+            schemaVersion: 1,
+            runnerDeviceId: paired.runnerDeviceId,
+            workspaceId: paired.workspaceId,
+            connectionStatus: 'online',
+            nextHeartbeatInSeconds: 1,
+          },
+          compatibilityAcknowledgement: 'compatible' as const,
+        };
+      },
+    );
+    const identity = {
+      product: 'tasktwin-runner' as const,
+      version: '1.4.0',
+      runnerProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      platform: 'windows' as const,
+      architecture: 'x64' as const,
+    };
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      context.clock,
+      identity.version,
+      { claimJob } as never,
+      {} as never,
+      undefined,
+      undefined,
+      { headed: false, attended: false },
+      {
+        prepare: vi.fn(),
+        refresh: vi.fn(),
+        dispose: vi.fn(),
+        isReady: () => true,
+        isNativeUnlockVerified: () => true,
+        secretUnlockMode: () => 'os_native',
+        currentPin: () => undefined,
+        startupHealth: () => 'ready',
+      } as unknown as LocalSecretRuntime,
+      undefined,
+      {
+        runtimeMode: 'service',
+        serviceVerified: true,
+        nativeProtectorAvailable: true,
+        drainTimeoutMilliseconds: 60_000,
+      },
+      identity,
+      {
+        activationId: 'release-a',
+        expectedSoftwareIdentity: identity,
+        instanceLockHeld: true,
+        requireNativeSecretAutoUnlock: true,
+        maintenanceSource: {
+          current: async () => ({
+            state: reads++ < 3 ? 'inactive' : 'draining',
+          }),
+          waitForChange: (waitSignal) =>
+            new Promise<void>((resolve) => {
+              if (waitSignal.aborted) resolve();
+              else
+                waitSignal.addEventListener('abort', () => resolve(), {
+                  once: true,
+                });
+            }),
+        },
+        startupStatusWriter: { write: async () => undefined },
+        startupHealthProbe: {
+          run: async () => ({
+            identity: 'passed',
+            instanceLock: 'passed',
+            workflowEngine: 'passed',
+            policyRuntime: 'passed',
+            chromium: 'passed',
+            localSecretStore: 'passed',
+            nativeSecretAutoUnlock: 'passed',
+          }),
+        },
+        createStartupAttemptId: () => 'startup-a',
+      },
+    );
+
+    await service.start(controller.signal);
+    expect(claimJob).not.toHaveBeenCalled();
+    expect(
+      context.transport.heartbeat.mock.calls.length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  it('heartbeats immediately when maintenance admission becomes unblocked', async () => {
+    const context = setup();
+    await context.store.save({
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    });
+    const controller = new AbortController();
+    let maintenanceState: 'draining' | 'inactive' = 'draining';
+    const reports: Array<{
+      readonly capabilities: readonly string[];
+      readonly serviceStatus: string;
+    }> = [];
+    context.transport.heartbeat.mockImplementation(
+      async (_credential, _version, capabilities, runtime) => {
+        reports.push({
+          capabilities: capabilities ?? [],
+          serviceStatus: runtime?.serviceStatus ?? 'missing',
+        });
+        if (reports.length === 1) maintenanceState = 'inactive';
+        if (reports.length === 2) controller.abort();
+        return {
+          response: {
+            schemaVersion: 1,
+            runnerDeviceId: paired.runnerDeviceId,
+            workspaceId: paired.workspaceId,
+            connectionStatus: 'online',
+            nextHeartbeatInSeconds: 30,
+          },
+          compatibilityAcknowledgement: 'compatible' as const,
+        };
+      },
+    );
+    const identity = {
+      product: 'tasktwin-runner' as const,
+      version: '1.4.0',
+      runnerProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      platform: 'windows' as const,
+      architecture: 'x64' as const,
+    };
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      context.clock,
+      identity.version,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { headed: false, attended: false },
+      {
+        prepare: vi.fn(),
+        refresh: vi.fn(),
+        dispose: vi.fn(),
+        isReady: () => true,
+        isNativeUnlockVerified: () => true,
+        secretUnlockMode: () => 'os_native',
+        currentPin: () => undefined,
+        startupHealth: () => 'ready',
+      } as unknown as LocalSecretRuntime,
+      undefined,
+      {
+        runtimeMode: 'service',
+        serviceVerified: true,
+        nativeProtectorAvailable: true,
+        drainTimeoutMilliseconds: 60_000,
+      },
+      identity,
+      {
+        activationId: 'release-a',
+        expectedSoftwareIdentity: identity,
+        instanceLockHeld: true,
+        requireNativeSecretAutoUnlock: true,
+        maintenanceSource: {
+          current: async () => ({ state: maintenanceState }),
+          waitForChange: (waitSignal) =>
+            new Promise<void>((resolve) => {
+              if (waitSignal.aborted) resolve();
+              else
+                waitSignal.addEventListener('abort', () => resolve(), {
+                  once: true,
+                });
+            }),
+        },
+        startupStatusWriter: { write: async () => undefined },
+        startupHealthProbe: {
+          run: async () => ({
+            identity: 'passed',
+            instanceLock: 'passed',
+            workflowEngine: 'passed',
+            policyRuntime: 'passed',
+            chromium: 'passed',
+            localSecretStore: 'passed',
+            nativeSecretAutoUnlock: 'passed',
+          }),
+        },
+        createStartupAttemptId: () => 'startup-a',
+      },
+    );
+
+    await service.start(controller.signal);
+    expect(reports[0]).toEqual({ capabilities: [], serviceStatus: 'draining' });
+    expect(reports[1]).toEqual({
+      capabilities: expect.arrayContaining(['runner_service_v1']),
+      serviceStatus: 'running',
+    });
+  });
+
+  it('does not apply target compatibility acknowledgement as a rollback-source gate', async () => {
+    const context = setup();
+    await context.store.save({
+      schemaVersion: 1,
+      controlPlaneOrigin: 'https://api.tasktwin.example',
+      runnerDeviceId: paired.runnerDeviceId,
+      workspaceId: paired.workspaceId,
+      installationId: '8bff4d89-91ba-4efd-8927-a4b6e8abec9c',
+      credential: paired.credential,
+      savedAt: '2026-07-30T12:00:00.000Z',
+    });
+    const controller = new AbortController();
+    context.transport.heartbeat.mockImplementation(async () => {
+      controller.abort();
+      return {
+        response: {
           schemaVersion: 1,
           runnerDeviceId: paired.runnerDeviceId,
           workspaceId: paired.workspaceId,
           connectionStatus: 'online',
           nextHeartbeatInSeconds: 30,
-        };
-      });
-    await context.service.start(controller.signal);
-    expect(context.transport.heartbeat).toHaveBeenCalledTimes(3);
-    expect(context.clock.sleep).toHaveBeenCalledWith(1_000, controller.signal);
-    expect(context.output).toContain('CONTROL_PLANE_UNAVAILABLE');
+        },
+        compatibilityAcknowledgement: 'update_required' as const,
+      };
+    });
+    const statuses: RunnerStartupStatus[] = [];
+    const identity = {
+      product: 'tasktwin-runner' as const,
+      version: '1.3.0',
+      runnerProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      platform: 'windows' as const,
+      architecture: 'x64' as const,
+    };
+    const service = new LocalRunnerService(
+      context.store,
+      context.transport as unknown as RunnerControlPlaneTransport,
+      { write: (message) => context.output.push(message) },
+      context.clock,
+      identity.version,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { headed: false, attended: false },
+      {
+        prepare: vi.fn(),
+        refresh: vi.fn(),
+        dispose: vi.fn(),
+        isReady: () => true,
+        isNativeUnlockVerified: () => true,
+        secretUnlockMode: () => 'os_native',
+        currentPin: () => undefined,
+        startupHealth: () => 'ready',
+      } as unknown as LocalSecretRuntime,
+      undefined,
+      {
+        runtimeMode: 'service',
+        serviceVerified: true,
+        nativeProtectorAvailable: true,
+        drainTimeoutMilliseconds: 60_000,
+      },
+      identity,
+      {
+        activationId: 'release-a',
+        expectedSoftwareIdentity: identity,
+        instanceLockHeld: true,
+        requireNativeSecretAutoUnlock: true,
+        maintenanceSource: {
+          current: async () => ({ state: 'rolling_back' }),
+          waitForChange: async () => undefined,
+        },
+        startupStatusWriter: {
+          write: async (status) => {
+            statuses.push(status);
+          },
+        },
+        startupHealthProbe: {
+          run: async () => ({
+            identity: 'passed',
+            instanceLock: 'passed',
+            workflowEngine: 'passed',
+            policyRuntime: 'passed',
+            chromium: 'passed',
+            localSecretStore: 'passed',
+            nativeSecretAutoUnlock: 'passed',
+          }),
+        },
+        createStartupAttemptId: () => 'startup-a',
+      },
+    );
+
+    await service.start(controller.signal);
+    expect(statuses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          state: 'healthy',
+          acceptsNewJobs: false,
+          controlPlaneAcknowledgement: 'not_attempted',
+        }),
+      ]),
+    );
+    expect(context.output).not.toContain(
+      'RUNNER_STARTUP_COMPATIBILITY_ACK_FAILED',
+    );
   });
 });
 

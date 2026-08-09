@@ -395,7 +395,9 @@ describe('detached signature and artifact verification', () => {
   it('rejects an invalid signature even when the digest matches', () => {
     const manifest = manifestFixture();
     const signature = signManifest(manifest);
-    signature.signature = `${signature.signature.slice(0, -1)}A`;
+    const invalidSignature = Buffer.from(signature.signature, 'base64url');
+    invalidSignature[0] = (invalidSignature[0] ?? 0) ^ 0x01;
+    signature.signature = invalidSignature.toString('base64url');
     expect(() =>
       verifyRelease({
         manifest,

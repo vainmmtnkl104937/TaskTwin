@@ -31,8 +31,14 @@ import { assertClaimedJobPolicy } from './policy-preflight.js';
 
 export class RunJobWorker {
   private acceptingJobs = true;
+  private stopping = false;
+  private claimInFlight: Promise<
+    Awaited<ReturnType<RunnerJobTransport['claimJob']>>
+  > | null = null;
   private activeRun: Promise<void> | null = null;
-  private readonly pollingAbort = new AbortController();
+  private pollingAbort = new AbortController();
+  private admissionChange = new AbortController();
+  private workChange = new AbortController();
   private readonly forcedCancellation = new AbortController();
   constructor(
     private readonly transport: RunnerJobTransport,
@@ -49,6 +55,7 @@ export class RunJobWorker {
     private readonly localSecretProvider?: LocalVaultSecretProvider,
     private readonly localInventoryPin?: () =>
       LocalSecretInventoryPin | undefined,
+    private readonly refreshClaimAdmission?: () => Promise<boolean>,
   ) {}
 
   async runLoop(
@@ -58,7 +65,16 @@ export class RunJobWorker {
     const force = () => this.forcedCancellation.abort();
     signal.addEventListener('abort', force, { once: true });
     try {
-      while (!signal.aborted && this.acceptingJobs) {
+      while (!signal.aborted) {
+        await this.waitUntilAccepting(signal);
+        if (signal.aborted || this.stopping) break;
+        if (
+          this.refreshClaimAdmission !== undefined &&
+          !(await this.refreshClaimAdmission())
+        ) {
+          this.pauseClaims();
+          continue;
+        }
         const claimRequest = RunnerJobClaimRequestSchema.parse({
           schemaVersion: RUN_PROTOCOL_SCHEMA_VERSION,
           runProtocolVersion: RUN_PROTOCOL_VERSION,
@@ -68,8 +84,25 @@ export class RunJobWorker {
           claimAttemptId: randomUUID(),
           secretInventory: this.localInventoryPin?.(),
         });
-        const claim = await this.claimWithRetry(credential, claimRequest);
+        const pendingClaim = this.claimWithRetry(credential, claimRequest);
+        this.claimInFlight = pendingClaim;
+        this.notifyWorkChange();
+        let claim: Awaited<typeof pendingClaim>;
+        try {
+          claim = await pendingClaim;
+        } catch (error: unknown) {
+          if (this.claimInFlight === pendingClaim) {
+            this.claimInFlight = null;
+            this.notifyWorkChange();
+          }
+          throw error;
+        }
+        if (this.claimInFlight === pendingClaim) {
+          this.claimInFlight = null;
+        }
         if (claim.status === 'no_job') {
+          this.notifyWorkChange();
+          if (!this.acceptingJobs) continue;
           await this.clock
             .sleep(claim.pollAfterSeconds * 1_000, this.pollingAbort.signal)
             .catch(() => undefined);
@@ -81,10 +114,14 @@ export class RunJobWorker {
           this.forcedCancellation.signal,
         );
         this.activeRun = active;
+        this.notifyWorkChange();
         try {
           await active;
         } finally {
-          if (this.activeRun === active) this.activeRun = null;
+          if (this.activeRun === active) {
+            this.activeRun = null;
+            this.notifyWorkChange();
+          }
         }
       }
     } finally {
@@ -93,8 +130,32 @@ export class RunJobWorker {
   }
 
   beginDrain(): void {
+    this.stopping = true;
+    if (this.acceptingJobs) {
+      this.pauseClaims();
+    } else {
+      this.notifyAdmissionChange();
+    }
+  }
+
+  pauseClaims(): void {
+    if (!this.acceptingJobs) return;
     this.acceptingJobs = false;
     this.pollingAbort.abort();
+    this.notifyAdmissionChange();
+  }
+
+  resumeClaims(): void {
+    if (this.acceptingJobs || this.stopping) return;
+    this.acceptingJobs = true;
+    if (this.pollingAbort.signal.aborted) {
+      this.pollingAbort = new AbortController();
+    }
+    this.notifyAdmissionChange();
+  }
+
+  acceptsNewJobs(): boolean {
+    return this.acceptingJobs;
   }
 
   hasActiveRun(): boolean {
@@ -105,8 +166,39 @@ export class RunJobWorker {
     await this.activeRun;
   }
 
+  hasUnsettledWork(): boolean {
+    return this.claimInFlight !== null || this.activeRun !== null;
+  }
+
+  async waitForQuiescence(signal?: AbortSignal): Promise<void> {
+    while (this.hasUnsettledWork()) {
+      if (signal?.aborted === true) {
+        throw new Error('Runner work-quiescence wait was aborted.');
+      }
+      const changed = this.workChange.signal;
+      await waitForAbort(changed, signal);
+    }
+  }
+
   forceCancelActiveRun(): void {
     this.forcedCancellation.abort();
+  }
+
+  private async waitUntilAccepting(signal: AbortSignal): Promise<void> {
+    while (!signal.aborted && !this.stopping && !this.acceptingJobs) {
+      const changed = this.admissionChange.signal;
+      await waitForAbort(changed, signal).catch(() => undefined);
+    }
+  }
+
+  private notifyAdmissionChange(): void {
+    this.admissionChange.abort();
+    this.admissionChange = new AbortController();
+  }
+
+  private notifyWorkChange(): void {
+    this.workChange.abort();
+    this.workChange = new AbortController();
   }
 
   private async claimWithRetry(
@@ -313,6 +405,30 @@ export class RunJobWorker {
     }
     throw latestError;
   }
+}
+
+function waitForAbort(
+  change: AbortSignal,
+  cancellation?: AbortSignal,
+): Promise<void> {
+  if (change.aborted) return Promise.resolve();
+  if (cancellation?.aborted === true) {
+    return Promise.reject(new Error('Runner wait was aborted.'));
+  }
+  return new Promise<void>((resolve, reject) => {
+    const finishChange = () => {
+      cancellation?.removeEventListener('abort', finishCancellation);
+      resolve();
+    };
+    const finishCancellation = () => {
+      change.removeEventListener('abort', finishChange);
+      reject(new Error('Runner wait was aborted.'));
+    };
+    change.addEventListener('abort', finishChange, { once: true });
+    cancellation?.addEventListener('abort', finishCancellation, {
+      once: true,
+    });
+  });
 }
 
 export function assertClaimedJobCompatibility(job: {

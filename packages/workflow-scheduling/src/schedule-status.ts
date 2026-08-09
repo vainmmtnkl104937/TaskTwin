@@ -56,6 +56,8 @@ export const ScheduleSkipReasonSchema = z.enum([
   'runner_unavailable',
   /** The assigned Runner cannot safely execute new work with the Control Plane. */
   'runner_update_required',
+  /** The assigned Runner is temporarily draining for local maintenance. */
+  'runner_maintenance',
   /** The current Active Policy denies or requires approval for the workflow. */
   'policy_denied',
   /** The pinned WorkflowVersion is no longer published or available. */

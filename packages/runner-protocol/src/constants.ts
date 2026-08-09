@@ -3,14 +3,12 @@ export const WORKFLOW_VERIFICATION_CAPABILITY = 'workflow_verification_v1';
 export const WORKFLOW_EXTRACTION_CAPABILITY = 'workflow_extraction_v1';
 export const WORKFLOW_APPROVAL_CAPABILITY = 'workflow_approval_v1';
 export const WORKFLOW_MANUAL_REPAIR_CAPABILITY = 'workflow_manual_repair_v1';
-export const WORKFLOW_SCHEDULED_EXECUTION_CAPABILITY =
-  'scheduled_execution_v1';
+export const WORKFLOW_SCHEDULED_EXECUTION_CAPABILITY = 'scheduled_execution_v1';
 export const LOCATOR_REPAIR_PROPOSALS_CAPABILITY =
   'locator_repair_proposals_v1';
 export const LOCAL_SECRET_STORE_CAPABILITY = 'local_secret_store_v1';
 export const RUNNER_SERVICE_CAPABILITY = 'runner_service_v1';
-export const OS_NATIVE_SECRET_UNLOCK_CAPABILITY =
-  'os_native_secret_unlock_v1';
+export const OS_NATIVE_SECRET_UNLOCK_CAPABILITY = 'os_native_secret_unlock_v1';
 export const DEFAULT_PAIRING_EXPIRES_IN_SECONDS = 600;
 export const DEFAULT_POLL_INTERVAL_SECONDS = 5;
 export const MAX_POLL_INTERVAL_SECONDS = 30;
@@ -18,6 +16,8 @@ export const POLL_SLOW_DOWN_INCREMENT_SECONDS = 5;
 export const CREDENTIAL_DELIVERY_WINDOW_SECONDS = 120;
 export const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
 export const RUNNER_OFFLINE_AFTER_SECONDS = 90;
+export const RUNNER_COMPATIBILITY_HEADER =
+  'TaskTwin-Runner-Compatibility' as const;
 
 export const USER_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const USER_CODE_CHARACTER_COUNT = 12;

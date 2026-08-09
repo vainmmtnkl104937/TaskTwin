@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -18,6 +18,7 @@ import {
   WindowsNativeMasterKeyProtector,
   type WindowsNativeProtectionBridge,
 } from './windows-native-master-key-protector.js';
+import { nativeBridgePowerShellExecutable } from './windows-native-protection-bridge.js';
 
 const workspaceId = '11111111-1111-4111-8111-111111111111';
 const runnerDeviceId = '22222222-2222-4222-8222-222222222222';
@@ -35,6 +36,24 @@ class MemoryNativeBridge implements WindowsNativeProtectionBridge {
     return Uint8Array.from(input).reverse();
   }
 }
+
+describe('Windows native protection command boundary', () => {
+  it('uses an absolute System32 PowerShell path', () => {
+    const systemRoot = resolve(tmpdir(), 'Windows');
+    const executable = nativeBridgePowerShellExecutable(systemRoot);
+    expect(isAbsolute(executable)).toBe(true);
+    expect(executable).toBe(
+      join(
+        systemRoot,
+        'System32',
+        'WindowsPowerShell',
+        'v1.0',
+        'powershell.exe',
+      ),
+    );
+    expect(() => nativeBridgePowerShellExecutable('relative')).toThrow();
+  });
+});
 
 function aad(overrides: Partial<{ vaultId: string; runnerDeviceId: string }> = {}) {
   return {

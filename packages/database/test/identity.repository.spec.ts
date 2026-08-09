@@ -63,6 +63,9 @@ describe('IdentityRepository', () => {
         create: vi.fn().mockResolvedValue(membership),
       },
       workspace: { create: vi.fn().mockResolvedValue(workspace) },
+      workspaceAuditChainHead: {
+        create: vi.fn().mockResolvedValue({}),
+      },
       workspaceExecutionPolicyVersion: {
         create: vi.fn().mockResolvedValue({}),
       },
@@ -85,6 +88,9 @@ describe('IdentityRepository', () => {
       workspace,
     });
     expect(transaction).toHaveBeenCalledOnce();
+    expect(
+      transactionClient.workspaceAuditChainHead.create,
+    ).toHaveBeenCalledWith({ data: { workspaceId: workspace.id } });
     expect(transactionClient.organizationMember.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ role: OrganizationRole.OWNER }),

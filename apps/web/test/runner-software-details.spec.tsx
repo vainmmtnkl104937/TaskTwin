@@ -35,6 +35,9 @@ describe('Runner software details', () => {
       'New workflow jobs are blocked',
     );
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /update|rollback|download|install/i }),
+    ).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/download-and-run/i);
   });
 
@@ -52,5 +55,9 @@ describe('Runner software details', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'incompatible with the Control Plane',
     );
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /update|rollback|download|install/i }),
+    ).not.toBeInTheDocument();
   });
 });

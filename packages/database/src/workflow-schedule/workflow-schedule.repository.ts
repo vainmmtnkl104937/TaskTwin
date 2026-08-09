@@ -50,6 +50,7 @@ const SERIALIZATION_RETRY_COUNT = 3;
 const SCHEDULED_EXECUTION_CAPABILITY = 'scheduled_execution_v1';
 const LOCAL_SECRET_STORE_CAPABILITY = 'local_secret_store_v1';
 const TRIGGER_SCHEDULED = 'scheduled';
+const RUNNER_UPDATE_MAINTENANCE_FRESHNESS_MS = 20 * 60_000;
 
 const SCHEDULE_EVENT_NAMESPACES = {
   created: 'schedule_created',
@@ -319,6 +320,7 @@ function buildOccurrenceSkippedInput(input: {
     | 'runner_busy'
     | 'runner_unavailable'
     | 'runner_update_required'
+    | 'runner_maintenance'
     | 'policy_denied'
     | 'source_version_unavailable'
     | 'missed_start_window'
@@ -1329,6 +1331,8 @@ export class WorkflowScheduleRepository {
           runProtocolVersion: true,
           workflowSchemaVersion: true,
           localStateSchemaVersion: true,
+          serviceStatus: true,
+          runtimeMetadataUpdatedAt: true,
           capabilities: true,
           secretInventory: {
             select: {
@@ -1347,6 +1351,38 @@ export class WorkflowScheduleRepository {
       if (runner.revokedAt !== null) {
         throw new WorkflowScheduleRepositoryError('SCHEDULE_RUNNER_REVOKED');
       }
+      const runnerOnline =
+        runner.lastSeenAt !== null &&
+        runner.lastSeenAt.getTime() > input.now.getTime() - 60_000;
+      const maintenanceReportedAt = [
+        runner.runtimeMetadataUpdatedAt,
+        runner.lastSeenAt,
+      ].reduce<Date | null>(
+        (latest, candidate) =>
+          candidate !== null &&
+          (latest === null || candidate.getTime() > latest.getTime())
+            ? candidate
+            : latest,
+        null,
+      );
+      const runnerInFreshUpdateMaintenance =
+        runner.serviceStatus === 'draining' &&
+        maintenanceReportedAt !== null &&
+        maintenanceReportedAt.getTime() >
+          input.now.getTime() - RUNNER_UPDATE_MAINTENANCE_FRESHNESS_MS;
+      // Planned update maintenance takes precedence over a transient target
+      // compatibility result. Claims remain blocked, but the occurrence is
+      // skipped without auto-pausing while the controller can still roll back.
+      if (runnerInFreshUpdateMaintenance) {
+        return this.skipMaintenanceOccurrence(transaction, {
+          scheduleId: schedule.id,
+          workspaceId: schedule.workspaceId,
+          definition: schedule.definition,
+          scheduledFor: schedule.nextOccurrenceAt,
+          maxStartDelaySeconds: schedule.maxStartDelaySeconds,
+          now: input.now,
+        });
+      }
       const runnerCompatibility = evaluatePersistedRunnerCompatibility(runner);
       if (!canRunnerClaimJobs(runnerCompatibility)) {
         return this.autoPauseBlockedOccurrence(transaction, {
@@ -1363,9 +1399,6 @@ export class WorkflowScheduleRepository {
       if (!runner.capabilities.includes(SCHEDULED_EXECUTION_CAPABILITY)) {
         throw new WorkflowScheduleRepositoryError('RUNNER_NOT_CAPABLE');
       }
-      const runnerOnline =
-        runner.lastSeenAt !== null &&
-        runner.lastSeenAt.getTime() > input.now.getTime() - 60_000;
       if (!runnerOnline) {
         throw new WorkflowScheduleRepositoryError('RUNNER_BUSY');
       }
@@ -1532,6 +1565,9 @@ export class WorkflowScheduleRepository {
               WorkflowRunStatus.QUEUED,
               WorkflowRunStatus.CLAIMED,
               WorkflowRunStatus.RUNNING,
+              WorkflowRunStatus.WAITING_FOR_APPROVAL,
+              WorkflowRunStatus.WAITING_FOR_REPAIR,
+              WorkflowRunStatus.CANCEL_REQUESTED,
             ],
           },
         },
@@ -1548,6 +1584,9 @@ export class WorkflowScheduleRepository {
               WorkflowRunStatus.QUEUED,
               WorkflowRunStatus.CLAIMED,
               WorkflowRunStatus.RUNNING,
+              WorkflowRunStatus.WAITING_FOR_APPROVAL,
+              WorkflowRunStatus.WAITING_FOR_REPAIR,
+              WorkflowRunStatus.CANCEL_REQUESTED,
             ],
           },
         },
@@ -2256,6 +2295,90 @@ export class WorkflowScheduleRepository {
       skipReason: input.skipReason,
       autoPaused: true,
       autoPauseReason: input.autoPauseReason,
+    };
+  }
+
+  private async skipMaintenanceOccurrence(
+    transaction: Prisma.TransactionClient,
+    input: {
+      scheduleId: string;
+      workspaceId: string;
+      definition: unknown;
+      scheduledFor: Date;
+      maxStartDelaySeconds: number;
+      now: Date;
+    },
+  ): Promise<OccurrenceDispatchResult> {
+    const parsedDefinition = ScheduleDefinitionSchema.safeParse(
+      input.definition,
+    );
+    if (!parsedDefinition.success) {
+      throw new WorkflowScheduleRepositoryError('SCHEDULE_NOT_READY');
+    }
+
+    const occurrenceId = randomUUID();
+    const startDeadlineAt = new Date(
+      input.scheduledFor.getTime() + input.maxStartDelaySeconds * 1_000,
+    );
+    const occurrence = await transaction.workflowScheduleOccurrence.create({
+      data: {
+        id: occurrenceId,
+        scheduleId: input.scheduleId,
+        scheduledFor: input.scheduledFor,
+        startDeadlineAt,
+        status: WorkflowScheduleOccurrenceStatus.SKIPPED,
+        skipReason: 'runner_maintenance',
+        skippedAt: input.now,
+      },
+    });
+
+    const isOneTime = parsedDefinition.data.type === 'one_time';
+    const nextResult = isOneTime
+      ? null
+      : nextOccurrence(
+          parsedDefinition.data,
+          input.now,
+          input.maxStartDelaySeconds,
+        );
+    const nextOccurrenceAt =
+      nextResult === null || isOccurrenceSkipped(nextResult)
+        ? null
+        : nextResult.scheduledInstant;
+
+    await transaction.workflowSchedule.update({
+      where: { id: input.scheduleId },
+      data: {
+        nextOccurrenceAt,
+        lastOccurrenceAt: input.scheduledFor,
+        ...(isOneTime
+          ? {
+              status: WorkflowScheduleStatus.COMPLETED,
+              completedAt: input.now,
+            }
+          : {}),
+      },
+    });
+    await appendAuditEventTransactional(
+      transaction,
+      this.auditTrail,
+      buildOccurrenceSkippedInput({
+        workspaceId: input.workspaceId,
+        scheduleId: input.scheduleId,
+        occurrenceId,
+        reason: 'runner_maintenance',
+        scheduledFor: input.scheduledFor,
+        occurredAt: input.now,
+      }),
+    );
+
+    return {
+      occurrence: toOccurrenceRecord(
+        occurrence as unknown as Record<string, unknown>,
+      ),
+      workflowRunId: null,
+      idempotent: false,
+      skipReason: 'runner_maintenance',
+      autoPaused: false,
     };
   }
 

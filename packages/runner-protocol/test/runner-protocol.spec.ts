@@ -5,6 +5,7 @@ import {
   PairingPollingResponseSchema,
   RunnerCapabilitiesSchema,
   RunnerHeartbeatRequestSchema,
+  RunnerCompatibilityAcknowledgementSchema,
   RunnerDeviceMetadataSchema,
   StoredRunnerCredentialSchema,
   canTransitionPairingStatus,
@@ -21,6 +22,23 @@ const metadata = {
 } as const;
 
 describe('runner capabilities', () => {
+  it('accepts only bounded heartbeat compatibility acknowledgements', () => {
+    for (const status of [
+      'compatible',
+      'update_recommended',
+      'update_required',
+      'unsupported',
+    ]) {
+      expect(RunnerCompatibilityAcknowledgementSchema.parse(status)).toBe(
+        status,
+      );
+    }
+    expect(
+      RunnerCompatibilityAcknowledgementSchema.safeParse('force_update')
+        .success,
+    ).toBe(false);
+  });
+
   it('accepts only matching safe software identity metadata', () => {
     const heartbeat = {
       schemaVersion: 1,

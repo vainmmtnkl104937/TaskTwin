@@ -13,10 +13,12 @@ const repositoryRoot = resolve(
 );
 
 async function workflow(name: string): Promise<string> {
-  return readFile(
+  return (
+    await readFile(
     resolve(repositoryRoot, '.github', 'workflows', name),
     'utf8',
-  );
+    )
+  ).replaceAll('\r\n', '\n');
 }
 
 describe('Runner release workflow trust boundaries', () => {

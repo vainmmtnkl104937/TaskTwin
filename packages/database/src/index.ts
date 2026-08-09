@@ -55,6 +55,7 @@ export type {
   RunnerAuthenticationRecord,
   RunnerDeviceListRecord,
   RunnerDeviceRecord,
+  RunnerHeartbeatPersistenceResult,
   RunnerOrganizationAccess,
   RunnerPairingRecord,
   RunnerPollingResult,

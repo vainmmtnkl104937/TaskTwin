@@ -42,6 +42,9 @@ const FORBIDDEN_FILE_NAMES = [
   /\.key$/i,
 ];
 const PROHIBITED_CONTENT = [
+  'UPDATE_SECRET_LEAK_32',
+  'UPDATE_CREDENTIAL_LEAK_32',
+  'UPDATE_PROTECTED_KEY_LEAK_32',
   'LOCAL_SECRET_STORE_LEAK_31',
   'RUNNER_CREDENTIAL_LEAK_31',
   'RELEASE_PRIVATE_KEY_LEAK_31',
@@ -186,6 +189,9 @@ export async function inspectReleaseStaging(stagingDirectory) {
     'package.json',
     'dist/index.js',
     'dist/release/build-identity.json',
+    'dist/platform/windows/windows-native-bridge.ps1',
+    'dist/platform/windows/windows-runner-installation-acl.ps1',
+    'dist/update/windows-release-archive.ps1',
     'runtime/node.exe',
     'runtime/LICENSE',
     'windows/vendor/winsw-2.12.0/WinSW.NET461.exe',

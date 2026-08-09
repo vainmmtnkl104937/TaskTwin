@@ -896,12 +896,71 @@ release; the manifest cannot bootstrap either one.
 Verification and deterministic preflight happen before service interruption.
 Preflight reads current state/vault headers without mutation and returns
 `compatible`, `migration_required`, `unsupported` or `downgrade_blocked`. The
-Windows service's absolute executable/entry-point binding means a manual
-upgrade extracts a new version directory and explicitly reinstalls the service.
-There is no automatic download, install, state migration or rollback.
+Windows service's absolute executable/entry-point binding requires a versioned
+activation rather than in-place replacement. Session 31 itself does not
+download, install, migrate or roll back a release; Session 32's separate local
+controller consumes that verified release boundary.
 See [Runner version](../runner-version.md),
 [release packaging](../runner-release-packaging.md),
 [release manifest](../runner-release-manifest.md),
 [compatibility](../runner-compatibility.md),
 [upgrade preflight](../runner-upgrade-preflight.md), and the
 [release pipeline](../runner-release-pipeline.md) for the operator boundaries.
+
+# Secure local Runner update and rollback
+
+`@tasktwin/runner-update` is the framework-independent Session 32 decision
+boundary. It owns strict update/installed/active/startup contracts, state
+transitions, bidirectional compatibility, deterministic plans and IDs, target
+health, crash recovery, retention and privacy-safe summaries. It imports
+Session 31 release contracts but no filesystem, Windows, child process,
+service manager, NestJS, Prisma, React, Next.js, Playwright or database API.
+
+The Local Runner application owns all machine effects. It verifies the target
+before the update lease or maintenance, then reverifies target and current
+proof under an exclusive filesystem lease. Apply is representable only when a
+newer target passes forward preflight, the retained source can read the target's
+declared writable state, and explicit Runner protocol, Workflow schema and
+aggregate service/local-state axes are supported. No state or vault migration
+is performed.
+
+The controlled ProgramData installation root separates versioned software,
+retained signed proof, staging, active-release metadata, update journal and
+startup status from mutable `.tasktwin` data. Staging uses a fixed local ZIP
+adapter with path, reparse, count, size and compression-ratio defenses. The
+extracted tree must match the allowlisted Windows x64 release layout and exact
+archive bytes; no archive-supplied install script executes.
+
+Update maintenance closes local claim admission and withholds capabilities.
+The Control Plane independently rejects claims from persisted `draining`
+Runners. An active Run—including Approval and Repair waits—is allowed to finish
+within a bounded drain window and is never cancelled solely for update. A
+scheduled occurrence during maintenance is skipped with `runner_maintenance`;
+it creates no WorkflowRun, no backfill and no unnecessary auto-pause.
+
+After staging, SCM is rebound from the source's per-release WinSW activation
+to the target activation and the atomic active-release record advances. The
+target must report a fresh activation/startup attempt, exact embedded identity,
+selected executable, successful instance/engine/policy/Chromium/secret-store
+checks, required native unlock, no active work and closed claim admission.
+SCM `RUNNING` is insufficient. Control Plane offline is acceptable for local
+health; an explicit incompatible acknowledgement is not.
+
+Target failure rolls back only after the retained source proof and current
+rollback compatibility are rechecked, and the restored source must pass local
+health. Crash recovery combines journal, active record, SCM binding, proof and
+startup status. Ambiguous or unsafe state is absorbing
+`manual_recovery_required`; no force path, WorkflowRun resume or lease reuse
+exists.
+
+The commands are local only and accept already-downloaded files. There is no
+Control Plane/Web update or rollback endpoint, discovery/download, background
+or silent update, fleet rollout, arbitrary executable/script, schema migration
+or non-Windows-x64 adapter. The initial production key registry is still empty,
+and existing unmanaged installations require a separately reviewed bootstrap
+before this controller has a verified rollback base. See
+[ADR-035](../adr/ADR-035-secure-runner-update-controller.md),
+[ADR-036](../adr/ADR-036-runner-update-rollback-safety.md), the
+[update guide](../runner-update.md), [installation layout](../windows-runner-update-layout.md),
+[rollback guide](../runner-update-rollback.md) and
+[recovery guide](../runner-update-recovery.md).

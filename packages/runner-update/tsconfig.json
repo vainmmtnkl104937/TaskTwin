@@ -1,0 +1,4 @@
+{
+  "extends": "@tasktwin/config/typescript/node.json",
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

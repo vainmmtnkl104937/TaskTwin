@@ -96,6 +96,21 @@ describe('strict audit payload schemas', () => {
     ).toBe(true);
   });
 
+  it('accepts maintenance only as an occurrence skip reason', () => {
+    expect(
+      AUDIT_PAYLOAD_SCHEMAS['schedule.occurrence.skipped'].safeParse({
+        ...VALID_PAYLOADS['schedule.occurrence.skipped'],
+        skipReason: 'runner_maintenance',
+      }).success,
+    ).toBe(true);
+    expect(
+      AUDIT_PAYLOAD_SCHEMAS['schedule.auto_paused'].safeParse({
+        ...VALID_PAYLOADS['schedule.auto_paused'],
+        reason: 'runner_maintenance',
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects every forbidden field in every payload schema', () => {
     for (const eventType of AUDIT_EVENT_TYPES) {
       for (const field of FORBIDDEN_AUDIT_FIELDS) {

@@ -21,6 +21,7 @@ export interface LocalSecretRuntime {
   currentPin(): LocalSecretInventoryPin | undefined;
   isNativeUnlockVerified?(): boolean;
   secretUnlockMode?(): RunnerSecretUnlockMode;
+  startupHealth?(): 'ready' | 'locked' | 'unavailable' | 'corrupted';
   dispose(): Promise<void>;
 }
 
@@ -29,6 +30,11 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
   private pin: LocalSecretInventoryPin | undefined;
   private nativeUnlockVerified = false;
   private configuredUnlockMode: RunnerSecretUnlockMode = 'none';
+  private startupHealthStatus:
+    | 'ready'
+    | 'locked'
+    | 'unavailable'
+    | 'corrupted' = 'unavailable';
 
   constructor(
     private readonly vault: LocalSecretVaultService,
@@ -43,6 +49,7 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
     signal: AbortSignal,
   ): Promise<void> {
     const status = await this.vault.status();
+    this.startupHealthStatus = status.status;
     if (status.status === 'unavailable') {
       await this.reportStatus(credential, 'unavailable');
       return;
@@ -65,6 +72,7 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
           runnerDeviceId: credential.runnerDeviceId,
         });
         this.nativeUnlockVerified = true;
+        this.startupHealthStatus = 'ready';
         try {
           await this.refresh(credential);
           this.output.write('Local Secret Store unlocked natively and synchronized.');
@@ -73,6 +81,7 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
         }
       } catch {
         this.nativeUnlockVerified = false;
+        this.startupHealthStatus = 'locked';
         await this.vault.dispose();
         await this.reportStatus(credential, 'locked');
         this.output.write('Local Secret Store native unlock failed safely.');
@@ -80,6 +89,7 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
       return;
     }
     if (this.runtimeMode === 'service' || !this.prompt.isAvailable()) {
+      this.startupHealthStatus = 'locked';
       await this.reportStatus(credential, 'locked');
       this.output.write('Local Secret Store status: locked.');
       return;
@@ -94,6 +104,7 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
         runnerDeviceId: credential.runnerDeviceId,
         passphrase,
       });
+      this.startupHealthStatus = 'ready';
       try {
         await this.refresh(credential);
         this.output.write('Local Secret Store unlocked and synchronized.');
@@ -101,6 +112,7 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
         this.output.write('Local Secret Store unlocked; inventory synchronization is pending.');
       }
     } catch {
+      this.startupHealthStatus = 'locked';
       await this.vault.dispose();
       await this.reportStatus(credential, 'locked');
       this.output.write('Local Secret Store unlock failed safely.');
@@ -140,6 +152,10 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
     return this.configuredUnlockMode;
   }
 
+  startupHealth(): 'ready' | 'locked' | 'unavailable' | 'corrupted' {
+    return this.startupHealthStatus;
+  }
+
   currentPin(): LocalSecretInventoryPin | undefined {
     return this.pin;
   }
@@ -149,6 +165,7 @@ export class RunnerLocalSecretRuntime implements LocalSecretRuntime {
     this.pin = undefined;
     this.nativeUnlockVerified = false;
     this.configuredUnlockMode = 'none';
+    this.startupHealthStatus = 'unavailable';
     await this.vault.dispose();
   }
 

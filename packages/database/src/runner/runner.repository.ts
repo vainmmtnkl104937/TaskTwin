@@ -22,6 +22,7 @@ import type {
   RunnerAuthenticationRecord,
   RunnerDeviceListRecord,
   RunnerDeviceRecord,
+  RunnerHeartbeatPersistenceResult,
   RunnerOrganizationAccess,
   RunnerPairingRecord,
   RunnerPollingResult,
@@ -30,13 +31,13 @@ import type { OperationalAlertTransactionAppender } from '../operational-alerts/
 import type { LocalSecretStoreStatus } from '@tasktwin/local-secret-store';
 import {
   RunnerRuntimeMetadataSchema,
-  type RunnerRuntimeMetadata,
   type RunnerRuntimeReport,
 } from '@tasktwin/runner-service-runtime';
 import { appendAuditEventTransactional } from '../audit-trail/audit-appender.repository.js';
 import { WorkspaceAuditTrailRepository } from '../audit-trail/audit-trail.repository.js';
 import type { RunnerSoftwareIdentity } from '@tasktwin/runner-release';
 import {
+  evaluatePersistedRunnerCompatibility,
   toPersistedRunnerSoftwareIdentity,
   toRunnerReleasePlatform,
 } from './runner-software-compatibility.js';
@@ -578,7 +579,7 @@ export class RunnerRepository {
     capabilities: RunnerCapability[];
     runtime?: RunnerRuntimeReport;
     now: Date;
-  }): Promise<RunnerRuntimeMetadata | null> {
+  }): Promise<RunnerHeartbeatPersistenceResult> {
     return this.runSerializable(async (transaction) => {
       const device = await transaction.runnerDevice.findUnique({
         where: { id: input.runnerDeviceId },
@@ -741,12 +742,24 @@ export class RunnerRepository {
           });
         }
       }
-      return input.runtime === undefined
-        ? null
-        : RunnerRuntimeMetadataSchema.parse({
-            ...input.runtime,
-            runtimeMetadataRevision: nextRuntimeRevision,
-          });
+      const runtime =
+        input.runtime === undefined
+          ? null
+          : RunnerRuntimeMetadataSchema.parse({
+              ...input.runtime,
+              runtimeMetadataRevision: nextRuntimeRevision,
+            });
+      return {
+        runtime,
+        compatibility: evaluatePersistedRunnerCompatibility({
+          runnerVersion: input.runnerVersion,
+          platform: device.platform,
+          architecture: device.architecture,
+          runProtocolVersion: reportedRunProtocolVersion,
+          workflowSchemaVersion: reportedWorkflowSchemaVersion,
+          localStateSchemaVersion: reportedLocalStateSchemaVersion,
+        }),
+      };
     });
   }
 

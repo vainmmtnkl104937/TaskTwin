@@ -1244,6 +1244,7 @@ export class WorkflowRunRepository {
           runProtocolVersion: true,
           workflowSchemaVersion: true,
           localStateSchemaVersion: true,
+          serviceStatus: true,
           secretInventory: {
             select: {
               vaultId: true,
@@ -1327,6 +1328,10 @@ export class WorkflowRunRepository {
           return { status: 'no_job' };
         }
         return this.claimedRecord(retried, true);
+      }
+
+      if (runner.serviceStatus === 'draining') {
+        return { status: 'no_job' };
       }
 
       const active = await transaction.workflowRun.findFirst({

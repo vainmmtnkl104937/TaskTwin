@@ -16,6 +16,7 @@ import {
 import {
   ProductSemVerSchema,
   RunnerCompatibilityEvaluationSchema,
+  RunnerCompatibilityStatusSchema,
   RunnerSoftwareIdentitySchema,
 } from '@tasktwin/runner-release';
 
@@ -297,6 +298,14 @@ export const RunnerHeartbeatResponseSchema = z.strictObject({
     .default(DEFAULT_HEARTBEAT_INTERVAL_SECONDS),
 });
 
+/**
+ * Optional heartbeat response-header acknowledgement. Keeping this outside
+ * the strict response body lets already-deployed Runners continue parsing the
+ * Session 17/31 heartbeat response unchanged.
+ */
+export const RunnerCompatibilityAcknowledgementSchema =
+  RunnerCompatibilityStatusSchema;
+
 export const RunnerAuthorizationPartsSchema = z.strictObject({
   runnerDeviceId: UuidSchema,
   credential: OpaqueCodeSchema,
@@ -359,6 +368,9 @@ export type RunnerHeartbeatRequest = z.infer<
 >;
 export type RunnerHeartbeatResponse = z.infer<
   typeof RunnerHeartbeatResponseSchema
+>;
+export type RunnerCompatibilityAcknowledgement = z.infer<
+  typeof RunnerCompatibilityAcknowledgementSchema
 >;
 export type RunnerAuthorizationParts = z.infer<
   typeof RunnerAuthorizationPartsSchema
