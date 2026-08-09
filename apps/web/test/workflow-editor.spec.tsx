@@ -256,6 +256,28 @@ describe('WorkflowEditor', () => {
     ).toBeInTheDocument();
   });
 
+  it('suspends only the policy preview while a draft is temporarily invalid', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkflowEditor detail={detail()} workspaceId={detail().workspaceId} />,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'Step 2: wait, Wait briefly' }),
+    );
+    expect(screen.getByText(/Risk: low · Policy: allow/)).toBeInTheDocument();
+
+    const name = screen.getByLabelText('Step name');
+    await user.clear(name);
+    expect(
+      screen.getByText(/expected string to have >=1 characters/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Risk: .*Policy:/)).not.toBeInTheDocument();
+
+    await user.type(name, 'Valid wait');
+    expect(screen.getByText(/Risk: low · Policy: allow/)).toBeInTheDocument();
+  });
+
   it('adds Wait and Approval and requires confirmation before deletion', async () => {
     const user = userEvent.setup();
     render(

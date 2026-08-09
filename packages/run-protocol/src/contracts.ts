@@ -1,9 +1,13 @@
 import {
+  WORKFLOW_ENGINE_SCHEMA_VERSION,
   WorkflowEngineExecutionOptionsSchema,
   WorkflowExecutionResultSchema,
   WorkflowProgressEventSchema,
 } from '@tasktwin/workflow-engine';
-import { WorkflowDefinitionSchema } from '@tasktwin/workflow-schema';
+import {
+  WORKFLOW_SCHEMA_VERSION,
+  WorkflowDefinitionSchema,
+} from '@tasktwin/workflow-schema';
 import { SafeVerificationResultSchema } from '@tasktwin/workflow-verification';
 import { SafeWorkflowOutputSummarySchema } from '@tasktwin/workflow-extraction';
 import { SafeStepAttemptSchema } from '@tasktwin/workflow-recovery';
@@ -22,6 +26,7 @@ import {
 } from '@tasktwin/secure-run-inputs';
 import { z } from 'zod';
 import { LocalSecretInventoryPinSchema } from '@tasktwin/local-secret-store';
+import { ProductSemVerSchema } from '@tasktwin/runner-release';
 
 import {
   DEFAULT_JOB_POLL_SECONDS,
@@ -209,13 +214,11 @@ export const WorkflowRunDetailResponseSchema = z.strictObject({
 export const RunnerJobClaimRequestSchema = z.strictObject({
   schemaVersion: z.literal(RUN_PROTOCOL_SCHEMA_VERSION),
   runProtocolVersion: z.literal(RUN_PROTOCOL_VERSION),
-  workflowEngineSchemaVersion: z.literal(1),
-  runnerVersion: z
-    .string()
-    .trim()
-    .min(1)
-    .max(32)
-    .regex(/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/),
+  workflowSchemaVersion: z
+    .literal(WORKFLOW_SCHEMA_VERSION)
+    .default(WORKFLOW_SCHEMA_VERSION),
+  workflowEngineSchemaVersion: z.literal(WORKFLOW_ENGINE_SCHEMA_VERSION),
+  runnerVersion: ProductSemVerSchema,
   claimAttemptId: UuidSchema,
   secretInventory: LocalSecretInventoryPinSchema.optional(),
 });
@@ -225,10 +228,14 @@ export const ClaimedRunInputSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('local_secret_store'),
     inventory: LocalSecretInventoryPinSchema,
-    secrets: z.array(z.strictObject({
-      secretName: z.string().trim().min(1).max(80),
-      usageCount: z.number().int().positive(),
-    })).max(100),
+    secrets: z
+      .array(
+        z.strictObject({
+          secretName: z.string().trim().min(1).max(80),
+          usageCount: z.number().int().positive(),
+        }),
+      )
+      .max(100),
   }),
   z.strictObject({
     kind: z.literal('encrypted_envelope'),
@@ -240,6 +247,8 @@ export const ClaimedRunInputSchema = z.discriminatedUnion('kind', [
 
 export const ClaimedRunnerJobSchema = z.strictObject({
   runId: UuidSchema,
+  runProtocolVersion: z.literal(RUN_PROTOCOL_VERSION),
+  workflowSchemaVersion: z.literal(WORKFLOW_SCHEMA_VERSION),
   definitionDigest: Sha256DigestSchema,
   workflow: WorkflowDefinitionSchema,
   policy: z.strictObject({

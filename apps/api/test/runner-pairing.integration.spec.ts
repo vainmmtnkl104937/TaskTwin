@@ -219,29 +219,41 @@ describe('Local Runner pairing integration', () => {
       secretUnlockMode: 'os_native',
       restartResilient: true,
     };
+    const softwareIdentity = {
+      product: 'tasktwin-runner',
+      version: '0.1.1',
+      runnerProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      platform: 'windows',
+      architecture: 'x64',
+    };
     await request(app.getHttpServer())
       .post('/runner/heartbeat')
       .set('Authorization', runnerHeader)
       .send({
         schemaVersion: 1,
         runnerVersion: '0.1.1',
-        capabilities: [
-          'runner_service_v1',
-          'os_native_secret_unlock_v1',
-        ],
+        softwareIdentity,
+        capabilities: ['runner_service_v1', 'os_native_secret_unlock_v1'],
         runtime,
       })
       .expect(200);
+    const firstSoftwareMetadata = await prisma.runnerDevice.findUniqueOrThrow({
+      where: { id: runnerDeviceId },
+      select: {
+        softwareMetadataRevision: true,
+        softwareMetadataUpdatedAt: true,
+      },
+    });
     await request(app.getHttpServer())
       .post('/runner/heartbeat')
       .set('Authorization', runnerHeader)
       .send({
         schemaVersion: 1,
         runnerVersion: '0.1.1',
-        capabilities: [
-          'runner_service_v1',
-          'os_native_secret_unlock_v1',
-        ],
+        softwareIdentity,
+        capabilities: ['runner_service_v1', 'os_native_secret_unlock_v1'],
         runtime,
       })
       .expect(200);
@@ -258,7 +270,18 @@ describe('Local Runner pairing integration', () => {
       secretUnlockMode: 'os_native',
       restartResilient: true,
       runtimeMetadataRevision: 1,
+      runProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      softwareMetadataRevision: 1,
     });
+    expect(heartbeatDevice.softwareMetadataUpdatedAt).not.toBeNull();
+    expect(heartbeatDevice.softwareMetadataRevision).toBe(
+      firstSoftwareMetadata.softwareMetadataRevision,
+    );
+    expect(heartbeatDevice.softwareMetadataUpdatedAt).toEqual(
+      firstSoftwareMetadata.softwareMetadataUpdatedAt,
+    );
     expect(
       await prisma.auditEvent.count({
         where: {
@@ -267,6 +290,20 @@ describe('Local Runner pairing integration', () => {
         },
       }),
     ).toBe(1);
+    const softwareVersionEvents = await prisma.auditEvent.findMany({
+      where: {
+        workspaceId: owner.workspace.id,
+        eventType: 'runner.software_version.changed',
+      },
+    });
+    expect(softwareVersionEvents).toHaveLength(1);
+    expect(softwareVersionEvents[0]?.payload).toEqual({
+      runnerDeviceId,
+      previousVersion: '0.1.0',
+      newVersion: '0.1.1',
+      runnerProtocolVersion: 2,
+      localStateSchemaVersion: 1,
+    });
     expect(
       await prisma.auditEvent.count({
         where: {
@@ -286,6 +323,10 @@ describe('Local Runner pairing integration', () => {
       autonomyLevel: 'boot_resilient',
       secretUnlockMode: 'os_native',
       restartResilient: true,
+    });
+    expect(list.body.devices[0]).toMatchObject({
+      softwareIdentity,
+      compatibility: { status: 'compatible', reasons: [] },
     });
     expect(JSON.stringify(list.body)).not.toContain(credential);
     expect(JSON.stringify(list.body)).not.toContain('protectedKey');

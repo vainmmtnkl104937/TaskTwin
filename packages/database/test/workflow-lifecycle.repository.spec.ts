@@ -1,5 +1,20 @@
 import type { WorkflowDefinition } from '@tasktwin/workflow-schema';
+import { DEFAULT_WORKSPACE_EXECUTION_POLICY } from '@tasktwin/workflow-policy';
 import { describe, expect, it, vi } from 'vitest';
+
+vi.mock(
+  '../src/audit-trail/audit-appender.repository.js',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('../src/audit-trail/audit-appender.repository.js')
+      >();
+    return {
+      ...actual,
+      appendAuditEventTransactional: vi.fn().mockResolvedValue(undefined),
+    };
+  },
+);
 
 import {
   OrganizationRole,
@@ -92,7 +107,16 @@ describe('WorkflowLifecycleRepository', () => {
       .mockResolvedValueOnce(detailRow('testing', OrganizationRole.MEMBER));
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const { repository } = createRepository({
-      workflowVersion: { findFirst, updateMany },
+      workflowVersion: {
+        findFirst,
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany,
+      },
+      workspaceExecutionPolicyVersion: {
+        findFirst: vi.fn().mockResolvedValue({
+          definition: DEFAULT_WORKSPACE_EXECUTION_POLICY,
+        }),
+      },
     });
 
     const result = await repository.submitForTesting(actorUserId, versionId, 4);
@@ -118,7 +142,16 @@ describe('WorkflowLifecycleRepository', () => {
       .mockResolvedValueOnce({ count: 1 });
     const transaction = {
       $queryRaw: vi.fn().mockResolvedValue([{ id: workflowId }]),
-      workflowVersion: { findFirst, updateMany },
+      workflowVersion: {
+        findFirst,
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany,
+      },
+      workspaceExecutionPolicyVersion: {
+        findFirst: vi.fn().mockResolvedValue({
+          definition: DEFAULT_WORKSPACE_EXECUTION_POLICY,
+        }),
+      },
     };
     const { repository, prisma } = createRepository(transaction);
     const occurredAt = new Date('2026-07-30T12:00:00.000Z');

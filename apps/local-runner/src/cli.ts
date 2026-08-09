@@ -34,8 +34,13 @@ import { readWindowsRunnerServiceConfig } from './platform/windows/windows-servi
 import { runServiceCli } from './service/service-cli.js';
 import { FileRunnerInstanceLock } from './runtime/runner-instance-lock.js';
 import type { RunnerRuntimeMode } from '@tasktwin/runner-service-runtime';
-
-const RUNNER_VERSION = '0.1.0';
+import {
+  formatRunnerVersion,
+  readEmbeddedBuildIdentity,
+  reportedSoftwareIdentity,
+} from './release/build-identity.js';
+import { runReleaseCli } from './release/release-cli.js';
+import type { TrustedReleaseKey } from '@tasktwin/runner-release';
 
 function optionalFixtureWait(value: string | undefined): number | undefined {
   if (value === undefined) {
@@ -90,20 +95,44 @@ export async function runCli(
   output: { write(message: string): void } = {
     write: (message) => console.info(message),
   },
+  dependencies: {
+    readBuildIdentity?: typeof readEmbeddedBuildIdentity;
+    trustedReleaseKeys?: readonly TrustedReleaseKey[] | undefined;
+  } = {},
 ): Promise<number> {
+  const readBuildIdentity =
+    dependencies.readBuildIdentity ?? readEmbeddedBuildIdentity;
   const command = argv[0] ?? 'start';
-  const serviceBootstrap = command === 'service-run'
-    ? parseArgs({
-        args: argv.slice(1),
-        options: { 'service-config': { type: 'string' } },
-        strict: true,
-      })
-    : null;
-  const serviceConfig = serviceBootstrap === null
-    ? null
-    : await readWindowsRunnerServiceConfig(
-        serviceBootstrap.values['service-config'] ?? '',
-      );
+  if (command === 'version') {
+    if (argv.length !== 1)
+      throw new Error('Runner version takes no arguments.');
+    output.write(formatRunnerVersion(await readBuildIdentity()));
+    return 0;
+  }
+  if (command === 'release' || command === 'upgrade') {
+    return runReleaseCli({
+      argv,
+      buildIdentity: await readBuildIdentity(),
+      output,
+      trustedKeys: dependencies.trustedReleaseKeys,
+    });
+  }
+  const serviceBootstrap =
+    command === 'service-run'
+      ? parseArgs({
+          args: argv.slice(1),
+          options: { 'service-config': { type: 'string' } },
+          strict: true,
+        })
+      : null;
+  const serviceCommand =
+    command === 'service' ? parseServiceCommandArguments(argv.slice(1)) : null;
+  const serviceConfig =
+    serviceBootstrap === null
+      ? null
+      : await readWindowsRunnerServiceConfig(
+          serviceBootstrap.values['service-config'] ?? '',
+        );
   if (
     serviceConfig !== null &&
     (serviceConfig.nodeExecutable !== process.execPath ||
@@ -112,7 +141,8 @@ export async function runCli(
   ) {
     throw new Error('The Windows service executable binding is invalid.');
   }
-  const dataRoot = serviceConfig?.dataRoot ?? homedir();
+  const dataRoot =
+    serviceConfig?.dataRoot ?? serviceCommand?.dataRoot ?? homedir();
   const transport = new HttpRunnerControlPlaneTransport();
   const credentialStore = new FileCredentialStore(dataRoot);
   const prompt = new TerminalNoEchoPrompt();
@@ -125,7 +155,7 @@ export async function runCli(
   );
   if (command === 'service') {
     return runServiceCli({
-      args: argv.slice(1),
+      args: serviceCommand?.operations ?? [],
       credentials: credentialStore,
       manager: new WindowsRunnerServiceManager(
         fileURLToPath(new URL('./index.js', import.meta.url)),
@@ -164,22 +194,42 @@ export async function runCli(
     headed: parsed.values.headed ?? false,
     attended: parsed.values.attended ?? false,
   });
-  const serviceManager = serviceConfig === null
-    ? null
-    : new WindowsRunnerServiceManager(
-        serviceConfig.runnerEntryPoint,
-        serviceConfig.dataRoot,
+  if (command === 'execute-fixture') {
+    const controller = new AbortController();
+    const stop = () => controller.abort();
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+    try {
+      return await executeFixtureCommand(
+        output,
+        parsed.values.headed ?? false,
+        controller.signal,
+        optionalFixtureWait(parsed.values['fixture-wait-ms']),
+        optionalTotalTimeout(parsed.values['total-timeout-ms']),
       );
-  const serviceVerified = serviceConfig === null
-    ? false
-    : await serviceManager!.verifyRunning(serviceConfig);
+    } finally {
+      process.off('SIGINT', stop);
+      process.off('SIGTERM', stop);
+    }
+  }
+  const buildIdentity = await readBuildIdentity();
+  const serviceManager =
+    serviceConfig === null
+      ? null
+      : new WindowsRunnerServiceManager(
+          serviceConfig.runnerEntryPoint,
+          serviceConfig.dataRoot,
+        );
+  const serviceVerified =
+    serviceConfig === null
+      ? false
+      : await serviceManager!.verifyRunning(serviceConfig);
   const keyManager = new RunnerKeyManager(
     new FileRunnerEncryptionKeyStore(dataRoot),
     transport,
   );
-  const secretProvider = runtimeMode === 'service'
-    ? undefined
-    : new InteractiveSecretProvider();
+  const secretProvider =
+    runtimeMode === 'service' ? undefined : new InteractiveSecretProvider();
   const localVaultProvider = new LocalVaultSecretProvider(vaultService);
   const localSecretRuntime = new RunnerLocalSecretRuntime(
     vaultService,
@@ -193,7 +243,7 @@ export async function runCli(
     transport,
     output,
     systemClock,
-    RUNNER_VERSION,
+    buildIdentity.version,
     transport,
     new PlaywrightBrowserSessionFactory(),
     keyManager,
@@ -210,26 +260,9 @@ export async function runCli(
       nativeProtectorAvailable: await nativeProtector.isAvailable(),
       drainTimeoutMilliseconds: 60_000,
     },
+    reportedSoftwareIdentity(buildIdentity),
   );
   switch (command) {
-    case 'execute-fixture': {
-      const controller = new AbortController();
-      const stop = () => controller.abort();
-      process.on('SIGINT', stop);
-      process.on('SIGTERM', stop);
-      try {
-        return await executeFixtureCommand(
-          output,
-          parsed.values.headed ?? false,
-          controller.signal,
-          optionalFixtureWait(parsed.values['fixture-wait-ms']),
-          optionalTotalTimeout(parsed.values['total-timeout-ms']),
-        );
-      } finally {
-        process.off('SIGINT', stop);
-        process.off('SIGTERM', stop);
-      }
-    }
     case 'pair': {
       const origin = validateControlPlaneOrigin(
         parsed.values.origin ?? 'http://127.0.0.1:3001',
@@ -248,7 +281,8 @@ export async function runCli(
     case 'start':
     case 'service-run': {
       const credential = await credentialStore.load();
-      if (credential === null) throw new Error('The Local Runner is not paired.');
+      if (credential === null)
+        throw new Error('The Local Runner is not paired.');
       if (
         serviceConfig !== null &&
         serviceConfig.runnerDeviceId !== credential.runnerDeviceId
@@ -256,10 +290,13 @@ export async function runCli(
         throw new Error('The local service Runner binding is invalid.');
       }
       if (command === 'service-run' && !serviceVerified) {
-        throw new Error('The Windows service configuration could not be verified.');
+        throw new Error(
+          'The Windows service configuration could not be verified.',
+        );
       }
-      const instance = await new FileRunnerInstanceLock(dataRoot)
-        .acquire(credential.runnerDeviceId);
+      const instance = await new FileRunnerInstanceLock(dataRoot).acquire(
+        credential.runnerDeviceId,
+      );
       const controller = new AbortController();
       const stop = () => controller.abort();
       process.on('SIGINT', stop);
@@ -281,6 +318,22 @@ export async function runCli(
   }
 }
 
+export function parseServiceCommandArguments(args: string[]): {
+  operations: string[];
+  dataRoot: string | undefined;
+} {
+  const parsed = parseArgs({
+    args,
+    options: { 'data-root': { type: 'string' } },
+    allowPositionals: true,
+    strict: true,
+  });
+  return {
+    operations: parsed.positionals,
+    dataRoot: parsed.values['data-root'],
+  };
+}
+
 export function determineRuntimeMode(input: {
   command: string;
   requested: string | undefined;
@@ -294,11 +347,19 @@ export function determineRuntimeMode(input: {
     return 'service';
   }
   if (input.requested !== undefined) {
-    if (input.requested !== 'interactive' && input.requested !== 'unattended_process') {
+    if (
+      input.requested !== 'interactive' &&
+      input.requested !== 'unattended_process'
+    ) {
       throw new Error('Runner runtime mode is invalid.');
     }
-    if (input.requested === 'unattended_process' && (input.headed || input.attended)) {
-      throw new Error('Unattended process mode rejects interactive execution options.');
+    if (
+      input.requested === 'unattended_process' &&
+      (input.headed || input.attended)
+    ) {
+      throw new Error(
+        'Unattended process mode rejects interactive execution options.',
+      );
     }
     return input.requested;
   }

@@ -6,6 +6,7 @@ export type RunnerRepositoryErrorCode =
   | 'RUNNER_DEVICE_NOT_FOUND'
   | 'RUNNER_FORBIDDEN'
   | 'RUNNER_REVOKED'
+  | 'RUNNER_SOFTWARE_IDENTITY_CONFLICT'
   | 'SERIALIZATION_FAILURE';
 
 export class RunnerRepositoryError extends Error {

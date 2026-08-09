@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@tasktwin/runner-service-runtime": "workspace:*",
+    "@tasktwin/runner-release": "workspace:*",
     "@tasktwin/local-secret-store": "workspace:*",
     "@tasktwin/secure-run-inputs": "workspace:*",
     "zod": "4.4.3"

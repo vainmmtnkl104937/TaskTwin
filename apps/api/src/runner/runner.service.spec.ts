@@ -18,6 +18,33 @@ const runner = {
 };
 
 describe('RunnerService heartbeat', () => {
+  it('persists only strict software identity metadata', async () => {
+    const softwareIdentity = {
+      product: 'tasktwin-runner',
+      version: '0.1.0',
+      runnerProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      localStateSchemaVersion: 1,
+      platform: 'windows',
+      architecture: 'x64',
+    } as const;
+    const heartbeat = vi.fn().mockResolvedValue(null);
+    const service = new RunnerService({
+      heartbeat,
+    } as unknown as RunnerRepository);
+    await service.heartbeat(runner, {
+      schemaVersion: 1,
+      runnerVersion: softwareIdentity.version,
+      softwareIdentity,
+    });
+    expect(heartbeat).toHaveBeenCalledWith(
+      expect.objectContaining({ softwareIdentity }),
+    );
+    expect(JSON.stringify(heartbeat.mock.calls)).not.toMatch(
+      /sourceCommit|installationPath|signing|vault/i,
+    );
+  });
+
   it('updates through the repository and returns a bounded interval', async () => {
     const heartbeat = vi.fn().mockResolvedValue(undefined);
     const service = new RunnerService({
@@ -56,6 +83,31 @@ describe('RunnerService heartbeat', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('rejects software identity that conflicts with paired device metadata', async () => {
+    const service = new RunnerService({
+      heartbeat: vi
+        .fn()
+        .mockRejectedValue(
+          new RunnerRepositoryError('RUNNER_SOFTWARE_IDENTITY_CONFLICT'),
+        ),
+    } as unknown as RunnerRepository);
+    await expect(
+      service.heartbeat(runner, {
+        schemaVersion: 1,
+        runnerVersion: '0.1.0',
+        softwareIdentity: {
+          product: 'tasktwin-runner',
+          version: '0.1.0',
+          runnerProtocolVersion: 2,
+          workflowSchemaVersion: 1,
+          localStateSchemaVersion: 1,
+          platform: 'windows',
+          architecture: 'x64',
+        },
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('persists and returns only strict safe runtime metadata', async () => {
     const runtimeReport = {
       schemaVersion: 1 as const,
@@ -70,7 +122,9 @@ describe('RunnerService heartbeat', () => {
       runtimeMetadataRevision: 2,
     };
     const heartbeat = vi.fn().mockResolvedValue(runtimeMetadata);
-    const service = new RunnerService({ heartbeat } as unknown as RunnerRepository);
+    const service = new RunnerService({
+      heartbeat,
+    } as unknown as RunnerRepository);
     await expect(
       service.heartbeat(runner, {
         schemaVersion: 1,
@@ -83,12 +137,16 @@ describe('RunnerService heartbeat', () => {
       expect.objectContaining({ runtime: runtimeReport }),
     );
     expect(JSON.stringify(heartbeat.mock.calls)).not.toContain('protectedKey');
-    expect(JSON.stringify(heartbeat.mock.calls)).not.toContain('serviceAccount');
+    expect(JSON.stringify(heartbeat.mock.calls)).not.toContain(
+      'serviceAccount',
+    );
   });
 
   it('rejects protected-key and local identity fields in heartbeat metadata', async () => {
     const heartbeat = vi.fn();
-    const service = new RunnerService({ heartbeat } as unknown as RunnerRepository);
+    const service = new RunnerService({
+      heartbeat,
+    } as unknown as RunnerRepository);
     await expect(
       service.heartbeat(runner, {
         schemaVersion: 1,
@@ -149,14 +207,23 @@ describe('RunnerService encryption key registration', () => {
 describe('RunnerService local secret inventory', () => {
   it('accepts only safe inventory metadata and returns the trusted revision', async () => {
     const vaultId = '53f321f7-ae3a-4707-b9d0-4f617ea116bd';
-    const entries = [{
-      alias: 'LOGIN_PASSWORD',
-      secretVersionId: 'b1304362-6088-44e2-9e8b-64b516ba322d',
-    }];
+    const entries = [
+      {
+        alias: 'LOGIN_PASSWORD',
+        secretVersionId: 'b1304362-6088-44e2-9e8b-64b516ba322d',
+      },
+    ];
     const inventoryDigest = createLocalSecretInventoryDigest(
-      { sha256Hex: (value) => createHash('sha256').update(value).digest('hex') },
-      { vaultId, workspaceId: runner.workspaceId,
-        runnerDeviceId: runner.runnerDeviceId, vaultRevision: 2, entries },
+      {
+        sha256Hex: (value) => createHash('sha256').update(value).digest('hex'),
+      },
+      {
+        vaultId,
+        workspaceId: runner.workspaceId,
+        runnerDeviceId: runner.runnerDeviceId,
+        vaultRevision: 2,
+        entries,
+      },
     );
     const synchronize = vi.fn().mockResolvedValue({
       idempotent: false,
@@ -171,14 +238,21 @@ describe('RunnerService local secret inventory', () => {
         entries,
       },
     });
-    const service = new RunnerService(
-      {} as RunnerRepository,
-      undefined,
-      { synchronize } as unknown as RunnerSecretInventoryRepository,
-    );
-    const request = { schemaVersion: 1, profile: 'local_secret_inventory_v1',
-      vaultId, vaultRevision: 2, inventoryDigest, storeStatus: 'ready', entries };
-    await expect(service.synchronizeSecretInventory(runner, request)).resolves.toMatchObject({
+    const service = new RunnerService({} as RunnerRepository, undefined, {
+      synchronize,
+    } as unknown as RunnerSecretInventoryRepository);
+    const request = {
+      schemaVersion: 1,
+      profile: 'local_secret_inventory_v1',
+      vaultId,
+      vaultRevision: 2,
+      inventoryDigest,
+      storeStatus: 'ready',
+      entries,
+    };
+    await expect(
+      service.synchronizeSecretInventory(runner, request),
+    ).resolves.toMatchObject({
       vaultId,
       vaultRevision: 2,
       storeStatus: 'ready',
@@ -188,18 +262,18 @@ describe('RunnerService local secret inventory', () => {
 
   it('strictly rejects ciphertext and secret value fields', async () => {
     const synchronize = vi.fn();
-    const service = new RunnerService(
-      {} as RunnerRepository,
-      undefined,
-      { synchronize } as unknown as RunnerSecretInventoryRepository,
-    );
-    await expect(service.synchronizeSecretInventory(runner, {
-      schemaVersion: 1,
-      profile: 'local_secret_inventory_v1',
-      storeStatus: 'locked',
-      ciphertext: 'forbidden',
-      secretValue: 'API_RECOGNIZABLE_SECRET_29',
-    })).rejects.toMatchObject({ status: 400 });
+    const service = new RunnerService({} as RunnerRepository, undefined, {
+      synchronize,
+    } as unknown as RunnerSecretInventoryRepository);
+    await expect(
+      service.synchronizeSecretInventory(runner, {
+        schemaVersion: 1,
+        profile: 'local_secret_inventory_v1',
+        storeStatus: 'locked',
+        ciphertext: 'forbidden',
+        secretValue: 'API_RECOGNIZABLE_SECRET_29',
+      }),
+    ).rejects.toMatchObject({ status: 400 });
     expect(synchronize).not.toHaveBeenCalled();
   });
 });

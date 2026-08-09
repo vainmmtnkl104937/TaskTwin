@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  RunnerJobClaimRequestSchema,
   WorkflowProgressBatchSchema,
   analyzeWorkflowRunReadiness,
   canTransitionWorkflowRun,
@@ -25,6 +26,39 @@ const published = {
 };
 
 describe('run protocol', () => {
+  it('requires the current explicit run and Workflow schema versions for claims', () => {
+    const request = {
+      schemaVersion: 1,
+      runProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+      workflowEngineSchemaVersion: 1,
+      runnerVersion: '0.1.0',
+      claimAttemptId: '3d6f0a72-7580-4f89-8d20-43376f86b08d',
+    };
+    expect(RunnerJobClaimRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      RunnerJobClaimRequestSchema.parse({
+        schemaVersion: 1,
+        runProtocolVersion: 2,
+        workflowEngineSchemaVersion: 1,
+        runnerVersion: '0.1.0',
+        claimAttemptId: request.claimAttemptId,
+      }).workflowSchemaVersion,
+    ).toBe(1);
+    expect(
+      RunnerJobClaimRequestSchema.safeParse({
+        ...request,
+        runProtocolVersion: 99,
+      }).success,
+    ).toBe(false);
+    expect(
+      RunnerJobClaimRequestSchema.safeParse({
+        ...request,
+        workflowSchemaVersion: 99,
+      }).success,
+    ).toBe(false);
+  });
+
   it('derives origins for a supported published workflow', () => {
     expect(analyzeWorkflowRunReadiness(published)).toMatchObject({
       ready: true,

@@ -35,6 +35,7 @@
     "@tasktwin/recording-schema": "workspace:*",
     "@tasktwin/run-protocol": "workspace:*",
     "@tasktwin/runner-protocol": "workspace:*",
+    "@tasktwin/runner-release": "workspace:*",
     "@tasktwin/runner-service-runtime": "workspace:*",
     "@tasktwin/secure-run-inputs": "workspace:*",
     "@tasktwin/workflow-engine": "workspace:*",

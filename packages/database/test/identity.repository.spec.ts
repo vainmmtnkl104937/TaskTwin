@@ -63,6 +63,9 @@ describe('IdentityRepository', () => {
         create: vi.fn().mockResolvedValue(membership),
       },
       workspace: { create: vi.fn().mockResolvedValue(workspace) },
+      workspaceExecutionPolicyVersion: {
+        create: vi.fn().mockResolvedValue({}),
+      },
     } as unknown as Prisma.TransactionClient;
     const transaction = vi
       .fn()
@@ -87,6 +90,9 @@ describe('IdentityRepository', () => {
         data: expect.objectContaining({ role: OrganizationRole.OWNER }),
       }),
     );
+    expect(
+      transactionClient.workspaceExecutionPolicyVersion.create,
+    ).toHaveBeenCalledOnce();
   });
 
   it('scopes workspace reads through organization membership', async () => {

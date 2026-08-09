@@ -54,9 +54,10 @@ describe('strict audit payload schemas', () => {
       [...AUDIT_EVENT_TYPES].sort(),
     );
     for (const eventType of AUDIT_EVENT_TYPES) {
-      expect(AUDIT_PAYLOAD_SCHEMAS[eventType].safeParse(VALID_PAYLOADS[eventType]).success).toBe(
-        true,
-      );
+      expect(
+        AUDIT_PAYLOAD_SCHEMAS[eventType].safeParse(VALID_PAYLOADS[eventType])
+          .success,
+      ).toBe(true);
       expect(
         AUDIT_PAYLOAD_SCHEMAS[eventType].safeParse({
           ...VALID_PAYLOADS[eventType],
@@ -72,13 +73,27 @@ describe('strict audit payload schemas', () => {
       occurredAt: '2026-08-05T14:00:00+02:00',
     });
     expect(parsed.occurredAt).toBe('2026-08-05T12:00:00.000Z');
-    expect(
-      () =>
-        parseAuditEventInput({
-          ...auditInput('workflow_run.started'),
-          arbitrary: true,
-        }),
+    expect(() =>
+      parseAuditEventInput({
+        ...auditInput('workflow_run.started'),
+        arbitrary: true,
+      }),
     ).toThrow();
+  });
+
+  it('accepts the safe Runner update-required scheduling reasons', () => {
+    expect(
+      AUDIT_PAYLOAD_SCHEMAS['schedule.auto_paused'].safeParse({
+        ...VALID_PAYLOADS['schedule.auto_paused'],
+        reason: 'runner_update_required',
+      }).success,
+    ).toBe(true);
+    expect(
+      AUDIT_PAYLOAD_SCHEMAS['schedule.occurrence.skipped'].safeParse({
+        ...VALID_PAYLOADS['schedule.occurrence.skipped'],
+        skipReason: 'runner_update_required',
+      }).success,
+    ).toBe(true);
   });
 
   it('rejects every forbidden field in every payload schema', () => {

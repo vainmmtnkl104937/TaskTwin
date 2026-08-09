@@ -13,6 +13,11 @@ import {
   LocalSecretAliasSchema,
   LocalSecretStoreStatusSchema,
 } from '@tasktwin/local-secret-store';
+import {
+  ProductSemVerSchema,
+  RunnerCompatibilityEvaluationSchema,
+  RunnerSoftwareIdentitySchema,
+} from '@tasktwin/runner-release';
 
 import {
   DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
@@ -100,12 +105,7 @@ export const ControlPlaneOriginSchema = z
 
 export const RunnerPlatformSchema = z.enum(['win32', 'darwin', 'linux']);
 export const RunnerArchitectureSchema = z.enum(['x64', 'arm64']);
-export const RunnerVersionSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(32)
-  .regex(/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/);
+export const RunnerVersionSchema = ProductSemVerSchema;
 
 export const RunnerDeviceMetadataSchema = z.strictObject({
   displayName: z.string().trim().min(1).max(100),
@@ -224,16 +224,25 @@ export const SafeRunnerDeviceSchema = z.strictObject({
   lastSeenAt: IsoDateSchema.nullable(),
   revokedAt: IsoDateSchema.nullable(),
   createdAt: IsoDateSchema,
-  localSecretStore: z.strictObject({
-    status: LocalSecretStoreStatusSchema,
-    vaultRevision: z.number().int().positive().nullable(),
-    configuredSecretCount: z.number().int().nonnegative().max(1_000),
-    lastSynchronizedAt: IsoDateSchema.nullable(),
-    aliases: z.array(z.strictObject({
-      alias: LocalSecretAliasSchema,
-      secretVersionId: UuidSchema,
-    })).max(1_000),
-  }).nullable().optional(),
+  softwareIdentity: RunnerSoftwareIdentitySchema.nullable().optional(),
+  compatibility: RunnerCompatibilityEvaluationSchema.optional(),
+  localSecretStore: z
+    .strictObject({
+      status: LocalSecretStoreStatusSchema,
+      vaultRevision: z.number().int().positive().nullable(),
+      configuredSecretCount: z.number().int().nonnegative().max(1_000),
+      lastSynchronizedAt: IsoDateSchema.nullable(),
+      aliases: z
+        .array(
+          z.strictObject({
+            alias: LocalSecretAliasSchema,
+            secretVersionId: UuidSchema,
+          }),
+        )
+        .max(1_000),
+    })
+    .nullable()
+    .optional(),
   runtime: RunnerRuntimeMetadataSchema.nullable().optional(),
 });
 
@@ -252,12 +261,26 @@ export const RunnerDeviceRevokeResponseSchema = z.strictObject({
   device: SafeRunnerDeviceSchema,
 });
 
-export const RunnerHeartbeatRequestSchema = z.strictObject({
-  schemaVersion: z.literal(RUNNER_PROTOCOL_SCHEMA_VERSION),
-  runnerVersion: RunnerVersionSchema,
-  capabilities: RunnerCapabilitiesSchema.default([]),
-  runtime: RunnerRuntimeReportSchema.optional(),
-});
+export const RunnerHeartbeatRequestSchema = z
+  .strictObject({
+    schemaVersion: z.literal(RUNNER_PROTOCOL_SCHEMA_VERSION),
+    runnerVersion: RunnerVersionSchema,
+    softwareIdentity: RunnerSoftwareIdentitySchema.optional(),
+    capabilities: RunnerCapabilitiesSchema.default([]),
+    runtime: RunnerRuntimeReportSchema.optional(),
+  })
+  .superRefine((request, context) => {
+    if (
+      request.softwareIdentity !== undefined &&
+      request.softwareIdentity.version !== request.runnerVersion
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['softwareIdentity', 'version'],
+        message: 'Software identity version must match runnerVersion.',
+      });
+    }
+  });
 
 export const RunnerHeartbeatResponseSchema = z.strictObject({
   schemaVersion: z.literal(RUNNER_PROTOCOL_SCHEMA_VERSION),

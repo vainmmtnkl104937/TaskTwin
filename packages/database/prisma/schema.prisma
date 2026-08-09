@@ -252,6 +252,7 @@ enum OperationalAlertSourceType {
   repair_request
   workflow_run
   workflow_schedule
+  workflow_schedule_occurrence
   audit_verification_failure
 
   @@map("operational_alert_source_type")
@@ -558,40 +559,45 @@ model RunnerPairingSession {
 }
 
 model RunnerDevice {
-  id                     String                          @id @default(uuid()) @db.Uuid
-  workspaceId            String                          @map("workspace_id") @db.Uuid
-  pairingSessionId       String                          @unique(map: "runner_devices_pairing_session_id_key") @map("pairing_session_id") @db.Uuid
-  installationId         String                          @unique(map: "runner_devices_installation_id_key") @map("installation_id") @db.Uuid
-  displayName            String                          @map("display_name") @db.VarChar(100)
-  platform               String                          @db.VarChar(16)
-  architecture           String                          @db.VarChar(16)
-  runnerVersion          String                          @map("runner_version") @db.VarChar(32)
-  lastSeenAt             DateTime?                       @map("last_seen_at") @db.Timestamptz(3)
-  revokedAt              DateTime?                       @map("revoked_at") @db.Timestamptz(3)
-  revokedById            String?                         @map("revoked_by_id") @db.Uuid
-  createdAt              DateTime                        @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt              DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(3)
-  workspace              Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  pairingSession         RunnerPairingSession            @relation(fields: [pairingSessionId], references: [id], onDelete: Restrict)
-  revokedBy              User?                           @relation("RunnerDeviceRevoker", fields: [revokedById], references: [id], onDelete: Restrict)
-  credential             RunnerCredential?
-  workflowRuns           WorkflowRun[]
-  capabilities           String[]                        @default([])
-  capabilitiesUpdatedAt  DateTime?                       @map("capabilities_updated_at") @db.Timestamptz(3)
-  runtimeMode             RunnerRuntimeMode?              @map("runtime_mode")
-  autonomyLevel           RunnerAutonomyLevel?            @map("autonomy_level")
-  serviceStatus           RunnerServiceStatus?            @map("service_status")
-  secretUnlockMode        RunnerSecretUnlockMode?         @map("secret_unlock_mode")
-  restartResilient        Boolean?                         @map("restart_resilient")
-  runtimeMetadataRevision Int                              @default(0) @map("runtime_metadata_revision")
-  runtimeMetadataUpdatedAt DateTime?                       @map("runtime_metadata_updated_at") @db.Timestamptz(3)
-  encryptionKeys         RunnerEncryptionKey[]
-  runInputPreparations   WorkflowRunInputPreparation[]
-  approvalRequests       WorkflowApprovalRequest[]
-  repairRequests         WorkflowRepairRequest[]
-  locatorRepairProposals WorkflowLocatorRepairProposal[]
-  schedules              WorkflowSchedule[]
-  secretInventory        RunnerSecretInventory?
+  id                        String                          @id @default(uuid()) @db.Uuid
+  workspaceId               String                          @map("workspace_id") @db.Uuid
+  pairingSessionId          String                          @unique(map: "runner_devices_pairing_session_id_key") @map("pairing_session_id") @db.Uuid
+  installationId            String                          @unique(map: "runner_devices_installation_id_key") @map("installation_id") @db.Uuid
+  displayName               String                          @map("display_name") @db.VarChar(100)
+  platform                  String                          @db.VarChar(16)
+  architecture              String                          @db.VarChar(16)
+  runnerVersion             String                          @map("runner_version") @db.VarChar(32)
+  runProtocolVersion        Int?                            @map("run_protocol_version")
+  workflowSchemaVersion     Int?                            @map("workflow_schema_version")
+  localStateSchemaVersion   Int?                            @map("local_state_schema_version")
+  softwareMetadataRevision  Int                             @default(0) @map("software_metadata_revision")
+  softwareMetadataUpdatedAt DateTime?                       @map("software_metadata_updated_at") @db.Timestamptz(3)
+  lastSeenAt                DateTime?                       @map("last_seen_at") @db.Timestamptz(3)
+  revokedAt                 DateTime?                       @map("revoked_at") @db.Timestamptz(3)
+  revokedById               String?                         @map("revoked_by_id") @db.Uuid
+  createdAt                 DateTime                        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace                 Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  pairingSession            RunnerPairingSession            @relation(fields: [pairingSessionId], references: [id], onDelete: Restrict)
+  revokedBy                 User?                           @relation("RunnerDeviceRevoker", fields: [revokedById], references: [id], onDelete: Restrict)
+  credential                RunnerCredential?
+  workflowRuns              WorkflowRun[]
+  capabilities              String[]                        @default([])
+  capabilitiesUpdatedAt     DateTime?                       @map("capabilities_updated_at") @db.Timestamptz(3)
+  runtimeMode               RunnerRuntimeMode?              @map("runtime_mode")
+  autonomyLevel             RunnerAutonomyLevel?            @map("autonomy_level")
+  serviceStatus             RunnerServiceStatus?            @map("service_status")
+  secretUnlockMode          RunnerSecretUnlockMode?         @map("secret_unlock_mode")
+  restartResilient          Boolean?                        @map("restart_resilient")
+  runtimeMetadataRevision   Int                             @default(0) @map("runtime_metadata_revision")
+  runtimeMetadataUpdatedAt  DateTime?                       @map("runtime_metadata_updated_at") @db.Timestamptz(3)
+  encryptionKeys            RunnerEncryptionKey[]
+  runInputPreparations      WorkflowRunInputPreparation[]
+  approvalRequests          WorkflowApprovalRequest[]
+  repairRequests            WorkflowRepairRequest[]
+  locatorRepairProposals    WorkflowLocatorRepairProposal[]
+  schedules                 WorkflowSchedule[]
+  secretInventory           RunnerSecretInventory?
 
   @@index([workspaceId, revokedAt, lastSeenAt], map: "runner_devices_workspace_id_revoked_at_last_seen_at_idx")
   @@index([revokedById], map: "runner_devices_revoked_by_id_idx")

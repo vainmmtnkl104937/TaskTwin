@@ -5,8 +5,15 @@ import type { Prisma } from '../generated/prisma/client.js';
 export type DatabaseTransactionClient = Prisma.TransactionClient;
 
 export type OperationalAlertResolutionReason =
-  | 'approved' | 'rejected' | 'expired' | 'cancelled' | 'invalidated'
-  | 'retry_approved' | 'aborted' | 'resumed' | 'archived';
+  | 'approved'
+  | 'rejected'
+  | 'expired'
+  | 'cancelled'
+  | 'invalidated'
+  | 'retry_approved'
+  | 'aborted'
+  | 'resumed'
+  | 'archived';
 
 export interface ResolveOperationalAlertInput {
   workspaceId: string;
@@ -15,6 +22,7 @@ export interface ResolveOperationalAlertInput {
   sourceId: string;
   reason: OperationalAlertResolutionReason;
   resolvedByUserId?: string;
+  ignoreAlreadyResolved?: boolean;
 }
 
 export interface OperationalAlertTransactionAppender {

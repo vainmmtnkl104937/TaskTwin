@@ -10,6 +10,7 @@ import {
   type RunnerCapability,
 } from '@tasktwin/runner-protocol';
 import type { RunnerRuntimeReport } from '@tasktwin/runner-service-runtime';
+import type { RunnerSoftwareIdentity } from '@tasktwin/runner-release';
 import {
   RunnerEncryptionKeyRegistrationResponseSchema,
   type RunnerEncryptionKeyRegistrationRequest,
@@ -81,6 +82,7 @@ export interface RunnerControlPlaneTransport {
     runnerVersion: string,
     capabilities?: RunnerCapability[],
     runtime?: RunnerRuntimeReport,
+    softwareIdentity?: RunnerSoftwareIdentity,
   ): Promise<RunnerHeartbeatResponse>;
   registerEncryptionKey(
     credential: StoredRunnerCredential,
@@ -204,6 +206,7 @@ export class HttpRunnerControlPlaneTransport
     runnerVersion: string,
     capabilities: RunnerCapability[] = [],
     runtime?: RunnerRuntimeReport,
+    softwareIdentity?: RunnerSoftwareIdentity,
   ): Promise<RunnerHeartbeatResponse> {
     return this.request(
       `${credential.controlPlaneOrigin}/runner/heartbeat`,
@@ -217,6 +220,7 @@ export class HttpRunnerControlPlaneTransport
         body: JSON.stringify({
           schemaVersion: 1,
           runnerVersion,
+          ...(softwareIdentity === undefined ? {} : { softwareIdentity }),
           capabilities,
           ...(runtime === undefined ? {} : { runtime }),
         }),

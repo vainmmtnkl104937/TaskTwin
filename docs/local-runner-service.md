@@ -38,6 +38,13 @@ key protection, unlocks and validates the vault, synchronizes inventory,
 initializes execution components, sends a heartbeat and then polls jobs. No
 ready capability is sent earlier.
 
+The first heartbeat also reports the immutable packaged software identity.
+Only product version, run protocol, Workflow schema, aggregate local-state
+schema and canonical target cross the boundary. Build commit, executable and
+installation paths, service identity, signing material and vault metadata stay
+local. Control Plane compatibility can block new claims without preventing a
+safe authenticated heartbeat.
+
 An unavailable Control Plane does not modify the vault. Retry delays are 1, 2,
 4, 8, 16, 30 and then at most 60 seconds. Recovery resynchronizes inventory and
 recomputes capabilities. Revoked or permanently rejected credentials stop the

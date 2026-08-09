@@ -30,6 +30,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { configureApplication } from '../src/config/configure-application.js';
 import { loadRootEnvironment } from '../src/config/environment.js';
+import { OperationalAlertAppender } from '../src/operational-alerts/operational-alert.appender.js';
 
 interface Identity {
   user: { id: string };
@@ -47,6 +48,15 @@ const approvalWorkflowId = `session21-${suffix}`;
 const credentialPepper = 'session17-credential-pepper-value-safe';
 const leasePepper = 'session17-run-lease-pepper-value-safe';
 const pairingPepper = 'session17-pairing-pepper-value-safe-123';
+const runnerSoftwareIdentity = {
+  product: 'tasktwin-runner',
+  version: '0.1.0',
+  platform: 'windows',
+  architecture: 'x64',
+  runnerProtocolVersion: 2,
+  workflowSchemaVersion: 1,
+  localStateSchemaVersion: 1,
+} as const;
 
 function definition(
   version: number,
@@ -386,6 +396,15 @@ describe('workflow run dispatch integration', () => {
       .expect(200);
     runnerDeviceId = paired.body.runnerDeviceId as string;
     runnerCredential = paired.body.credential as string;
+    await request(app.getHttpServer())
+      .post('/runner/heartbeat')
+      .set(runnerAuth())
+      .send({
+        schemaVersion: 1,
+        runnerVersion: runnerSoftwareIdentity.version,
+        softwareIdentity: runnerSoftwareIdentity,
+      })
+      .expect(200);
   });
 
   afterAll(async () => {
@@ -528,6 +547,7 @@ describe('workflow run dispatch integration', () => {
     const claimBody = {
       schemaVersion: 1,
       runProtocolVersion: 2,
+      workflowSchemaVersion: 1,
       workflowEngineSchemaVersion: 1,
       runnerVersion: '0.1.0',
       claimAttemptId,
@@ -538,6 +558,10 @@ describe('workflow run dispatch integration', () => {
       .send(claimBody)
       .expect(200);
     expect(firstClaim.body.status).toBe('claimed');
+    expect(firstClaim.body.job).toMatchObject({
+      runProtocolVersion: 2,
+      workflowSchemaVersion: 1,
+    });
     const leaseToken = firstClaim.body.job.leaseToken as string;
     const retryClaim = await request(app.getHttpServer())
       .post('/runner/jobs/claim')
@@ -704,6 +728,249 @@ describe('workflow run dispatch integration', () => {
       .expect(200);
   });
 
+  it('allows compatible software and blocks required, unsupported, and revoked Runners', async () => {
+    const createdRunIds: string[] = [];
+    const reportSoftware = async (
+      version: string,
+      runnerProtocolVersion: number,
+    ) => {
+      await request(app.getHttpServer())
+        .post('/runner/heartbeat')
+        .set(runnerAuth())
+        .send({
+          schemaVersion: 1,
+          runnerVersion: version,
+          softwareIdentity: {
+            ...runnerSoftwareIdentity,
+            version,
+            runnerProtocolVersion,
+          },
+        })
+        .expect(200);
+    };
+    const createQueuedRun = async () => {
+      const response = await request(app.getHttpServer())
+        .post(`/workflow-versions/${publishedVersionId}/runs`)
+        .set(auth(owner))
+        .send({
+          schemaVersion: 1,
+          clientRunId: randomUUID(),
+          runnerDeviceId,
+        })
+        .expect(200);
+      const runId = response.body.run.id as string;
+      createdRunIds.push(runId);
+      return runId;
+    };
+    const claim = (version: string) =>
+      request(app.getHttpServer())
+        .post('/runner/jobs/claim')
+        .set(runnerAuth())
+        .send({
+          schemaVersion: 1,
+          runProtocolVersion: 2,
+          workflowSchemaVersion: 1,
+          workflowEngineSchemaVersion: 1,
+          runnerVersion: version,
+          claimAttemptId: randomUUID(),
+        });
+
+    try {
+      await reportSoftware('0.1.0', 2);
+      const compatibleRunId = await createQueuedRun();
+      await claim('0.1.0')
+        .expect(200)
+        .expect(({ body }) => expect(body.status).toBe('claimed'));
+      expect(
+        await prisma.workflowRun.findUniqueOrThrow({
+          where: { id: compatibleRunId },
+        }),
+      ).toMatchObject({ status: 'CLAIMED' });
+
+      await prisma.workflowRun.update({
+        where: { id: compatibleRunId },
+        data: {
+          status: 'CANCELLED',
+          finishedAt: new Date(),
+          leaseTokenHash: null,
+          leaseExpiresAt: null,
+        },
+      });
+
+      const incompatibleProtocolRunId = await createQueuedRun();
+      await prisma.workflowRun.update({
+        where: { id: incompatibleProtocolRunId },
+        data: { runProtocolVersion: 1 },
+      });
+      await claim('0.1.0')
+        .expect(200)
+        .expect(({ body }) => expect(body.status).toBe('no_job'));
+      expect(
+        await prisma.workflowRun.findUniqueOrThrow({
+          where: { id: incompatibleProtocolRunId },
+        }),
+      ).toMatchObject({
+        status: 'QUEUED',
+        runProtocolVersion: 1,
+        claimedAt: null,
+      });
+
+      await reportSoftware('0.0.4', 2);
+      const blockedRunId = await createQueuedRun();
+      await claim('0.0.4')
+        .expect(200)
+        .expect(({ body }) => expect(body.status).toBe('no_job'));
+      expect(
+        await prisma.workflowRun.findUniqueOrThrow({
+          where: { id: blockedRunId },
+        }),
+      ).toMatchObject({ status: 'QUEUED', claimedAt: null });
+
+      await reportSoftware('0.1.0', 99);
+      await claim('0.1.0')
+        .expect(200)
+        .expect(({ body }) => expect(body.status).toBe('no_job'));
+
+      await request(app.getHttpServer())
+        .post('/runner/heartbeat')
+        .set(runnerAuth())
+        .send({ schemaVersion: 1, runnerVersion: '0.1.0' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .post('/runner/jobs/claim')
+        .set(runnerAuth())
+        .send({
+          schemaVersion: 1,
+          runProtocolVersion: 2,
+          workflowEngineSchemaVersion: 1,
+          runnerVersion: '0.1.0',
+          claimAttemptId: randomUUID(),
+        })
+        .expect(200)
+        .expect(({ body }) => expect(body.status).toBe('no_job'));
+
+      await reportSoftware('0.1.0', 2);
+      await prisma.runnerDevice.update({
+        where: { id: runnerDeviceId },
+        data: { revokedAt: new Date() },
+      });
+      await claim('0.1.0').expect(401);
+      expect(
+        await prisma.workflowRun.findUniqueOrThrow({
+          where: { id: blockedRunId },
+        }),
+      ).toMatchObject({ status: 'QUEUED', claimedAt: null });
+    } finally {
+      await prisma.runnerDevice.update({
+        where: { id: runnerDeviceId },
+        data: { revokedAt: null },
+      });
+      if (createdRunIds.length > 0) {
+        await prisma.workflowRunStep.deleteMany({
+          where: { workflowRunId: { in: createdRunIds } },
+        });
+        await prisma.workflowRun.deleteMany({
+          where: { id: { in: createdRunIds } },
+        });
+      }
+    }
+  });
+
+  it('persists distinct recurring schedule auto-pause alert lifecycles', async () => {
+    const appender = app.get(OperationalAlertAppender);
+    const scheduleId = randomUUID();
+    const firstOccurrenceId = randomUUID();
+    const secondOccurrenceId = randomUUID();
+    const alertInput = (occurrenceId: string, at: string) =>
+      ({
+        schemaVersion: 1,
+        workspaceId: owner.workspace.id,
+        type: 'schedule_auto_paused',
+        source: {
+          type: 'workflow_schedule_occurrence',
+          id: occurrenceId,
+        },
+        primaryEntity: { type: 'workflow_schedule', id: scheduleId },
+        relatedEntities: [
+          { type: 'workflow_schedule_occurrence', id: occurrenceId },
+        ],
+        template: {
+          schemaVersion: 1,
+          templateKey: 'schedule_auto_paused.v1',
+          workflowScheduleId: scheduleId,
+          reason: 'runner_update_required',
+          autoPausedAt: at,
+          occurrenceId,
+        },
+        actionTarget: {
+          schemaVersion: 1,
+          kind: 'schedule',
+          workspaceId: owner.workspace.id,
+          workflowScheduleId: scheduleId,
+        },
+        creatorUserId: owner.user.id,
+      }) as const;
+
+    try {
+      await prisma.$transaction(async (transaction) => {
+        await appender.append(
+          transaction,
+          alertInput(firstOccurrenceId, '2026-08-09T09:00:00.000Z'),
+        );
+        await appender.resolve(transaction, {
+          workspaceId: owner.workspace.id,
+          type: 'schedule_auto_paused',
+          sourceType: 'workflow_schedule_occurrence',
+          sourceId: firstOccurrenceId,
+          reason: 'resumed',
+          resolvedByUserId: owner.user.id,
+        });
+        await appender.append(
+          transaction,
+          alertInput(secondOccurrenceId, '2026-08-09T10:00:00.000Z'),
+        );
+        await appender.resolve(transaction, {
+          workspaceId: owner.workspace.id,
+          type: 'schedule_auto_paused',
+          sourceType: 'workflow_schedule_occurrence',
+          sourceId: secondOccurrenceId,
+          reason: 'archived',
+          resolvedByUserId: owner.user.id,
+        });
+      });
+
+      await expect(
+        prisma.operationalAlert.findMany({
+          where: {
+            workspaceId: owner.workspace.id,
+            sourceType: 'workflow_schedule_occurrence',
+            sourceId: { in: [firstOccurrenceId, secondOccurrenceId] },
+          },
+          orderBy: { sourceId: 'asc' },
+        }),
+      ).resolves.toHaveLength(2);
+    } finally {
+      const alerts = await prisma.operationalAlert.findMany({
+        where: {
+          workspaceId: owner.workspace.id,
+          sourceType: 'workflow_schedule_occurrence',
+          sourceId: { in: [firstOccurrenceId, secondOccurrenceId] },
+        },
+        select: { id: true },
+      });
+      await prisma.notificationOutboxMessage.deleteMany({
+        where: { alertId: { in: alerts.map((alert) => alert.id) } },
+      });
+      await prisma.operationalAlert.deleteMany({
+        where: {
+          workspaceId: owner.workspace.id,
+          sourceType: 'workflow_schedule_occurrence',
+          sourceId: { in: [firstOccurrenceId, secondOccurrenceId] },
+        },
+      });
+    }
+  });
+
   it('serializes concurrent claims and cooperatively completes cancellation', async () => {
     const queuedRunIds: string[] = [];
     for (let index = 0; index < 2; index += 1) {
@@ -725,6 +992,7 @@ describe('workflow run dispatch integration', () => {
         .send({
           schemaVersion: 1,
           runProtocolVersion: 2,
+          workflowSchemaVersion: 1,
           workflowEngineSchemaVersion: 1,
           runnerVersion: '0.1.0',
           claimAttemptId: randomUUID(),
@@ -866,6 +1134,7 @@ describe('workflow run dispatch integration', () => {
       .send({
         schemaVersion: 1,
         runProtocolVersion: 2,
+        workflowSchemaVersion: 1,
         workflowEngineSchemaVersion: 1,
         runnerVersion: '0.1.0',
         claimAttemptId: randomUUID(),
@@ -909,7 +1178,8 @@ describe('workflow run dispatch integration', () => {
       .set(runnerAuth())
       .send({
         schemaVersion: 1,
-        runnerVersion: '0.1.0',
+        runnerVersion: runnerSoftwareIdentity.version,
+        softwareIdentity: runnerSoftwareIdentity,
         capabilities: ['secure_input_envelope_v1'],
       })
       .expect(200);
@@ -1056,6 +1326,7 @@ describe('workflow run dispatch integration', () => {
       .send({
         schemaVersion: 1,
         runProtocolVersion: 2,
+        workflowSchemaVersion: 1,
         workflowEngineSchemaVersion: 1,
         runnerVersion: '0.1.0',
         claimAttemptId: randomUUID(),
@@ -1095,7 +1366,8 @@ describe('workflow run dispatch integration', () => {
       .set(runnerAuth())
       .send({
         schemaVersion: 1,
-        runnerVersion: '0.1.0',
+        runnerVersion: runnerSoftwareIdentity.version,
+        softwareIdentity: runnerSoftwareIdentity,
         capabilities: ['secure_input_envelope_v1', 'workflow_verification_v1'],
       })
       .expect(200);
@@ -1132,7 +1404,8 @@ describe('workflow run dispatch integration', () => {
       .set(runnerAuth())
       .send({
         schemaVersion: 1,
-        runnerVersion: '0.1.0',
+        runnerVersion: runnerSoftwareIdentity.version,
+        softwareIdentity: runnerSoftwareIdentity,
         capabilities: [
           'secure_input_envelope_v1',
           'workflow_verification_v1',
@@ -1169,6 +1442,7 @@ describe('workflow run dispatch integration', () => {
       .send({
         schemaVersion: 1,
         runProtocolVersion: 2,
+        workflowSchemaVersion: 1,
         workflowEngineSchemaVersion: 1,
         runnerVersion: '0.1.0',
         claimAttemptId: randomUUID(),
@@ -1332,7 +1606,8 @@ describe('workflow run dispatch integration', () => {
       .set(runnerAuth())
       .send({
         schemaVersion: 1,
-        runnerVersion: '0.1.0',
+        runnerVersion: runnerSoftwareIdentity.version,
+        softwareIdentity: runnerSoftwareIdentity,
         capabilities: [
           'secure_input_envelope_v1',
           'workflow_verification_v1',
@@ -1354,6 +1629,7 @@ describe('workflow run dispatch integration', () => {
       .send({
         schemaVersion: 1,
         runProtocolVersion: 2,
+        workflowSchemaVersion: 1,
         workflowEngineSchemaVersion: 1,
         runnerVersion: '0.1.0',
         claimAttemptId: randomUUID(),
@@ -1558,7 +1834,8 @@ describe('workflow run dispatch integration', () => {
       .set(runnerAuth())
       .send({
         schemaVersion: 1,
-        runnerVersion: '0.1.0',
+        runnerVersion: runnerSoftwareIdentity.version,
+        softwareIdentity: runnerSoftwareIdentity,
         capabilities: [
           'secure_input_envelope_v1',
           'workflow_verification_v1',
@@ -1590,6 +1867,7 @@ describe('workflow run dispatch integration', () => {
       .send({
         schemaVersion: 1,
         runProtocolVersion: 2,
+        workflowSchemaVersion: 1,
         workflowEngineSchemaVersion: 1,
         runnerVersion: '0.1.0',
         claimAttemptId: randomUUID(),

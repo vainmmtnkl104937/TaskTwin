@@ -61,6 +61,13 @@ export type {
 } from './runner/runner-records.js';
 export { RunnerRepository } from './runner/runner.repository.js';
 export {
+  CONTROL_PLANE_RUNNER_COMPATIBILITY_POLICY,
+  canRunnerClaimJobs,
+  evaluatePersistedRunnerCompatibility,
+  toPersistedRunnerSoftwareIdentity,
+  type PersistedRunnerSoftwareFields,
+} from './runner/runner-software-compatibility.js';
+export {
   WorkflowVersionRepository,
   type PersistedWorkflowVersion,
 } from './workflow-version.repository.js';
@@ -199,4 +206,7 @@ export {
 export { RunnerSecretInventoryRepository } from './runner-secret-inventory/runner-secret-inventory.repository.js';
 export { RunnerSecretInventoryRepositoryError } from './runner-secret-inventory/runner-secret-inventory-errors.js';
 export type { RunnerSecretInventoryRepositoryErrorCode } from './runner-secret-inventory/runner-secret-inventory-errors.js';
-export type { RunnerSecretInventoryRecord, RunnerSecretInventorySyncResult } from './runner-secret-inventory/runner-secret-inventory-records.js';
+export type {
+  RunnerSecretInventoryRecord,
+  RunnerSecretInventorySyncResult,
+} from './runner-secret-inventory/runner-secret-inventory-records.js';

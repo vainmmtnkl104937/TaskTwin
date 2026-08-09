@@ -14,6 +14,7 @@ import {
   type RunnerDeviceRecord,
   RunnerSecretInventoryRepository,
   RunnerSecretInventoryRepositoryError,
+  evaluatePersistedRunnerCompatibility,
 } from '@tasktwin/database';
 import {
   LocalSecretInventorySyncRequestSchema,
@@ -39,6 +40,16 @@ import {
 import type { AuthenticatedRunner } from '../runner-auth/runner-authenticated-request.js';
 
 function safeDevice(record: RunnerDeviceRecord, now: Date) {
+  const compatibility = evaluatePersistedRunnerCompatibility({
+    runnerVersion: record.metadata.runnerVersion,
+    platform: record.metadata.platform,
+    architecture: record.metadata.architecture,
+    runProtocolVersion: record.softwareIdentity?.runnerProtocolVersion ?? null,
+    workflowSchemaVersion:
+      record.softwareIdentity?.workflowSchemaVersion ?? null,
+    localStateSchemaVersion:
+      record.softwareIdentity?.localStateSchemaVersion ?? null,
+  });
   return {
     id: record.id,
     workspaceId: record.workspaceId,
@@ -53,6 +64,8 @@ function safeDevice(record: RunnerDeviceRecord, now: Date) {
     lastSeenAt: record.lastSeenAt?.toISOString() ?? null,
     revokedAt: record.revokedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
+    softwareIdentity: record.softwareIdentity,
+    compatibility,
     runtime: record.runtime,
     localSecretStore:
       record.localSecretStore === null
@@ -101,9 +114,7 @@ export class RunnerService {
       });
     } catch (error: unknown) {
       if (error instanceof RunnerSecretInventoryRepositoryError) {
-        if (
-          error.code === 'RUNNER_UNAVAILABLE'
-        ) {
+        if (error.code === 'RUNNER_UNAVAILABLE') {
           throw new ForbiddenException({ code: error.code });
         }
         throw new ConflictException({
@@ -127,8 +138,13 @@ export class RunnerService {
       const runtime = await this.repository.heartbeat({
         ...runner,
         runnerVersion: request.data.runnerVersion,
+        ...(request.data.softwareIdentity === undefined
+          ? {}
+          : { softwareIdentity: request.data.softwareIdentity }),
         capabilities: request.data.capabilities,
-        ...(request.data.runtime === undefined ? {} : { runtime: request.data.runtime }),
+        ...(request.data.runtime === undefined
+          ? {}
+          : { runtime: request.data.runtime }),
         now: new Date(),
       });
       return RunnerHeartbeatResponseSchema.parse({
@@ -143,7 +159,8 @@ export class RunnerService {
     } catch (error: unknown) {
       if (
         error instanceof RunnerRepositoryError &&
-        error.code === 'RUNNER_REVOKED'
+        (error.code === 'RUNNER_REVOKED' ||
+          error.code === 'RUNNER_SOFTWARE_IDENTITY_CONFLICT')
       ) {
         throw new ForbiddenException();
       }

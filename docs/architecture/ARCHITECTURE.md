@@ -859,3 +859,49 @@ The Control Plane stores strict safe runtime metadata and audits accepted mode
 and protector transitions. Native blobs, local identities and paths never
 cross that boundary. See [ADR-031](../adr/ADR-031-production-runner-service.md)
 and [ADR-032](../adr/ADR-032-os-native-secret-protection.md).
+
+# Signed Runner releases and compatibility
+
+`@tasktwin/runner-release` is the framework-independent Session 31 trust and
+decision boundary. It owns strict product/build identity, platform and
+architecture contracts, artifact descriptors, release manifest and detached
+signature schemas, compatibility declarations, Control Plane compatibility,
+upgrade preflight, safe summaries and stable errors. It depends only on Zod,
+SemVer and the existing framework-independent canonical JSON contract. Node
+crypto, filesystem, archive, GitHub, Windows and service behavior stay in
+application/build-tool boundaries.
+
+Product SemVer does not replace protocol or state compatibility. The Runner
+reports the existing run protocol version, the exported Workflow definition
+schema version and the independently named aggregate local-state schema. The
+Control Plane derives compatibility from its deployed policy and the last
+accepted complete identity; it does not persist a compatibility enum or release
+catalog. Legacy/incomplete identity remains heartbeat-capable but cannot claim.
+Only `compatible` and `update_recommended` Runners receive new work.
+
+The tagged Windows x64 release is a clean allowlisted directory ZIP containing
+the compiled Runner and pinned runtime closure. No repository tree, local
+Runner state or signing private material enters staging. A strict manifest
+binds exact artifact name, size and SHA-256. After validation it is canonicalized
+and signed with detached Ed25519; `keyId` resolves only through a compiled
+trusted public-key registry. See [ADR-033](../adr/ADR-033-runner-release-artifacts.md)
+and [ADR-034](../adr/ADR-034-signed-release-manifest.md).
+
+The initial production trust registry is intentionally empty and fails closed;
+ephemeral test and dry-run keys are injected only at their verification
+boundaries. A reviewed production public-key entry and its matching protected
+CI private credential are operational prerequisites for the first production
+release; the manifest cannot bootstrap either one.
+
+Verification and deterministic preflight happen before service interruption.
+Preflight reads current state/vault headers without mutation and returns
+`compatible`, `migration_required`, `unsupported` or `downgrade_blocked`. The
+Windows service's absolute executable/entry-point binding means a manual
+upgrade extracts a new version directory and explicitly reinstalls the service.
+There is no automatic download, install, state migration or rollback.
+See [Runner version](../runner-version.md),
+[release packaging](../runner-release-packaging.md),
+[release manifest](../runner-release-manifest.md),
+[compatibility](../runner-compatibility.md),
+[upgrade preflight](../runner-upgrade-preflight.md), and the
+[release pipeline](../runner-release-pipeline.md) for the operator boundaries.

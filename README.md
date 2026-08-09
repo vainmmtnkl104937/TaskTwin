@@ -30,8 +30,12 @@ Runner-only extraction outputs with metadata-only Control Plane tracking.
 Session 24 introduces a deterministic Workspace execution policy with
 immutable versions, origin/action/risk evaluation and pinned runs.
 Session 25 adds an append-only, hash-chained audit trail with API and web
-surfaces. It still does not transfer files, rotate Runner keys, reuse browser profiles,
-persist secrets, or capture screenshots.
+surfaces. Sessions 26 through 30 add safe scheduling, operational alerts and
+telemetry, the Local Secret Store, and the production Windows Runner service
+with native secret auto-unlock. Session 31 adds immutable Windows x64 Runner
+release archives, canonical signed manifests, local verification/preflight and
+protocol/schema compatibility gates. It still does not provide automatic
+updates, remote installation, browser-profile reuse or screenshots.
 
 ## Browser-first MVP
 
@@ -63,10 +67,19 @@ general-purpose operating-system control are not part of the browser-first MVP.
 | `packages/config`               | Shared strict TypeScript and ESLint configuration       |
 | `packages/runner-protocol`      | Local Runner pairing and heartbeat contracts            |
 | `packages/run-protocol`         | Persisted run, lease, progress and completion contracts |
-| `packages/audit-trail`         | Append-only, hash-chained audit events and verification |
+| `packages/runner-release`       | Signed release and compatibility contracts              |
+| `packages/audit-trail`          | Append-only, hash-chained audit events and verification |
 
 The architectural direction is documented in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
+
+Runner release operations are documented in
+[`docs/runner-version.md`](docs/runner-version.md),
+[`docs/runner-release-packaging.md`](docs/runner-release-packaging.md),
+[`docs/runner-release-manifest.md`](docs/runner-release-manifest.md),
+[`docs/runner-compatibility.md`](docs/runner-compatibility.md),
+[`docs/runner-upgrade-preflight.md`](docs/runner-upgrade-preflight.md), and
+[`docs/runner-release-pipeline.md`](docs/runner-release-pipeline.md).
 
 ## Requirements
 

@@ -82,6 +82,8 @@ export type ClaimWorkflowRunResult =
   | {
       status: 'claimed';
       runId: string;
+      runProtocolVersion: number;
+      workflowSchemaVersion: number;
       workflow: WorkflowDefinition;
       definitionDigest: string;
       policy: {

@@ -1,0 +1,313 @@
+name: Release Windows x64 Runner
+
+on:
+  push:
+    tags:
+      - 'runner-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build_candidate:
+    name: Build and inspect candidate
+    runs-on: windows-2022
+    outputs:
+      version: ${{ steps.release_metadata.outputs.version }}
+      artifact_name: ${{ steps.release_metadata.outputs.artifact_name }}
+      manifest_name: ${{ steps.release_metadata.outputs.manifest_name }}
+    steps:
+      - name: Check out exact tag commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Verify trusted tag commit
+        shell: pwsh
+        env:
+          TRIGGER_TAG: ${{ github.ref_name }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          $tagCommit = (git rev-list -n 1 $env:TRIGGER_TAG).Trim()
+          if ($head -ne $env:TRIGGER_SHA -or $tagCommit -ne $head) {
+            throw 'The checked-out commit does not match the triggering tag.'
+          }
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor $head origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Runner releases must point to a commit reachable from main.'
+          }
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+
+      - name: Install frozen dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Validate tag and embedded version
+        id: release_metadata
+        shell: pwsh
+        env:
+          RUNNER_RELEASE_SIGNING_KEY_ID: ${{ vars.RUNNER_RELEASE_SIGNING_KEY_ID }}
+          TRIGGER_TAG: ${{ github.ref_name }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $package = Get-Content -LiteralPath 'apps/local-runner/package.json' -Raw | ConvertFrom-Json
+          $identityPath = 'apps/local-runner/dist/release/build-identity.json'
+          node apps/local-runner/scripts/release/validate-tag-version.mjs `
+            --tag $env:TRIGGER_TAG `
+            --package-version $package.version `
+            --build-identity $identityPath
+          $identity = Get-Content -LiteralPath $identityPath -Raw | ConvertFrom-Json
+          if ($identity.sourceCommit -ne $env:TRIGGER_SHA) {
+            throw 'The embedded source commit does not match the tagged commit.'
+          }
+          $keyId = $env:RUNNER_RELEASE_SIGNING_KEY_ID
+          if ([string]::IsNullOrWhiteSpace($keyId)) {
+            throw 'RUNNER_RELEASE_SIGNING_KEY_ID is not configured.'
+          }
+          $artifactName = "tasktwin-runner-$($package.version)-windows-x64.zip"
+          $manifestName = "tasktwin-runner-$($package.version)-release-manifest.json"
+          "version=$($package.version)" >> $env:GITHUB_OUTPUT
+          "artifact_name=$artifactName" >> $env:GITHUB_OUTPUT
+          "manifest_name=$manifestName" >> $env:GITHUB_OUTPUT
+
+      - name: Install pinned Chromium payload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $browserRoot = Join-Path $env:RUNNER_TEMP 'runner-release-browsers'
+          $env:PLAYWRIGHT_BROWSERS_PATH = $browserRoot
+          pnpm --filter @tasktwin/local-runner exec playwright install chromium
+
+      - name: Prepare checksum-pinned WinSW
+        run: pnpm --filter @tasktwin/local-runner service:prepare-windows
+
+      - name: Stage, inspect, and package candidate
+        shell: pwsh
+        env:
+          ARTIFACT_NAME: ${{ steps.release_metadata.outputs.artifact_name }}
+          MANIFEST_NAME: ${{ steps.release_metadata.outputs.manifest_name }}
+          RUNNER_RELEASE_SIGNING_KEY_ID: ${{ vars.RUNNER_RELEASE_SIGNING_KEY_ID }}
+          VERSION: ${{ steps.release_metadata.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:VERSION
+          $artifactName = $env:ARTIFACT_NAME
+          $manifestName = $env:MANIFEST_NAME
+          $stageParent = Join-Path $env:RUNNER_TEMP 'runner-release-staging'
+          $candidate = Join-Path $env:RUNNER_TEMP 'runner-release-candidate'
+          New-Item -ItemType Directory -Path $stageParent | Out-Null
+          New-Item -ItemType Directory -Path $candidate | Out-Null
+          $browserRoot = Join-Path $env:RUNNER_TEMP 'runner-release-browsers'
+          node apps/local-runner/scripts/release/stage-windows-x64.mjs `
+            --output-dir $stageParent `
+            --browser-source $browserRoot
+          $stage = Join-Path $stageParent "tasktwin-runner-$version-windows-x64"
+          node apps/local-runner/scripts/release/inspect-release-staging.mjs `
+            --staging-dir $stage
+          & (Join-Path $stage 'runtime/node.exe') `
+            (Join-Path $stage 'dist/index.js') version
+          $artifact = Join-Path $candidate $artifactName
+          & apps/local-runner/scripts/release/package-windows-x64.ps1 `
+            -StagingDirectory $stage `
+            -OutputFile $artifact
+          & apps/local-runner/scripts/release/inspect-release-archive.ps1 `
+            -Artifact $artifact
+          $manifest = Join-Path $candidate $manifestName
+          node apps/local-runner/scripts/release/generate-release-manifest.mjs `
+            --build-identity (Join-Path $stage 'dist/release/build-identity.json') `
+            --artifact $artifact `
+            --built-at ([DateTime]::UtcNow.ToString('o')) `
+            --signing-key-id $env:RUNNER_RELEASE_SIGNING_KEY_ID `
+            --output $manifest
+          $actual = @(Get-ChildItem -LiteralPath $candidate -File | ForEach-Object Name | Sort-Object)
+          $expected = @($artifactName, $manifestName) | Sort-Object
+          if (Compare-Object $expected $actual) {
+            throw 'The unsigned candidate file set is invalid.'
+          }
+
+      - name: Upload unsigned candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: runner-release-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}\runner-release-candidate\*
+          if-no-files-found: error
+          retention-days: 1
+
+  sign_and_publish:
+    name: Sign, self-verify, and publish
+    needs: build_candidate
+    runs-on: windows-2022
+    environment: runner-production-release
+    permissions:
+      contents: write
+    steps:
+      - name: Check out exact tag commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Reverify trusted tag commit before signing
+        shell: pwsh
+        env:
+          TRIGGER_TAG: ${{ github.ref_name }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          $tagCommit = (git rev-list -n 1 $env:TRIGGER_TAG).Trim()
+          if ($head -ne $env:TRIGGER_SHA -or $tagCommit -ne $head) {
+            throw 'The signing checkout does not match the triggering tag commit.'
+          }
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor $head origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Runner releases must point to a commit reachable from main.'
+          }
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+
+      - name: Build public verification tools
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Download exact unsigned candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: runner-release-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}\runner-release-candidate
+
+      - name: Reinspect candidate before signing
+        shell: pwsh
+        env:
+          ARTIFACT_NAME: ${{ needs.build_candidate.outputs.artifact_name }}
+          MANIFEST_NAME: ${{ needs.build_candidate.outputs.manifest_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidate = Join-Path $env:RUNNER_TEMP 'runner-release-candidate'
+          $artifact = Join-Path $candidate $env:ARTIFACT_NAME
+          $manifest = Join-Path $candidate $env:MANIFEST_NAME
+          & apps/local-runner/scripts/release/inspect-release-archive.ps1 -Artifact $artifact
+          if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+            throw 'The candidate release manifest is missing.'
+          }
+          $actual = @(Get-ChildItem -LiteralPath $candidate -File | ForEach-Object Name | Sort-Object)
+          $expected = @($env:ARTIFACT_NAME, $env:MANIFEST_NAME) | Sort-Object
+          if (Compare-Object $expected $actual) {
+            throw 'The candidate file set changed before signing.'
+          }
+
+      - name: Sign canonical manifest
+        shell: pwsh
+        env:
+          MANIFEST_NAME: ${{ needs.build_candidate.outputs.manifest_name }}
+          RUNNER_RELEASE_SIGNING_KEY_ID: ${{ vars.RUNNER_RELEASE_SIGNING_KEY_ID }}
+          TASKTWIN_RUNNER_RELEASE_SIGNING_KEY_PKCS8_BASE64: ${{ secrets.RUNNER_RELEASE_SIGNING_KEY_PKCS8_BASE64 }}
+          VERSION: ${{ needs.build_candidate.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidate = Join-Path $env:RUNNER_TEMP 'runner-release-candidate'
+          node apps/local-runner/scripts/release/sign-release-manifest.mjs `
+            --manifest (Join-Path $candidate $env:MANIFEST_NAME) `
+            --key-id $env:RUNNER_RELEASE_SIGNING_KEY_ID `
+            --output (Join-Path $candidate "tasktwin-runner-$($env:VERSION)-release-signature.json")
+
+      - name: Self-verify signed manifest and artifact
+        shell: pwsh
+        env:
+          ARTIFACT_NAME: ${{ needs.build_candidate.outputs.artifact_name }}
+          MANIFEST_NAME: ${{ needs.build_candidate.outputs.manifest_name }}
+          VERSION: ${{ needs.build_candidate.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidate = Join-Path $env:RUNNER_TEMP 'runner-release-candidate'
+          $artifact = Join-Path $candidate $env:ARTIFACT_NAME
+          $manifest = Join-Path $candidate $env:MANIFEST_NAME
+          $signatureName = "tasktwin-runner-$($env:VERSION)-release-signature.json"
+          $signature = Join-Path $candidate $signatureName
+          node apps/local-runner/dist/index.js release verify $manifest $signature $artifact
+          & apps/local-runner/scripts/release/inspect-release-archive.ps1 -Artifact $artifact
+          $extractRoot = Join-Path $env:RUNNER_TEMP 'runner-release-extracted'
+          Expand-Archive -LiteralPath $artifact -DestinationPath $extractRoot
+          $packageRoot = Join-Path $extractRoot "tasktwin-runner-$($env:VERSION)-windows-x64"
+          & (Join-Path $packageRoot 'runtime/node.exe') `
+            (Join-Path $packageRoot 'dist/index.js') version
+          $actual = @(Get-ChildItem -LiteralPath $candidate -File | ForEach-Object Name | Sort-Object)
+          $expected = @(
+            $env:ARTIFACT_NAME,
+            $env:MANIFEST_NAME,
+            $signatureName
+          ) | Sort-Object
+          if (Compare-Object $expected $actual) {
+            throw 'The final release file set is invalid.'
+          }
+
+      - name: Publish immutable GitHub Release
+        shell: pwsh
+        env:
+          ARTIFACT_NAME: ${{ needs.build_candidate.outputs.artifact_name }}
+          GH_TOKEN: ${{ github.token }}
+          MANIFEST_NAME: ${{ needs.build_candidate.outputs.manifest_name }}
+          TRIGGER_TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build_candidate.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:TRIGGER_TAG
+          & gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw 'A release already exists for this immutable Runner version.'
+          }
+          $candidate = Join-Path $env:RUNNER_TEMP 'runner-release-candidate'
+          $artifact = Join-Path $candidate $env:ARTIFACT_NAME
+          $manifest = Join-Path $candidate $env:MANIFEST_NAME
+          $signature = Join-Path $candidate "tasktwin-runner-$($env:VERSION)-release-signature.json"
+          gh release create $tag `
+            --repo $env:GITHUB_REPOSITORY `
+            --verify-tag `
+            --draft `
+            --title "TaskTwin Runner $($env:VERSION)" `
+            --notes 'Windows x64 Runner artifact, signed manifest, and detached signature.'
+          gh release upload $tag $artifact $manifest $signature --repo $env:GITHUB_REPOSITORY
+          $assetNames = @(gh release view $tag --repo $env:GITHUB_REPOSITORY --json assets --jq '.assets[].name' | Sort-Object)
+          $expected = @(
+            $env:ARTIFACT_NAME,
+            $env:MANIFEST_NAME,
+            "tasktwin-runner-$($env:VERSION)-release-signature.json"
+          ) | Sort-Object
+          if (Compare-Object $expected $assetNames) {
+            throw 'The draft release asset set is invalid.'
+          }
+          gh release edit $tag --repo $env:GITHUB_REPOSITORY --draft=false

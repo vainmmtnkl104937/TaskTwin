@@ -94,16 +94,18 @@ export function WorkflowEditor({
     () => analyzePublishReadiness(definition, executionPolicy),
     [definition, executionPolicy],
   );
-  const policyEvaluation = useMemo(
-    () =>
-      evaluateWorkflowPolicy({
-        policy: executionPolicy,
-        workflow: definition,
-        policyDigest: '0'.repeat(64),
-        workflowDigest: '0'.repeat(64),
-      }),
-    [definition, executionPolicy],
-  );
+  const policyEvaluation = useMemo(() => {
+    const parsedDefinition = WorkflowDefinitionSchema.safeParse(definition);
+    if (!parsedDefinition.success) {
+      return null;
+    }
+    return evaluateWorkflowPolicy({
+      policy: executionPolicy,
+      workflow: parsedDefinition.data,
+      policyDigest: '0'.repeat(64),
+      workflowDigest: '0'.repeat(64),
+    });
+  }, [definition, executionPolicy]);
   const extractionAnalysis = useMemo(
     () => analyzeWorkflowExtraction(definition),
     [definition],
@@ -517,11 +519,10 @@ export function WorkflowEditor({
                 outputs={availableOutputs}
                 readOnly={readOnly}
                 locatorMetadata={detail.locatorMetadata}
-                {...(policyEvaluation.steps[selectedIndex] === undefined
+                {...(policyEvaluation?.steps[selectedIndex] === undefined
                   ? {}
                   : {
-                      policyEvaluation:
-                        policyEvaluation.steps[selectedIndex],
+                      policyEvaluation: policyEvaluation.steps[selectedIndex],
                     })}
                 onChange={updateStep}
                 onValueSourceChange={updateValueSource}

@@ -87,6 +87,7 @@ export type {
 } from './workflow-assertion.js';
 
 export {
+  WORKFLOW_SCHEMA_VERSION,
   WorkflowDefinitionSchema,
   WorkflowDefinitionV1Schema,
   WorkflowLifecycleStatusSchema,
