@@ -7,6 +7,8 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "lint": "eslint .",
+    "healthcheck:scheduler": "node dist/scheduler/healthcheck.js",
+    "start:scheduler": "node dist/scheduler/main.js",
     "start": "node dist/main.js",
     "test": "vitest run --exclude test/**/*.integration.spec.ts",
     "test:integration": "vitest run test --maxWorkers=1 --no-file-parallelism",

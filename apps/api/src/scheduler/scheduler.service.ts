@@ -31,12 +31,6 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit(): Promise<void> {
-    const enabled = process.env['SCHEDULER_ENABLED'] === 'true';
-    if (!enabled) {
-      this.logger.log('Scheduler is disabled via SCHEDULER_ENABLED env var');
-      return;
-    }
-
     this.enabled = true;
     await this.heartbeat.start();
     this.logger.log('Starting scheduler polling loop');
@@ -113,15 +107,11 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
           if (result === null) {
             return;
           }
-          if (result.skipReason !== undefined) {
-            this.logger.log(
-              `Schedule ${schedule.scheduleId} occurrence skipped: ${result.skipReason}`,
-            );
-          } else {
-            this.logger.log(
-              `Schedule ${schedule.scheduleId} occurrence dispatched (id: ${result.occurrence.id})`,
-            );
-          }
+          this.logger.log(
+            result.skipReason === undefined
+              ? 'SCHEDULER_OCCURRENCE_DISPATCHED'
+              : 'SCHEDULER_OCCURRENCE_SKIPPED',
+          );
         } catch {
           this.logger.error('SCHEDULER_OCCURRENCE_FAILED');
         }

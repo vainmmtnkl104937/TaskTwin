@@ -37,3 +37,4 @@ specific historical design question unresolved.
 32 [Secure local Runner update and rollback](../sessions/session-32.md)
 33 [Trusted release catalog and controlled fleet rollout](../sessions/session-33.md)
 34 [Secure Runner release acquisition](../sessions/session-34.md)
+35 [Production Control Plane deployment](../sessions/session-35.md)

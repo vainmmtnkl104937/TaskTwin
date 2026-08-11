@@ -1,5 +1,10 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import {
+  getRequiredDatabaseUrl,
+  getRequiredEnvironmentSecret,
+} from '@tasktwin/database';
+import type { LogLevel } from '@nestjs/common';
 
 const DEFAULT_API_PORT = 3001;
 const DEFAULT_ACCESS_TOKEN_LIFETIME_SECONDS = 900;
@@ -24,6 +29,8 @@ export interface RunnerJobSecurityConfiguration {
 }
 
 export function loadRootEnvironment(): void {
+  if (process.env.NODE_ENV === 'production') return;
+
   const rootEnvironmentPath = fileURLToPath(
     new URL('../../../../.env', import.meta.url),
   );
@@ -31,6 +38,32 @@ export function loadRootEnvironment(): void {
   if (existsSync(rootEnvironmentPath)) {
     process.loadEnvFile(rootEnvironmentPath);
   }
+}
+
+export function getApiHost(): string {
+  const configuredHost = process.env.API_HOST;
+  if (configuredHost === undefined) {
+    return process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1';
+  }
+  if (!/^[a-zA-Z0-9.:-]+$/u.test(configuredHost)) {
+    throw new Error('API_HOST contains unsupported characters');
+  }
+  return configuredHost;
+}
+
+export function getApiLogLevels(): LogLevel[] {
+  const configured = process.env.TASKTWIN_LOG_LEVEL ?? 'log';
+  const levels: Record<string, LogLevel[]> = {
+    error: ['error'],
+    warn: ['error', 'warn'],
+    log: ['error', 'warn', 'log'],
+    debug: ['error', 'warn', 'log', 'debug'],
+  };
+  const result = levels[configured];
+  if (result === undefined) {
+    throw new Error('TASKTWIN_LOG_LEVEL must be error, warn, log, or debug');
+  }
+  return result;
 }
 
 export function getApiPort(): number {
@@ -48,11 +81,8 @@ export function getApiPort(): number {
 }
 
 export function getJwtAccessConfiguration(): JwtAccessConfiguration {
-  const secret = process.env.JWT_ACCESS_SECRET;
-  if (
-    secret === undefined ||
-    secret.trim().length < MINIMUM_JWT_SECRET_LENGTH
-  ) {
+  const secret = getRequiredEnvironmentSecret('JWT_ACCESS_SECRET');
+  if (secret.trim().length < MINIMUM_JWT_SECRET_LENGTH) {
     throw new Error(
       `JWT_ACCESS_SECRET must contain at least ${MINIMUM_JWT_SECRET_LENGTH} characters`,
     );
@@ -78,16 +108,28 @@ export function getJwtAccessConfiguration(): JwtAccessConfiguration {
 }
 
 function getRequiredSecret(name: string): string {
-  const value = process.env[name];
-  if (
-    value === undefined ||
-    value.trim().length < MINIMUM_RUNNER_PEPPER_LENGTH
-  ) {
+  const value = getRequiredEnvironmentSecret(name);
+  if (value.trim().length < MINIMUM_RUNNER_PEPPER_LENGTH) {
     throw new Error(
       `${name} must contain at least ${MINIMUM_RUNNER_PEPPER_LENGTH} characters`,
     );
   }
   return value;
+}
+
+export function validateApiEnvironment(): void {
+  getRequiredDatabaseUrl();
+  getApiHost();
+  getApiPort();
+  getApiLogLevels();
+  getJwtAccessConfiguration();
+  getRunnerSecurityConfiguration();
+  getRunnerJobSecurityConfiguration();
+}
+
+export function validateSchedulerEnvironment(): void {
+  getRequiredDatabaseUrl();
+  getApiLogLevels();
 }
 
 function getHttpOrigin(name: string, fallback?: string): string {
@@ -127,7 +169,12 @@ export function getRunnerSecurityConfiguration(): RunnerSecurityConfiguration {
   return {
     pairingCodePepper: getRequiredSecret('RUNNER_PAIRING_CODE_PEPPER'),
     credentialPepper: getRequiredSecret('RUNNER_CREDENTIAL_PEPPER'),
-    webOrigin: getHttpOrigin('TASKTWIN_WEB_BASE_URL', 'http://127.0.0.1:3000'),
+    webOrigin: getHttpOrigin(
+      'TASKTWIN_WEB_BASE_URL',
+      process.env.NODE_ENV === 'production'
+        ? undefined
+        : 'http://127.0.0.1:3000',
+    ),
   };
 }
 

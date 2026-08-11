@@ -1,0 +1,86 @@
+name: Control Plane images
+
+on:
+  pull_request:
+    paths:
+      - '.dockerignore'
+      - '.github/workflows/control-plane-images.yml'
+      - 'apps/api/**'
+      - 'apps/notification-worker/**'
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'deploy/control-plane/**'
+      - 'docker/**'
+      - 'compose.production.yaml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and inspect Control Plane images
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [web, api, scheduler, notification-worker, migrate]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Build target without secrets
+        run: |
+          docker build \
+            --file docker/control-plane.Dockerfile \
+            --target "${{ matrix.target }}" \
+            --tag "tasktwin/${{ matrix.target }}:ci" \
+            .
+
+      - name: Verify non-root runtime and excluded Local Runner
+        run: |
+          test "$(docker image inspect --format '{{.Config.User}}' "tasktwin/${{ matrix.target }}:ci")" = 'node'
+          container_id="$(docker create "tasktwin/${{ matrix.target }}:ci")"
+          trap 'docker rm -f "$container_id" >/dev/null' EXIT
+          if docker export "$container_id" | tar -t | grep -E '(^|/)apps/local-runner(/|$)'; then
+            echo 'Local Runner content was found in a Control Plane image.' >&2
+            exit 1
+          fi
+
+  compose:
+    name: Validate production Compose
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Create validation-only secret files
+        run: |
+          secret_root="$RUNNER_TEMP/tasktwin-compose-secrets"
+          mkdir -p "$secret_root"
+          printf '%s' 'validation-password' > "$secret_root/postgres-password"
+          printf '%s' 'postgresql://tasktwin:validation-password@postgres:5432/tasktwin' > "$secret_root/database-url"
+          printf '%032d' 0 > "$secret_root/jwt-access-secret"
+          printf '%032d' 1 > "$secret_root/runner-pairing-code-pepper"
+          printf '%032d' 2 > "$secret_root/runner-credential-pepper"
+          printf '%032d' 3 > "$secret_root/runner-job-lease-pepper"
+
+      - name: Validate resolved deployment model
+        env:
+          POSTGRES_USER: tasktwin
+          POSTGRES_DB: tasktwin
+          TASKTWIN_WEB_BASE_URL: https://tasktwin.example.test
+          TASKTWIN_POSTGRES_PASSWORD_FILE: ${{ runner.temp }}/tasktwin-compose-secrets/postgres-password
+          TASKTWIN_DATABASE_URL_FILE: ${{ runner.temp }}/tasktwin-compose-secrets/database-url
+          TASKTWIN_JWT_ACCESS_SECRET_FILE: ${{ runner.temp }}/tasktwin-compose-secrets/jwt-access-secret
+          TASKTWIN_RUNNER_PAIRING_CODE_PEPPER_FILE: ${{ runner.temp }}/tasktwin-compose-secrets/runner-pairing-code-pepper
+          TASKTWIN_RUNNER_CREDENTIAL_PEPPER_FILE: ${{ runner.temp }}/tasktwin-compose-secrets/runner-credential-pepper
+          TASKTWIN_RUNNER_JOB_LEASE_PEPPER_FILE: ${{ runner.temp }}/tasktwin-compose-secrets/runner-job-lease-pepper
+        run: docker compose -f compose.production.yaml config --quiet
