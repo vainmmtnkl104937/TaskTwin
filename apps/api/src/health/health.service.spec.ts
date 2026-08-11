@@ -14,6 +14,9 @@ describe('HealthService', () => {
     process.env.RUNNER_CREDENTIAL_PEPPER = 'c'.repeat(32);
     process.env.RUNNER_JOB_LEASE_PEPPER = 'l'.repeat(32);
     process.env.TASKTWIN_WEB_BASE_URL = 'http://127.0.0.1:3000';
+    process.env.DATABASE_URL =
+      'postgresql://tasktwin:test@127.0.0.1:5432/tasktwin';
+    delete process.env.DATABASE_URL_FILE;
     isHealthy = vi.fn().mockResolvedValue(true);
   });
 

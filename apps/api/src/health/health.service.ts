@@ -2,12 +2,7 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import type { ServiceHealthResponse } from '@tasktwin/shared-types';
 
 import { PrismaService } from '../database/prisma.service.js';
-import {
-  getApiPort,
-  getJwtAccessConfiguration,
-  getRunnerJobSecurityConfiguration,
-  getRunnerSecurityConfiguration,
-} from '../config/environment.js';
+import { validateApiEnvironment } from '../config/environment.js';
 
 @Injectable()
 export class HealthService {
@@ -27,10 +22,7 @@ export class HealthService {
     const databaseReady = await this.prisma.isHealthy();
     let configurationReady = true;
     try {
-      getApiPort();
-      getJwtAccessConfiguration();
-      getRunnerSecurityConfiguration();
-      getRunnerJobSecurityConfiguration();
+      validateApiEnvironment();
     } catch {
       configurationReady = false;
     }

@@ -8,14 +8,17 @@ contracts or deterministic domain decisions.
 
 - `apps/web` — Next.js Control Plane UI for authentication, workspaces,
   workflow review, runs, governance, operations and Runner fleet views.
-- `apps/api` — NestJS Control Plane HTTP boundary, authentication,
-  authorization, orchestration, scheduling and repository integration.
+- `apps/api` — NestJS Control Plane HTTP boundary plus the separate Scheduler
+  process entrypoint, authorization, orchestration and repository integration.
 - `apps/extension` — Manifest V3 Chrome Recorder, DOM/privacy adapters, local
   recording state, artifact archive and sync outbox.
 - `apps/local-runner` — authenticated local worker, Playwright adapter, CLI,
   local crypto/filesystem adapters and Windows service/update integration.
 - `apps/notification-worker` — non-HTTP transactional outbox consumer for
   crash-safe in-app notification delivery.
+- `docker/control-plane.Dockerfile` and `compose.production.yaml` — separate
+  production Control Plane images, migration-gated startup, health wiring,
+  persistent PostgreSQL and reverse-proxy-ready networks.
 
 ## Recording and privacy
 

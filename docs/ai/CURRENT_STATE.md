@@ -1,6 +1,6 @@
 # TaskTwin Current State
 
-Last completed session: **34**
+Last completed session: **35**
 
 ## Workflow
 
@@ -57,6 +57,10 @@ Last completed session: **34**
 - Operational telemetry exposes fixed-window, low-cardinality Workspace
   aggregates and component readiness without workflow business data, Runner
   identities, versions or runtime values as public labels.
+- The Control Plane has separate production images/processes for Web, API,
+  Scheduler and Notification Worker. A persistent PostgreSQL service and
+  explicit one-shot migration job gate startup; runtime secrets stay outside
+  image layers and health/readiness supports container orchestration.
 
 ## Runner
 
@@ -111,3 +115,6 @@ Last completed session: **34**
   controlled bootstrap.
 - Fleet rollout has no percentage/random cohorts, automatic stage promotion,
   auto-remediation or forced downgrade.
+- The production deployment baseline is single-host Docker Compose. It does not
+  provide a reverse proxy, managed TLS, database HA/backups, image publishing,
+  autoscaling, multi-region operation or cloud-specific infrastructure.

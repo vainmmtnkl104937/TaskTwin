@@ -1,5 +1,8 @@
 export { createDatabaseClient } from './database-client.js';
-export { getRequiredDatabaseUrl } from './database-url.js';
+export {
+  getRequiredDatabaseUrl,
+  getRequiredEnvironmentSecret,
+} from './database-url.js';
 export {
   OrganizationRole,
   Prisma,

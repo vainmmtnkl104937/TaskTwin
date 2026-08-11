@@ -127,3 +127,15 @@ migrations and tests define their exact implementation.
   Runner software.
 - Blocking a target pauses progression; it does not remotely downgrade a
   converged Runner. Actual blocked software cannot claim new work.
+
+## Control Plane deployment
+
+- Web, API, Scheduler and Notification Worker run as separate production
+  processes; the API process does not also run the Scheduler.
+- Production schema changes run through an explicit `migrate deploy` job before
+  application startup. Old migrations are never rewritten and migration
+  failures never trigger automatic database rollback.
+- Production secrets and local state are runtime mounts, never Docker build
+  inputs or image layers.
+- Control Plane images never bundle the Local Runner, browser execution,
+  Runner secret store or Runner update state.

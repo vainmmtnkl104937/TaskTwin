@@ -1,0 +1,225 @@
+x-build: &control-plane-build
+  context: .
+  dockerfile: docker/control-plane.Dockerfile
+
+x-service-hardening: &service-hardening
+  init: true
+  read_only: true
+  restart: unless-stopped
+  stop_grace_period: 45s
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
+services:
+  postgres:
+    image: postgres:17.10-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+    secrets:
+      - postgres_password
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    volumes:
+      - tasktwin-production-postgres:/var/lib/postgresql/data
+    networks:
+      - backend
+    restart: unless-stopped
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  migrate:
+    <<: *service-hardening
+    image: ${TASKTWIN_IMAGE_PREFIX:-tasktwin}/migrate:${TASKTWIN_IMAGE_TAG:-local}
+    build:
+      <<: *control-plane-build
+      target: migrate
+    environment:
+      NODE_ENV: production
+      DATABASE_URL_FILE: /run/secrets/database_url
+    secrets:
+      - database_url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: 'no'
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+
+  api:
+    <<: *service-hardening
+    image: ${TASKTWIN_IMAGE_PREFIX:-tasktwin}/api:${TASKTWIN_IMAGE_TAG:-local}
+    build:
+      <<: *control-plane-build
+      target: api
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 3001
+      TASKTWIN_LOG_LEVEL: ${TASKTWIN_LOG_LEVEL:-log}
+      TASKTWIN_WEB_BASE_URL: ${TASKTWIN_WEB_BASE_URL:?Set the public HTTPS Web origin}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-900}
+      DATABASE_URL_FILE: /run/secrets/database_url
+      JWT_ACCESS_SECRET_FILE: /run/secrets/jwt_access_secret
+      RUNNER_PAIRING_CODE_PEPPER_FILE: /run/secrets/runner_pairing_code_pepper
+      RUNNER_CREDENTIAL_PEPPER_FILE: /run/secrets/runner_credential_pepper
+      RUNNER_JOB_LEASE_PEPPER_FILE: /run/secrets/runner_job_lease_pepper
+    secrets:
+      - database_url
+      - jwt_access_secret
+      - runner_pairing_code_pepper
+      - runner_credential_pepper
+      - runner_job_lease_pepper
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    ports:
+      - '${TASKTWIN_BIND_ADDRESS:-127.0.0.1}:${TASKTWIN_API_EDGE_PORT:-3001}:3001'
+    expose:
+      - '3001'
+    networks:
+      - edge
+      - backend
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+
+  scheduler:
+    <<: *service-hardening
+    image: ${TASKTWIN_IMAGE_PREFIX:-tasktwin}/scheduler:${TASKTWIN_IMAGE_TAG:-local}
+    build:
+      <<: *control-plane-build
+      target: scheduler
+    environment:
+      NODE_ENV: production
+      TASKTWIN_LOG_LEVEL: ${TASKTWIN_LOG_LEVEL:-log}
+      DATABASE_URL_FILE: /run/secrets/database_url
+    secrets:
+      - database_url
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'node', 'dist/scheduler/healthcheck.js']
+      interval: 15s
+      timeout: 7s
+      retries: 4
+      start_period: 15s
+    networks:
+      - backend
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+
+  notification-worker:
+    <<: *service-hardening
+    image: ${TASKTWIN_IMAGE_PREFIX:-tasktwin}/notification-worker:${TASKTWIN_IMAGE_TAG:-local}
+    build:
+      <<: *control-plane-build
+      target: notification-worker
+    environment:
+      NODE_ENV: production
+      DATABASE_URL_FILE: /run/secrets/database_url
+    secrets:
+      - database_url
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'node', 'dist/healthcheck.js']
+      interval: 15s
+      timeout: 7s
+      retries: 4
+      start_period: 15s
+    networks:
+      - backend
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+
+  web:
+    <<: *service-hardening
+    image: ${TASKTWIN_IMAGE_PREFIX:-tasktwin}/web:${TASKTWIN_IMAGE_TAG:-local}
+    build:
+      <<: *control-plane-build
+      target: web
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      TASKTWIN_API_BASE_URL: http://api:3001
+      TASKTWIN_ALLOW_HTTP_INTERNAL_API: 'true'
+      TASKTWIN_WEB_READINESS_TIMEOUT_MS: ${TASKTWIN_WEB_READINESS_TIMEOUT_MS:-3000}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    ports:
+      - '${TASKTWIN_BIND_ADDRESS:-127.0.0.1}:${TASKTWIN_WEB_EDGE_PORT:-3000}:3000'
+    expose:
+      - '3000'
+    networks:
+      - edge
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /app/apps/web/.next/cache:size=64m,mode=0750,uid=1000,gid=1000
+
+secrets:
+  postgres_password:
+    file: ${TASKTWIN_POSTGRES_PASSWORD_FILE:?Set TASKTWIN_POSTGRES_PASSWORD_FILE}
+  database_url:
+    file: ${TASKTWIN_DATABASE_URL_FILE:?Set TASKTWIN_DATABASE_URL_FILE}
+  jwt_access_secret:
+    file: ${TASKTWIN_JWT_ACCESS_SECRET_FILE:?Set TASKTWIN_JWT_ACCESS_SECRET_FILE}
+  runner_pairing_code_pepper:
+    file: ${TASKTWIN_RUNNER_PAIRING_CODE_PEPPER_FILE:?Set TASKTWIN_RUNNER_PAIRING_CODE_PEPPER_FILE}
+  runner_credential_pepper:
+    file: ${TASKTWIN_RUNNER_CREDENTIAL_PEPPER_FILE:?Set TASKTWIN_RUNNER_CREDENTIAL_PEPPER_FILE}
+  runner_job_lease_pepper:
+    file: ${TASKTWIN_RUNNER_JOB_LEASE_PEPPER_FILE:?Set TASKTWIN_RUNNER_JOB_LEASE_PEPPER_FILE}
+
+networks:
+  edge:
+  backend:
+    internal: true
+
+volumes:
+  tasktwin-production-postgres:

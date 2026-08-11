@@ -7,16 +7,12 @@ import type {
 import { SchedulerService } from './scheduler.service.js';
 
 describe('SchedulerService lifecycle', () => {
-  const originalEnvironment = { ...process.env };
-
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => {
     vi.useRealTimers();
-    process.env = { ...originalEnvironment };
   });
 
   it('reports heartbeat and waits for its current tick before graceful stop', async () => {
-    process.env.SCHEDULER_ENABLED = 'true';
     let finishTick: (() => void) | undefined;
     const terminal = new Promise<void>((resolve) => {
       finishTick = resolve;

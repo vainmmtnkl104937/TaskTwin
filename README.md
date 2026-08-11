@@ -173,6 +173,14 @@ pnpm --filter @tasktwin/local-runner start
 To inspect the extension, build it and load `apps/extension/dist` as an
 unpacked extension in Chrome.
 
+## Production Control Plane
+
+The portable production baseline runs Web, API, Scheduler, Notification
+Worker, database migration and PostgreSQL as separate Docker Compose services.
+It does not package the Local Runner. See
+[`deploy/control-plane/README.md`](deploy/control-plane/README.md) for
+configuration, secret mounting, build, migration and startup instructions.
+
 ## Session 01 scope
 
 Session 01 includes the monorepo toolchain, application shells, shared health

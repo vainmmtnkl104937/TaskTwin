@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  getApiHost,
+  getApiLogLevels,
   getApiPort,
   getJwtAccessConfiguration,
   getRunnerSecurityConfiguration,
@@ -47,6 +49,22 @@ describe('environment configuration', () => {
     );
   });
 
+  it('uses a container-reachable host and bounded logging in production', () => {
+    process.env.NODE_ENV = 'production';
+    delete process.env.API_HOST;
+    process.env.TASKTWIN_LOG_LEVEL = 'warn';
+
+    expect(getApiHost()).toBe('0.0.0.0');
+    expect(getApiLogLevels()).toEqual(['error', 'warn']);
+  });
+
+  it('rejects unknown production log levels', () => {
+    process.env.TASKTWIN_LOG_LEVEL = 'trace';
+    expect(() => getApiLogLevels()).toThrow(
+      'TASKTWIN_LOG_LEVEL must be error, warn, log, or debug',
+    );
+  });
+
   it('validates runner peppers and the verification origin', () => {
     process.env.RUNNER_PAIRING_CODE_PEPPER = 'p'.repeat(32);
     process.env.RUNNER_CREDENTIAL_PEPPER = 'c'.repeat(32);
@@ -66,6 +84,17 @@ describe('environment configuration', () => {
 
     expect(() => getRunnerSecurityConfiguration()).toThrow(
       'TASKTWIN_WEB_BASE_URL must use HTTPS outside local development',
+    );
+  });
+
+  it('requires an explicit runner verification origin in production', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.RUNNER_PAIRING_CODE_PEPPER = 'p'.repeat(32);
+    process.env.RUNNER_CREDENTIAL_PEPPER = 'c'.repeat(32);
+    delete process.env.TASKTWIN_WEB_BASE_URL;
+
+    expect(() => getRunnerSecurityConfiguration()).toThrow(
+      'TASKTWIN_WEB_BASE_URL is required',
     );
   });
 });
