@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@tasktwin/runner-protocol": "workspace:*",
+    "@tasktwin/runner-release": "workspace:*",
+    "@tasktwin/runner-rollout": "workspace:*",
     "@tasktwin/run-protocol": "workspace:*",
     "@tasktwin/secure-run-inputs": "workspace:*",
     "@tasktwin/audit-trail": "workspace:*",

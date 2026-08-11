@@ -269,6 +269,10 @@ describe('OperationsQueryService', () => {
         revoked: 1,
         busy: 1,
         available: 1,
+        compliant: 0,
+        updateAvailable: 0,
+        updateRequired: 0,
+        unsupported: 0,
       });
       expect(snapshot.runs).toMatchObject({
         total: 6,

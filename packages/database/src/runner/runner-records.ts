@@ -11,6 +11,7 @@ import type {
   RunnerCompatibilityEvaluation,
   RunnerSoftwareIdentity,
 } from '@tasktwin/runner-release';
+import type { RunnerComplianceStatus } from '@tasktwin/runner-rollout';
 
 export interface RunnerOrganizationAccess {
   organizationId: string;
@@ -37,6 +38,8 @@ export interface RunnerDeviceRecord {
   revokedAt: Date | null;
   createdAt: Date;
   runtime: RunnerRuntimeMetadata | null;
+  desiredVersion: string | null;
+  complianceStatus: RunnerComplianceStatus;
   localSecretStore: {
     status: LocalSecretStoreStatus;
     vaultRevision: number | null;
@@ -64,6 +67,8 @@ export interface RunnerAuthenticationRecord {
 export interface RunnerHeartbeatPersistenceResult {
   runtime: RunnerRuntimeMetadata | null;
   compatibility: RunnerCompatibilityEvaluation;
+  desiredVersion: string | null;
+  complianceStatus: RunnerComplianceStatus;
 }
 
 export type RunnerPollingResult =

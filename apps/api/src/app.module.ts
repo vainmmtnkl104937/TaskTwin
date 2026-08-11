@@ -20,6 +20,8 @@ import { WorkflowScheduleModule } from './workflow-schedule/workflow-schedule.mo
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { OperationalTelemetryModule } from './operational-telemetry/operational-telemetry.module.js';
 import { OperationsModule } from './operations/operations.module.js';
+import { RunnerReleaseModule } from './runner-release/runner-release.module.js';
+import { RunnerRolloutModule } from './runner-rollout/runner-rollout.module.js';
 
 @Module({
   imports: [
@@ -41,6 +43,8 @@ import { OperationsModule } from './operations/operations.module.js';
     NotificationsModule,
     OperationalTelemetryModule,
     OperationsModule,
+    RunnerReleaseModule,
+    RunnerRolloutModule,
   ],
   controllers: [HealthController],
   providers: [HealthService],

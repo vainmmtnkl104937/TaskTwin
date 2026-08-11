@@ -226,6 +226,7 @@ enum OperationalAlertType {
   run_interrupted
   schedule_auto_paused
   audit_integrity_failed
+  runner_rollout_requires_review
 
   @@map("operational_alert_type")
 }
@@ -254,8 +255,60 @@ enum OperationalAlertSourceType {
   workflow_schedule
   workflow_schedule_occurrence
   audit_verification_failure
+  runner_release_rollout
+  runner_release_rollout_assignment
 
   @@map("operational_alert_source_type")
+}
+
+enum RunnerReleaseCatalogStatus {
+  available
+  deprecated
+  blocked
+
+  @@map("runner_release_catalog_status")
+}
+
+enum RunnerReleaseStatusReason {
+  superseded
+  end_of_support
+  security_issue
+  integrity_issue
+  compatibility_issue
+  operational_issue
+
+  @@map("runner_release_status_reason")
+}
+
+enum RunnerReleaseRolloutStatus {
+  draft
+  active
+  paused
+  completed
+  cancelled
+
+  @@map("runner_release_rollout_status")
+}
+
+enum RunnerReleaseRolloutStageStatus {
+  pending
+  active
+  completed
+  failed_review
+  cancelled
+
+  @@map("runner_release_rollout_stage_status")
+}
+
+enum RunnerReleaseRolloutAssignmentStatus {
+  pending
+  target_assigned
+  converged
+  rolled_back
+  failed
+  cancelled
+
+  @@map("runner_release_rollout_assignment_status")
 }
 
 enum NotificationChannel {
@@ -337,6 +390,7 @@ model User {
   passwordHash                String                            @map("password_hash") @db.VarChar(255)
   displayName                 String                            @map("display_name") @db.VarChar(100)
   isActive                    Boolean                           @default(true) @map("is_active")
+  isSystemAdministrator       Boolean                           @default(false) @map("is_system_administrator")
   createdAt                   DateTime                          @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt                   DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(3)
   organizationMemberships     OrganizationMember[]
@@ -416,6 +470,7 @@ model Workspace {
   userNotifications          UserNotification[]
   auditVerificationState     WorkspaceAuditVerificationState?
   runnerSecretInventories    RunnerSecretInventory[]
+  runnerReleaseRollouts      RunnerReleaseRollout[]
 
   @@unique([organizationId, slug], map: "workspaces_organization_id_slug_key")
   @@map("workspaces")
@@ -559,49 +614,188 @@ model RunnerPairingSession {
 }
 
 model RunnerDevice {
-  id                        String                          @id @default(uuid()) @db.Uuid
-  workspaceId               String                          @map("workspace_id") @db.Uuid
-  pairingSessionId          String                          @unique(map: "runner_devices_pairing_session_id_key") @map("pairing_session_id") @db.Uuid
-  installationId            String                          @unique(map: "runner_devices_installation_id_key") @map("installation_id") @db.Uuid
-  displayName               String                          @map("display_name") @db.VarChar(100)
-  platform                  String                          @db.VarChar(16)
-  architecture              String                          @db.VarChar(16)
-  runnerVersion             String                          @map("runner_version") @db.VarChar(32)
-  runProtocolVersion        Int?                            @map("run_protocol_version")
-  workflowSchemaVersion     Int?                            @map("workflow_schema_version")
-  localStateSchemaVersion   Int?                            @map("local_state_schema_version")
-  softwareMetadataRevision  Int                             @default(0) @map("software_metadata_revision")
-  softwareMetadataUpdatedAt DateTime?                       @map("software_metadata_updated_at") @db.Timestamptz(3)
-  lastSeenAt                DateTime?                       @map("last_seen_at") @db.Timestamptz(3)
-  revokedAt                 DateTime?                       @map("revoked_at") @db.Timestamptz(3)
-  revokedById               String?                         @map("revoked_by_id") @db.Uuid
-  createdAt                 DateTime                        @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                 DateTime                        @updatedAt @map("updated_at") @db.Timestamptz(3)
-  workspace                 Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  pairingSession            RunnerPairingSession            @relation(fields: [pairingSessionId], references: [id], onDelete: Restrict)
-  revokedBy                 User?                           @relation("RunnerDeviceRevoker", fields: [revokedById], references: [id], onDelete: Restrict)
-  credential                RunnerCredential?
-  workflowRuns              WorkflowRun[]
-  capabilities              String[]                        @default([])
-  capabilitiesUpdatedAt     DateTime?                       @map("capabilities_updated_at") @db.Timestamptz(3)
-  runtimeMode               RunnerRuntimeMode?              @map("runtime_mode")
-  autonomyLevel             RunnerAutonomyLevel?            @map("autonomy_level")
-  serviceStatus             RunnerServiceStatus?            @map("service_status")
-  secretUnlockMode          RunnerSecretUnlockMode?         @map("secret_unlock_mode")
-  restartResilient          Boolean?                        @map("restart_resilient")
-  runtimeMetadataRevision   Int                             @default(0) @map("runtime_metadata_revision")
-  runtimeMetadataUpdatedAt  DateTime?                       @map("runtime_metadata_updated_at") @db.Timestamptz(3)
-  encryptionKeys            RunnerEncryptionKey[]
-  runInputPreparations      WorkflowRunInputPreparation[]
-  approvalRequests          WorkflowApprovalRequest[]
-  repairRequests            WorkflowRepairRequest[]
-  locatorRepairProposals    WorkflowLocatorRepairProposal[]
-  schedules                 WorkflowSchedule[]
-  secretInventory           RunnerSecretInventory?
+  id                         String                           @id @default(uuid()) @db.Uuid
+  workspaceId                String                           @map("workspace_id") @db.Uuid
+  pairingSessionId           String                           @unique(map: "runner_devices_pairing_session_id_key") @map("pairing_session_id") @db.Uuid
+  installationId             String                           @unique(map: "runner_devices_installation_id_key") @map("installation_id") @db.Uuid
+  displayName                String                           @map("display_name") @db.VarChar(100)
+  platform                   String                           @db.VarChar(16)
+  architecture               String                           @db.VarChar(16)
+  runnerVersion              String                           @map("runner_version") @db.VarChar(32)
+  runProtocolVersion         Int?                             @map("run_protocol_version")
+  workflowSchemaVersion      Int?                             @map("workflow_schema_version")
+  localStateSchemaVersion    Int?                             @map("local_state_schema_version")
+  desiredReleaseId           String?                          @map("desired_release_id") @db.Uuid
+  desiredRolloutAssignmentId String?                          @unique(map: "runner_devices_desired_assignment_id_key") @map("desired_rollout_assignment_id") @db.Uuid
+  desiredAssignedAt          DateTime?                        @map("desired_assigned_at") @db.Timestamptz(3)
+  softwareMetadataRevision   Int                              @default(0) @map("software_metadata_revision")
+  softwareMetadataUpdatedAt  DateTime?                        @map("software_metadata_updated_at") @db.Timestamptz(3)
+  lastSeenAt                 DateTime?                        @map("last_seen_at") @db.Timestamptz(3)
+  revokedAt                  DateTime?                        @map("revoked_at") @db.Timestamptz(3)
+  revokedById                String?                          @map("revoked_by_id") @db.Uuid
+  createdAt                  DateTime                         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace                  Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  pairingSession             RunnerPairingSession             @relation(fields: [pairingSessionId], references: [id], onDelete: Restrict)
+  revokedBy                  User?                            @relation("RunnerDeviceRevoker", fields: [revokedById], references: [id], onDelete: Restrict)
+  credential                 RunnerCredential?
+  workflowRuns               WorkflowRun[]
+  capabilities               String[]                         @default([])
+  capabilitiesUpdatedAt      DateTime?                        @map("capabilities_updated_at") @db.Timestamptz(3)
+  runtimeMode                RunnerRuntimeMode?               @map("runtime_mode")
+  autonomyLevel              RunnerAutonomyLevel?             @map("autonomy_level")
+  serviceStatus              RunnerServiceStatus?             @map("service_status")
+  secretUnlockMode           RunnerSecretUnlockMode?          @map("secret_unlock_mode")
+  restartResilient           Boolean?                         @map("restart_resilient")
+  runtimeMetadataRevision    Int                              @default(0) @map("runtime_metadata_revision")
+  runtimeMetadataUpdatedAt   DateTime?                        @map("runtime_metadata_updated_at") @db.Timestamptz(3)
+  encryptionKeys             RunnerEncryptionKey[]
+  runInputPreparations       WorkflowRunInputPreparation[]
+  approvalRequests           WorkflowApprovalRequest[]
+  repairRequests             WorkflowRepairRequest[]
+  locatorRepairProposals     WorkflowLocatorRepairProposal[]
+  schedules                  WorkflowSchedule[]
+  secretInventory            RunnerSecretInventory?
+  desiredRelease             RunnerRelease?                   @relation("RunnerDesiredRelease", fields: [desiredReleaseId], references: [id], onDelete: Restrict)
+  desiredRolloutAssignment   RunnerReleaseRolloutAssignment?  @relation("RunnerDesiredAssignment", fields: [desiredRolloutAssignmentId], references: [id], onDelete: Restrict)
+  rolloutAssignments         RunnerReleaseRolloutAssignment[] @relation("RunnerRolloutAssignments")
 
   @@index([workspaceId, revokedAt, lastSeenAt], map: "runner_devices_workspace_id_revoked_at_last_seen_at_idx")
   @@index([revokedById], map: "runner_devices_revoked_by_id_idx")
+  @@index([desiredReleaseId], map: "runner_devices_desired_release_id_idx")
   @@map("runner_devices")
+}
+
+model RunnerRelease {
+  id                    String                     @id @default(uuid()) @db.Uuid
+  product               String                     @db.VarChar(64)
+  version               String                     @db.VarChar(32)
+  manifestDigest        String                     @unique(map: "runner_releases_manifest_digest_key") @map("manifest_digest") @db.Char(64)
+  manifest              Json                       @db.JsonB
+  signingKeyId          String                     @map("signing_key_id") @db.VarChar(128)
+  sourceCommit          String                     @map("source_commit") @db.Char(40)
+  builtAt               DateTime                   @map("built_at") @db.Timestamptz(3)
+  status                RunnerReleaseCatalogStatus @default(available)
+  statusReasonCode      RunnerReleaseStatusReason? @map("status_reason_code")
+  importedByUserId      String                     @map("imported_by_user_id") @db.Uuid
+  statusChangedByUserId String?                    @map("status_changed_by_user_id") @db.Uuid
+  statusChangedAt       DateTime?                  @map("status_changed_at") @db.Timestamptz(3)
+  createdAt             DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  desiredRunnerDevices  RunnerDevice[]             @relation("RunnerDesiredRelease")
+  targetRollouts        RunnerReleaseRollout[]
+
+  @@unique([product, version], map: "runner_releases_product_version_key")
+  @@index([status, createdAt], map: "runner_releases_status_created_at_idx")
+  @@map("runner_releases")
+}
+
+model RunnerReleaseRollout {
+  id                String                           @id @default(uuid()) @db.Uuid
+  workspaceId       String                           @map("workspace_id") @db.Uuid
+  targetReleaseId   String                           @map("target_release_id") @db.Uuid
+  clientRolloutId   String                           @map("client_rollout_id") @db.Uuid
+  requestDigest     String                           @map("request_digest") @db.Char(64)
+  status            RunnerReleaseRolloutStatus       @default(draft)
+  reviewReason      String?                          @map("review_reason") @db.VarChar(80)
+  createdByUserId   String                           @map("created_by_user_id") @db.Uuid
+  activatedByUserId String?                          @map("activated_by_user_id") @db.Uuid
+  pausedByUserId    String?                          @map("paused_by_user_id") @db.Uuid
+  cancelledByUserId String?                          @map("cancelled_by_user_id") @db.Uuid
+  activatedAt       DateTime?                        @map("activated_at") @db.Timestamptz(3)
+  pausedAt          DateTime?                        @map("paused_at") @db.Timestamptz(3)
+  completedAt       DateTime?                        @map("completed_at") @db.Timestamptz(3)
+  cancelledAt       DateTime?                        @map("cancelled_at") @db.Timestamptz(3)
+  createdAt         DateTime                         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace         Workspace                        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  targetRelease     RunnerRelease                    @relation(fields: [targetReleaseId], references: [id], onDelete: Restrict)
+  stages            RunnerReleaseRolloutStage[]
+  assignments       RunnerReleaseRolloutAssignment[]
+
+  @@unique([workspaceId, clientRolloutId], map: "runner_release_rollouts_workspace_client_key")
+  @@index([workspaceId, status, createdAt], map: "runner_release_rollouts_workspace_status_created_idx")
+  @@index([targetReleaseId, status], map: "runner_release_rollouts_target_status_idx")
+  @@map("runner_release_rollouts")
+}
+
+model RunnerReleaseRolloutStage {
+  id                String                           @id @default(uuid()) @db.Uuid
+  rolloutId         String                           @map("rollout_id") @db.Uuid
+  stageNumber       Int                              @map("stage_number")
+  status            RunnerReleaseRolloutStageStatus  @default(pending)
+  reviewReason      String?                          @map("review_reason") @db.VarChar(80)
+  activatedByUserId String?                          @map("activated_by_user_id") @db.Uuid
+  activatedAt       DateTime?                        @map("activated_at") @db.Timestamptz(3)
+  completedAt       DateTime?                        @map("completed_at") @db.Timestamptz(3)
+  failedReviewAt    DateTime?                        @map("failed_review_at") @db.Timestamptz(3)
+  cancelledAt       DateTime?                        @map("cancelled_at") @db.Timestamptz(3)
+  createdAt         DateTime                         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  rollout           RunnerReleaseRollout             @relation(fields: [rolloutId], references: [id], onDelete: Restrict)
+  assignments       RunnerReleaseRolloutAssignment[]
+
+  @@unique([rolloutId, stageNumber], map: "runner_release_rollout_stages_number_key")
+  @@index([rolloutId, status], map: "runner_release_rollout_stages_status_idx")
+  @@map("runner_release_rollout_stages")
+}
+
+model RunnerReleaseRolloutAssignment {
+  id                  String                               @id @default(uuid()) @db.Uuid
+  rolloutId           String                               @map("rollout_id") @db.Uuid
+  stageId             String                               @map("stage_id") @db.Uuid
+  runnerDeviceId      String                               @map("runner_device_id") @db.Uuid
+  status              RunnerReleaseRolloutAssignmentStatus @default(pending)
+  baselineVersion     String?                              @map("baseline_version") @db.VarChar(32)
+  lastObservedVersion String?                              @map("last_observed_version") @db.VarChar(32)
+  lastObservedAt      DateTime?                            @map("last_observed_at") @db.Timestamptz(3)
+  assignedAt          DateTime?                            @map("assigned_at") @db.Timestamptz(3)
+  convergedAt         DateTime?                            @map("converged_at") @db.Timestamptz(3)
+  rolledBackAt        DateTime?                            @map("rolled_back_at") @db.Timestamptz(3)
+  failedAt            DateTime?                            @map("failed_at") @db.Timestamptz(3)
+  cancelledAt         DateTime?                            @map("cancelled_at") @db.Timestamptz(3)
+  createdAt           DateTime                             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  rollout             RunnerReleaseRollout                 @relation(fields: [rolloutId], references: [id], onDelete: Restrict)
+  stage               RunnerReleaseRolloutStage            @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  runnerDevice        RunnerDevice                         @relation("RunnerRolloutAssignments", fields: [runnerDeviceId], references: [id], onDelete: Restrict)
+  desiredForRunner    RunnerDevice?                        @relation("RunnerDesiredAssignment")
+
+  @@unique([rolloutId, runnerDeviceId], map: "runner_release_rollout_assignments_runner_key")
+  @@index([stageId, status], map: "runner_release_rollout_assignments_stage_status_idx")
+  @@index([runnerDeviceId, status], map: "runner_release_rollout_assignments_runner_status_idx")
+  @@map("runner_release_rollout_assignments")
+}
+
+model SystemAuditChainHead {
+  scope         String   @id @db.VarChar(64)
+  lastSequence  Int      @default(0) @map("last_sequence")
+  lastEventHash String   @default("0000000000000000000000000000000000000000000000000000000000000000") @map("last_event_hash") @db.Char(64)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("system_audit_chain_heads")
+}
+
+model SystemAuditEvent {
+  id                String   @id @default(uuid()) @db.Uuid
+  scope             String   @db.VarChar(64)
+  sequence          Int
+  eventType         String   @map("event_type") @db.VarChar(80)
+  actorUserId       String   @map("actor_user_id") @db.Uuid
+  primaryEntityKind String   @map("primary_entity_kind") @db.VarChar(48)
+  primaryEntityId   String   @map("primary_entity_id") @db.VarChar(256)
+  occurredAt        DateTime @map("occurred_at") @db.Timestamptz(3)
+  sourceId          String   @map("source_id") @db.VarChar(160)
+  payload           Json     @db.JsonB
+  payloadDigest     String   @map("payload_digest") @db.Char(64)
+  previousHash      String   @map("previous_hash") @db.Char(64)
+  eventHash         String   @map("event_hash") @db.Char(64)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([scope, sequence], map: "system_audit_events_scope_sequence_key")
+  @@unique([scope, sourceId], map: "system_audit_events_scope_source_key")
+  @@index([scope, occurredAt], map: "system_audit_events_scope_occurred_idx")
+  @@map("system_audit_events")
 }
 
 model RunnerCredential {

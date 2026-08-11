@@ -19,6 +19,8 @@ import {
   ComponentHeartbeatRepository,
   AuditVerificationStateRepository,
   RunnerSecretInventoryRepository,
+  RunnerReleaseRepository,
+  RunnerRolloutRepository,
   type PrismaClient,
 } from '@tasktwin/database';
 
@@ -38,6 +40,17 @@ import { OperationalAlertAppender } from '../operational-alerts/operational-aler
     PrismaService,
     DatabaseHealthService,
     OperationalAlertAppender,
+    {
+      provide: RunnerReleaseRepository,
+      inject: [DATABASE_CLIENT, OperationalAlertAppender],
+      useFactory: (client: PrismaClient, alerts: OperationalAlertAppender) =>
+        new RunnerReleaseRepository(client, alerts),
+    },
+    {
+      provide: RunnerRolloutRepository,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: PrismaClient) => new RunnerRolloutRepository(client),
+    },
     {
       provide: RunnerSecretInventoryRepository,
       inject: [DATABASE_CLIENT],
@@ -157,6 +170,8 @@ import { OperationalAlertAppender } from '../operational-alerts/operational-aler
     ComponentHeartbeatRepository,
     AuditVerificationStateRepository,
     RunnerSecretInventoryRepository,
+    RunnerReleaseRepository,
+    RunnerRolloutRepository,
     PrismaService,
     DATABASE_CLIENT,
   ],

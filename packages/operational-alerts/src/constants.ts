@@ -8,6 +8,7 @@ export const OPERATIONAL_ALERT_TYPES = [
   'run_interrupted',
   'schedule_auto_paused',
   'audit_integrity_failed',
+  'runner_rollout_requires_review',
 ] as const;
 
 export const OPERATIONAL_ALERT_SEVERITIES = [
@@ -30,6 +31,8 @@ export const OPERATIONAL_ALERT_SOURCE_TYPES = [
   'workflow_schedule',
   'workflow_schedule_occurrence',
   'audit_verification_failure',
+  'runner_release_rollout',
+  'runner_release_rollout_assignment',
 ] as const;
 
 export const OPERATIONAL_ALERT_ENTITY_TYPES = [

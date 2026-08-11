@@ -7,7 +7,10 @@ import type {
   OperationalAlertType,
   TrustedOperationalAlertInput,
 } from './contracts.js';
-import { AlertUuidSchema, TrustedOperationalAlertInputSchema } from './contracts.js';
+import {
+  AlertUuidSchema,
+  TrustedOperationalAlertInputSchema,
+} from './contracts.js';
 import { OperationalAlertError } from './errors.js';
 import { MAX_ALERT_RECIPIENTS } from './constants.js';
 
@@ -25,6 +28,7 @@ const SEVERITY_BY_TYPE = {
   run_interrupted: 'critical',
   schedule_auto_paused: 'error',
   audit_integrity_failed: 'critical',
+  runner_rollout_requires_review: 'error',
 } as const satisfies Record<OperationalAlertType, OperationalAlertSeverity>;
 
 export function deriveOperationalAlertSeverity(
@@ -157,6 +161,12 @@ export function createSafeOperationalAlertSummary(
         title: 'Audit integrity verification failed',
         body: 'The Workspace audit chain requires immediate review.',
         actionLabel: 'Review audit trail',
+      };
+    case 'runner_rollout_requires_review.v1':
+      return {
+        title: 'Runner rollout requires review',
+        body: 'A controlled Runner rollout was paused after a safety condition.',
+        actionLabel: 'Review rollout',
       };
   }
 }

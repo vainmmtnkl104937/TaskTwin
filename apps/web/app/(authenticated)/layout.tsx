@@ -20,8 +20,14 @@ export default async function AuthenticatedLayout({
         <Link href="/workspaces" className="brand">
           TaskTwin
         </Link>
-        <div className="header-actions"><NotificationBell />
-          <form action="/auth/sign-out" method="post"><button type="submit" className="secondary-button">Sign out</button></form>
+        <div className="header-actions">
+          <Link href="/runner-releases">Runner releases</Link>
+          <NotificationBell />
+          <form action="/auth/sign-out" method="post">
+            <button type="submit" className="secondary-button">
+              Sign out
+            </button>
+          </form>
         </div>
       </header>
       {children}

@@ -18,6 +18,9 @@ export const DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30;
 export const RUNNER_OFFLINE_AFTER_SECONDS = 90;
 export const RUNNER_COMPATIBILITY_HEADER =
   'TaskTwin-Runner-Compatibility' as const;
+export const RUNNER_DESIRED_VERSION_HEADER =
+  'TaskTwin-Runner-Desired-Version' as const;
+export const RUNNER_COMPLIANCE_HEADER = 'TaskTwin-Runner-Compliance' as const;
 
 export const USER_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const USER_CODE_CHARACTER_COUNT = 12;

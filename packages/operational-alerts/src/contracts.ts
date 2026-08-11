@@ -71,6 +71,12 @@ export const ScheduleActionTargetSchema = WorkspaceActionBaseSchema.extend({
 export const AuditActionTargetSchema = WorkspaceActionBaseSchema.extend({
   kind: z.literal('audit'),
 });
+export const RunnerRolloutActionTargetSchema = WorkspaceActionBaseSchema.extend(
+  {
+    kind: z.literal('runner_rollout'),
+    rolloutId: AlertUuidSchema,
+  },
+);
 
 export const OperationalAlertActionTargetSchema = z.discriminatedUnion('kind', [
   ApprovalActionTargetSchema,
@@ -78,6 +84,7 @@ export const OperationalAlertActionTargetSchema = z.discriminatedUnion('kind', [
   RunActionTargetSchema,
   ScheduleActionTargetSchema,
   AuditActionTargetSchema,
+  RunnerRolloutActionTargetSchema,
 ]);
 
 const TemplateBaseSchema = z.strictObject({
@@ -149,6 +156,13 @@ export const AuditIntegrityFailedTemplateSchema = TemplateBaseSchema.extend({
   failureSequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
   verifiedAt: SafeTimestampSchema,
 });
+export const RunnerRolloutRequiresReviewTemplateSchema =
+  TemplateBaseSchema.extend({
+    templateKey: z.literal('runner_rollout_requires_review.v1'),
+    rolloutId: AlertUuidSchema,
+    reason: z.enum(['assignment_rolled_back', 'target_release_blocked']),
+    observedAt: SafeTimestampSchema,
+  });
 
 export const OperationalAlertTemplateSchema = z.discriminatedUnion(
   'templateKey',
@@ -160,6 +174,7 @@ export const OperationalAlertTemplateSchema = z.discriminatedUnion(
     RunInterruptedTemplateSchema,
     ScheduleAutoPausedTemplateSchema,
     AuditIntegrityFailedTemplateSchema,
+    RunnerRolloutRequiresReviewTemplateSchema,
   ],
 );
 
@@ -199,12 +214,19 @@ export const TrustedOperationalAlertInputSchema = z
         'audit_integrity_failed.v1',
         'audit',
       ],
+      runner_rollout_requires_review: [
+        'runner_release_rollout',
+        'runner_rollout_requires_review.v1',
+        'runner_rollout',
+      ],
     } as const;
     const [sourceType, templateKey, actionKind] = expected[input.type];
     const sourceTypeMatches =
       input.source.type === sourceType ||
       (input.type === 'schedule_auto_paused' &&
-        input.source.type === 'workflow_schedule_occurrence');
+        input.source.type === 'workflow_schedule_occurrence') ||
+      (input.type === 'runner_rollout_requires_review' &&
+        input.source.type === 'runner_release_rollout_assignment');
     if (!sourceTypeMatches) {
       context.addIssue({
         code: 'custom',
@@ -311,6 +333,20 @@ export const TrustedOperationalAlertInputSchema = z
           mismatch(
             ['primaryEntity'],
             'Audit integrity alerts must bind the Workspace audit chain.',
+          );
+        }
+        break;
+      case 'runner_rollout_requires_review':
+        if (
+          input.template.templateKey !== 'runner_rollout_requires_review.v1' ||
+          input.actionTarget.kind !== 'runner_rollout' ||
+          input.template.rolloutId !== input.actionTarget.rolloutId ||
+          input.primaryEntity.type !== 'runner_release_rollout' ||
+          input.primaryEntity.id !== input.template.rolloutId
+        ) {
+          mismatch(
+            ['primaryEntity'],
+            'Runner rollout review alert identities must match.',
           );
         }
         break;

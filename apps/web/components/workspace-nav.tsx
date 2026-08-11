@@ -8,6 +8,8 @@ interface WorkspaceNavProps {
     | 'schedules'
     | 'approvals'
     | 'repairs'
+    | 'fleet'
+    | 'rollouts'
     | 'audit'
     | 'operations';
 }
@@ -44,6 +46,18 @@ export function WorkspaceNav({ workspaceId, currentPage }: WorkspaceNavProps) {
         className={currentPage === 'repairs' ? 'active' : undefined}
       >
         Repairs
+      </Link>
+      <Link
+        href={`/workspaces/${workspaceId}/fleet`}
+        className={currentPage === 'fleet' ? 'active' : undefined}
+      >
+        Fleet
+      </Link>
+      <Link
+        href={`/workspaces/${workspaceId}/runner-rollouts`}
+        className={currentPage === 'rollouts' ? 'active' : undefined}
+      >
+        Rollouts
       </Link>
       <Link
         href={`/workspaces/${workspaceId}/operations`}

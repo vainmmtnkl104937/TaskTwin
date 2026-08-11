@@ -61,6 +61,26 @@ export type {
   RunnerPollingResult,
 } from './runner/runner-records.js';
 export { RunnerRepository } from './runner/runner.repository.js';
+export { RunnerReleaseRepository } from './runner-release/runner-release.repository.js';
+export {
+  RunnerReleaseRepositoryError,
+  RUNNER_RELEASE_REPOSITORY_ERROR_CODES,
+} from './runner-release/runner-release-errors.js';
+export type {
+  RunnerReleaseRecord,
+  TrustedRunnerReleaseImport,
+} from './runner-release/runner-release-records.js';
+export { RunnerRolloutRepository } from './runner-rollout/runner-rollout.repository.js';
+export {
+  RunnerRolloutRepositoryError,
+  RUNNER_ROLLOUT_REPOSITORY_ERROR_CODES,
+} from './runner-rollout/runner-rollout-errors.js';
+export type {
+  RunnerRolloutAccess,
+  RunnerRolloutRecord,
+  RunnerRolloutStageRecord,
+  RunnerRolloutAssignmentRecord,
+} from './runner-rollout/runner-rollout-records.js';
 export {
   CONTROL_PLANE_RUNNER_COMPATIBILITY_POLICY,
   canRunnerClaimJobs,

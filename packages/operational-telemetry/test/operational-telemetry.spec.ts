@@ -88,6 +88,10 @@ describe('operational telemetry', () => {
       revoked: 0,
       busy: 0,
       available: 0,
+      compliant: 0,
+      updateAvailable: 0,
+      updateRequired: 0,
+      unsupported: 0,
     };
     const snapshot = {
       schemaVersion: 1,

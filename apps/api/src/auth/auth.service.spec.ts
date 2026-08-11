@@ -18,6 +18,7 @@ const authenticationUser: AuthenticationUserRecord = {
   passwordHash: '$argon2id$test',
   displayName: 'Owner',
   isActive: true,
+  isSystemAdministrator: false,
   createdAt: timestamp,
   updatedAt: timestamp,
 };
@@ -222,6 +223,7 @@ describe('AuthService', () => {
       email: authenticationUser.email,
       displayName: authenticationUser.displayName,
       isActive: true,
+      isSystemAdministrator: false,
       createdAt: timestamp,
       updatedAt: timestamp,
     });

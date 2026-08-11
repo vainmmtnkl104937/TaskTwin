@@ -8,6 +8,7 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   displayName: string;
+  isSystemAdministrator: boolean;
 }
 
 export interface JwtAccessPayload {
@@ -19,6 +20,7 @@ export interface SafeUserResponse {
   email: string;
   displayName: string;
   isActive: boolean;
+  isSystemAdministrator: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -61,6 +63,7 @@ export function toSafeUserResponse(user: SafeUserRecord): SafeUserResponse {
     email: user.email,
     displayName: user.displayName,
     isActive: user.isActive,
+    isSystemAdministrator: user.isSystemAdministrator,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -71,6 +74,7 @@ export function toAuthenticatedUser(user: SafeUserRecord): AuthenticatedUser {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
+    isSystemAdministrator: user.isSystemAdministrator,
   };
 }
 

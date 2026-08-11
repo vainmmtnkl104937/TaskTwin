@@ -85,6 +85,14 @@ export function OperationsDashboard({
             <dd>{snapshot.runners.offline}</dd>
             <dt>Revoked</dt>
             <dd>{snapshot.runners.revoked}</dd>
+            <dt>Compliant</dt>
+            <dd>{snapshot.runners.compliant}</dd>
+            <dt>Update available</dt>
+            <dd>{snapshot.runners.updateAvailable}</dd>
+            <dt>Update required</dt>
+            <dd>{snapshot.runners.updateRequired}</dd>
+            <dt>Unsupported</dt>
+            <dd>{snapshot.runners.unsupported}</dd>
           </dl>
         </article>
         <article className="panel operations-card">

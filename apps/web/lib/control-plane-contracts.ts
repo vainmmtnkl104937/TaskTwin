@@ -41,6 +41,14 @@ import {
   WorkflowLifecycleStatusSchema,
 } from '@tasktwin/workflow-schema';
 import { z } from 'zod';
+import { ReleaseManifestSchema } from '@tasktwin/runner-release';
+import {
+  RunnerReleaseCatalogStatusSchema,
+  RunnerReleaseStatusReasonSchema,
+  RunnerRolloutAssignmentStatusSchema,
+  RunnerRolloutStageStatusSchema,
+  RunnerRolloutStatusSchema,
+} from '@tasktwin/runner-rollout';
 
 const UuidSchema = z.string().uuid();
 const IsoDateSchema = z.string().datetime({ offset: true });
@@ -93,11 +101,97 @@ export const LoginResponseSchema = z.strictObject({
     email: z.string().email(),
     displayName: z.string().min(1),
     isActive: z.boolean(),
+    isSystemAdministrator: z.boolean(),
     createdAt: IsoDateSchema,
     updatedAt: IsoDateSchema,
   }),
   accessToken: z.string().min(1),
 });
+
+export const RunnerReleaseSchema = z.strictObject({
+  id: UuidSchema,
+  product: z.string(),
+  version: z.string(),
+  manifestDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  manifest: ReleaseManifestSchema,
+  signingKeyId: z.string(),
+  sourceCommit: z.string(),
+  builtAt: IsoDateSchema,
+  status: RunnerReleaseCatalogStatusSchema,
+  statusReasonCode: RunnerReleaseStatusReasonSchema.nullable(),
+  importedByUserId: UuidSchema,
+  statusChangedByUserId: UuidSchema.nullable(),
+  statusChangedAt: IsoDateSchema.nullable(),
+  createdAt: IsoDateSchema,
+  updatedAt: IsoDateSchema,
+});
+
+const RunnerRolloutAssignmentSchema = z.strictObject({
+  id: UuidSchema,
+  runnerDeviceId: UuidSchema,
+  runnerDisplayName: z.string(),
+  status: RunnerRolloutAssignmentStatusSchema,
+  baselineVersion: z.string().nullable(),
+  lastObservedVersion: z.string().nullable(),
+  assignedAt: IsoDateSchema.nullable(),
+  convergedAt: IsoDateSchema.nullable(),
+  rolledBackAt: IsoDateSchema.nullable(),
+});
+
+const RunnerRolloutStageSchema = z.strictObject({
+  id: UuidSchema,
+  stageNumber: z.number().int().positive(),
+  status: RunnerRolloutStageStatusSchema,
+  reviewReason: z.string().nullable(),
+  activatedAt: IsoDateSchema.nullable(),
+  completedAt: IsoDateSchema.nullable(),
+  assignments: z.array(RunnerRolloutAssignmentSchema),
+});
+
+export const RunnerRolloutSchema = z.strictObject({
+  id: UuidSchema,
+  workspaceId: UuidSchema,
+  clientRolloutId: UuidSchema,
+  status: RunnerRolloutStatusSchema,
+  reviewReason: z.string().nullable(),
+  targetRelease: z.strictObject({
+    id: UuidSchema,
+    product: z.string(),
+    version: z.string(),
+    status: RunnerReleaseCatalogStatusSchema,
+  }),
+  createdByUserId: UuidSchema,
+  activatedAt: IsoDateSchema.nullable(),
+  pausedAt: IsoDateSchema.nullable(),
+  completedAt: IsoDateSchema.nullable(),
+  cancelledAt: IsoDateSchema.nullable(),
+  createdAt: IsoDateSchema,
+  updatedAt: IsoDateSchema,
+  stages: z.array(RunnerRolloutStageSchema),
+});
+
+const RunnerRolloutAccessSchema = z.strictObject({
+  organizationId: UuidSchema,
+  userId: UuidSchema,
+  role: RoleSchema,
+});
+
+export const RunnerRolloutListResponseSchema = z.strictObject({
+  access: RunnerRolloutAccessSchema,
+  rollouts: z.array(RunnerRolloutSchema),
+});
+export const RunnerRolloutDetailResponseSchema = z.strictObject({
+  access: RunnerRolloutAccessSchema,
+  rollout: RunnerRolloutSchema,
+});
+export const RunnerRolloutMutationResponseSchema = RunnerRolloutSchema;
+export const RunnerRolloutCreateResponseSchema = z.strictObject({
+  rollout: RunnerRolloutSchema,
+  idempotent: z.boolean(),
+});
+
+export type RunnerReleaseResponse = z.infer<typeof RunnerReleaseSchema>;
+export type RunnerRolloutResponse = z.infer<typeof RunnerRolloutSchema>;
 
 export const WorkspaceListResponseSchema = z.strictObject({
   workspaces: z.array(
@@ -335,8 +429,8 @@ function makeTypedPayloadSchemas(): {
 const TYPED_PAYLOAD_SCHEMAS = makeTypedPayloadSchemas();
 
 const TypedPayloadUnion = z.union(
-  AUDIT_EVENT_TYPES.map((eventType) =>
-    TYPED_PAYLOAD_SCHEMAS[eventType],
+  AUDIT_EVENT_TYPES.map(
+    (eventType) => TYPED_PAYLOAD_SCHEMAS[eventType],
   ) as unknown as readonly [z.ZodType, ...z.ZodType[]],
 );
 
@@ -350,9 +444,7 @@ const StrictTypedPayloadUnion = TypedPayloadUnion.superRefine((value, ctx) => {
       return;
     }
     for (const key of Object.keys(input as Record<string, unknown>)) {
-      if (
-        (FORBIDDEN_AUDIT_KEYS as readonly string[]).includes(key)
-      ) {
+      if ((FORBIDDEN_AUDIT_KEYS as readonly string[]).includes(key)) {
         ctx.addIssue({
           code: 'custom',
           path: [...path, key],
@@ -457,7 +549,9 @@ export const RunEvidenceResponseSchema = z.strictObject({
 });
 
 export type SafeAuditEvent = z.infer<typeof SafeAuditEventDtoSchema>;
-export type SafeAuditEventDetail = z.infer<typeof SafeAuditEventDetailDtoSchema>;
+export type SafeAuditEventDetail = z.infer<
+  typeof SafeAuditEventDetailDtoSchema
+>;
 export type AuditEventListResponse = z.infer<
   typeof AuditEventListResponseSchema
 >;
@@ -480,7 +574,9 @@ export const WorkflowScheduleStatusSchema = z.enum([
   'ARCHIVED',
 ]);
 
-export type WorkflowScheduleStatus = z.infer<typeof WorkflowScheduleStatusSchema>;
+export type WorkflowScheduleStatus = z.infer<
+  typeof WorkflowScheduleStatusSchema
+>;
 
 export const WorkflowScheduleOccurrenceStatusSchema = z.enum([
   'PENDING',
@@ -521,7 +617,9 @@ export const WorkflowScheduleRecordSchema = z.strictObject({
   updatedAt: IsoDateSchema,
 });
 
-export type WorkflowScheduleRecord = z.infer<typeof WorkflowScheduleRecordSchema>;
+export type WorkflowScheduleRecord = z.infer<
+  typeof WorkflowScheduleRecordSchema
+>;
 
 export const WorkflowScheduleOccurrenceRecordSchema = z.strictObject({
   id: UuidSchema,
@@ -576,7 +674,9 @@ export const OccurrenceListResponseSchema = z.strictObject({
   nextCursor: z.string().nullable(),
 });
 
-export type OccurrenceListResponse = z.infer<typeof OccurrenceListResponseSchema>;
+export type OccurrenceListResponse = z.infer<
+  typeof OccurrenceListResponseSchema
+>;
 
 export const CreateWorkflowScheduleRequestSchema = z.strictObject({
   schemaVersion: z.literal(1),
@@ -587,12 +687,7 @@ export const CreateWorkflowScheduleRequestSchema = z.strictObject({
   runnerDeviceId: UuidSchema,
   overlapPolicy: z.enum(['skip']).default('skip'),
   misfirePolicy: z.enum(['skip']).default('skip'),
-  maxStartDelaySeconds: z
-    .number()
-    .int()
-    .min(30)
-    .max(3600)
-    .default(300),
+  maxStartDelaySeconds: z.number().int().min(30).max(3600).default(300),
 });
 
 export type CreateWorkflowScheduleRequest = z.infer<
@@ -612,23 +707,47 @@ import { OperationalAlertActionTargetSchema } from '@tasktwin/operational-alerts
 
 export const NotificationItemSchema = z.strictObject({
   id: UuidSchema,
-  workspace: z.strictObject({ id: UuidSchema, name: z.string().min(1).max(120) }),
+  workspace: z.strictObject({
+    id: UuidSchema,
+    name: z.string().min(1).max(120),
+  }),
   alertId: UuidSchema,
-  type: z.enum(['approval_required', 'repair_required', 'run_failed', 'run_timed_out', 'run_interrupted', 'schedule_auto_paused', 'audit_integrity_failed']),
+  type: z.enum([
+    'approval_required',
+    'repair_required',
+    'run_failed',
+    'run_timed_out',
+    'run_interrupted',
+    'schedule_auto_paused',
+    'audit_integrity_failed',
+    'runner_rollout_requires_review',
+  ]),
   severity: z.enum(['info', 'warning', 'error', 'critical']),
   status: z.enum(['active', 'resolved', 'informational']),
-  deliveredAt: z.string().datetime({ offset: true }), readAt: z.string().datetime({ offset: true }).nullable(),
-  summary: z.strictObject({ title: z.string().max(100), body: z.string().max(240), actionLabel: z.string().max(80) }),
+  deliveredAt: z.string().datetime({ offset: true }),
+  readAt: z.string().datetime({ offset: true }).nullable(),
+  summary: z.strictObject({
+    title: z.string().max(100),
+    body: z.string().max(240),
+    actionLabel: z.string().max(80),
+  }),
   actionTarget: OperationalAlertActionTargetSchema,
 });
 export const NotificationListResponseSchema = z.strictObject({
-  items: z.array(NotificationItemSchema).max(100), nextCursor: z.string().nullable(),
+  items: z.array(NotificationItemSchema).max(100),
+  nextCursor: z.string().nullable(),
 });
-export const NotificationUnreadCountSchema = z.strictObject({ count: z.number().int().min(0) });
+export const NotificationUnreadCountSchema = z.strictObject({
+  count: z.number().int().min(0),
+});
 export const NotificationReadResponseSchema = z.strictObject({
-  id: UuidSchema, readAt: z.string().datetime({ offset: true }), idempotent: z.boolean(),
+  id: UuidSchema,
+  readAt: z.string().datetime({ offset: true }),
+  idempotent: z.boolean(),
 });
 export const NotificationReadAllResponseSchema = z.strictObject({
-  updatedCount: z.number().int().min(0), cutoff: z.string().datetime({ offset: true }), readAt: z.string().datetime({ offset: true }),
+  updatedCount: z.number().int().min(0),
+  cutoff: z.string().datetime({ offset: true }),
+  readAt: z.string().datetime({ offset: true }),
 });
 export type NotificationItem = z.infer<typeof NotificationItemSchema>;
