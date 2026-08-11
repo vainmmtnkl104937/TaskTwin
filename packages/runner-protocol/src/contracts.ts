@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RunnerComplianceStatusSchema } from '@tasktwin/runner-rollout';
 import {
   RunnerRuntimeMetadataSchema,
   RunnerRuntimeReportSchema,
@@ -227,6 +228,8 @@ export const SafeRunnerDeviceSchema = z.strictObject({
   createdAt: IsoDateSchema,
   softwareIdentity: RunnerSoftwareIdentitySchema.nullable().optional(),
   compatibility: RunnerCompatibilityEvaluationSchema.optional(),
+  desiredVersion: RunnerVersionSchema.nullable().optional(),
+  complianceStatus: RunnerComplianceStatusSchema.optional(),
   localSecretStore: z
     .strictObject({
       status: LocalSecretStoreStatusSchema,
@@ -305,6 +308,9 @@ export const RunnerHeartbeatResponseSchema = z.strictObject({
  */
 export const RunnerCompatibilityAcknowledgementSchema =
   RunnerCompatibilityStatusSchema;
+export const RunnerDesiredVersionAcknowledgementSchema = RunnerVersionSchema;
+export const RunnerComplianceAcknowledgementSchema =
+  RunnerComplianceStatusSchema;
 
 export const RunnerAuthorizationPartsSchema = z.strictObject({
   runnerDeviceId: UuidSchema,
@@ -368,6 +374,12 @@ export type RunnerHeartbeatRequest = z.infer<
 >;
 export type RunnerHeartbeatResponse = z.infer<
   typeof RunnerHeartbeatResponseSchema
+>;
+export type RunnerDesiredVersionAcknowledgement = z.infer<
+  typeof RunnerDesiredVersionAcknowledgementSchema
+>;
+export type RunnerComplianceAcknowledgement = z.infer<
+  typeof RunnerComplianceAcknowledgementSchema
 >;
 export type RunnerCompatibilityAcknowledgement = z.infer<
   typeof RunnerCompatibilityAcknowledgementSchema

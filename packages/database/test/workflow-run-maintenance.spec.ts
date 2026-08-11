@@ -8,6 +8,7 @@ const runnerDeviceId = '00000000-0000-4000-8000-000000000005';
 function createRepository(input: {
   serviceStatus: 'running' | 'draining';
   revokedAt?: Date | null;
+  releaseStatus?: 'available' | 'deprecated' | 'blocked' | null;
 }) {
   const workflowRunFindUnique = vi.fn(async () => null);
   const workflowRunFindFirst = vi.fn(async () => null);
@@ -25,6 +26,13 @@ function createRepository(input: {
         serviceStatus: input.serviceStatus,
         secretInventory: null,
       })),
+    },
+    runnerRelease: {
+      findUnique: vi.fn(async () =>
+        input.releaseStatus === undefined || input.releaseStatus === null
+          ? null
+          : { status: input.releaseStatus },
+      ),
     },
     workflowRun: {
       findUnique: workflowRunFindUnique,
@@ -83,5 +91,17 @@ describe('WorkflowRunRepository maintenance claim defense', () => {
     await expect(test.repository.claim(claimInput)).rejects.toMatchObject({
       code: 'RUNNER_REVOKED',
     });
+  });
+
+  it('rejects claims from actual blocked catalog software', async () => {
+    const test = createRepository({
+      serviceStatus: 'running',
+      releaseStatus: 'blocked',
+    });
+
+    await expect(test.repository.claim(claimInput)).resolves.toEqual({
+      status: 'no_job',
+    });
+    expect(test.workflowRunFindFirst).not.toHaveBeenCalled();
   });
 });

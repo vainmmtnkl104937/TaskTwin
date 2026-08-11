@@ -35,6 +35,8 @@ describe('HTTP Runner heartbeat compatibility acknowledgement', () => {
             status: 200,
             headers: {
               'TaskTwin-Runner-Compatibility': 'update_recommended',
+              'TaskTwin-Runner-Desired-Version': '1.5.0',
+              'TaskTwin-Runner-Compliance': 'update_available',
             },
           },
         ),
@@ -45,6 +47,8 @@ describe('HTTP Runner heartbeat compatibility acknowledgement', () => {
     ).resolves.toMatchObject({
       response: { schemaVersion: 1, nextHeartbeatInSeconds: 30 },
       compatibilityAcknowledgement: 'update_recommended',
+      desiredVersion: '1.5.0',
+      complianceStatus: 'update_available',
     });
   });
 

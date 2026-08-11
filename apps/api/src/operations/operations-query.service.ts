@@ -1,5 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { Prisma, PrismaClient } from '@tasktwin/database';
+import {
+  evaluatePersistedRunnerCompatibility,
+  toPersistedRunnerSoftwareIdentity,
+  type Prisma,
+  type PrismaClient,
+} from '@tasktwin/database';
+import {
+  deriveRunnerCompliance,
+  summarizeCompliance,
+} from '@tasktwin/runner-rollout';
 import {
   calculateRate,
   createEmptyRunOutcomeBuckets,
@@ -214,6 +223,54 @@ export class OperationsQueryService {
     };
     const online = count(row.online);
     const busy = count(row.busy);
+    let compliance = {
+      compliant: 0,
+      updateAvailable: 0,
+      updateRequired: 0,
+      unsupported: 0,
+    };
+    if (tx.runnerDevice !== undefined && tx.runnerRelease !== undefined) {
+      const devices = await tx.runnerDevice.findMany({
+        where: { workspaceId },
+        select: {
+          runnerVersion: true,
+          platform: true,
+          architecture: true,
+          runProtocolVersion: true,
+          workflowSchemaVersion: true,
+          localStateSchemaVersion: true,
+          serviceStatus: true,
+          desiredRelease: { select: { version: true } },
+          desiredRolloutAssignment: { select: { status: true } },
+        },
+      });
+      const releases = await tx.runnerRelease.findMany({
+        where: {
+          product: 'tasktwin-runner',
+          version: {
+            in: [...new Set(devices.map((value) => value.runnerVersion))],
+          },
+        },
+        select: { version: true, status: true },
+      });
+      const releaseStatuses = new Map(
+        releases.map((release) => [release.version, release.status]),
+      );
+      compliance = summarizeCompliance(
+        devices.map((device) => {
+          const compatibility = evaluatePersistedRunnerCompatibility(device);
+          return deriveRunnerCompliance({
+            actualIdentity: toPersistedRunnerSoftwareIdentity(device),
+            compatibility,
+            actualReleaseStatus:
+              releaseStatuses.get(device.runnerVersion) ?? null,
+            desiredVersion: device.desiredRelease?.version ?? null,
+            assignmentStatus: device.desiredRolloutAssignment?.status ?? null,
+            localMaintenanceObserved: device.serviceStatus === 'draining',
+          });
+        }),
+      );
+    }
     return {
       total: count(row.total),
       online,
@@ -221,6 +278,7 @@ export class OperationsQueryService {
       revoked: count(row.revoked),
       busy,
       available: Math.max(0, online - busy),
+      ...compliance,
     };
   }
 

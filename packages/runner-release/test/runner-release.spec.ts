@@ -22,6 +22,7 @@ import {
   evaluateUpgradePreflight,
   summarizeRelease,
   verifyRelease,
+  verifyReleaseManifest,
   type ReleaseManifest,
   type ReleaseSignature,
   type ReleaseVerificationCrypto,
@@ -340,6 +341,19 @@ describe('upgrade preflight', () => {
 });
 
 describe('detached signature and artifact verification', () => {
+  it('verifies a trusted catalog manifest without accepting artifact bytes', () => {
+    const manifest = manifestFixture();
+    const verified = verifyReleaseManifest({
+      manifest,
+      signature: signManifest(manifest),
+      trustedKeys: [trustedKey],
+      crypto: nodeCrypto,
+    });
+    expect(verified.manifest).toEqual(manifest);
+    expect(verified.manifestSha256).toHaveLength(64);
+    expect(verified).not.toHaveProperty('artifactBytes');
+  });
+
   it('verifies a trusted signature and exact artifact', () => {
     const manifest = manifestFixture();
     expect(

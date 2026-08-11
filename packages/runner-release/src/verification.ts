@@ -44,6 +44,20 @@ export interface VerifyReleaseInput {
   crypto: ReleaseVerificationCrypto;
 }
 
+export interface VerifyReleaseManifestInput {
+  manifest: unknown;
+  signature: unknown;
+  trustedKeys: readonly TrustedReleaseKey[];
+  crypto: ReleaseVerificationCrypto;
+}
+
+export interface VerifiedReleaseManifest {
+  manifest: ReleaseManifest;
+  signature: ReleaseSignature;
+  canonicalManifest: string;
+  manifestSha256: string;
+}
+
 export interface VerifiedRelease {
   manifest: ReleaseManifest;
   signature: ReleaseSignature;
@@ -84,10 +98,11 @@ function parseSignature(input: unknown): ReleaseSignature {
   return parsed.data;
 }
 
-export function verifyRelease(input: VerifyReleaseInput): VerifiedRelease {
+export function verifyReleaseManifest(
+  input: VerifyReleaseManifestInput,
+): VerifiedReleaseManifest {
   const manifest = parseManifest(input.manifest);
   const signature = parseSignature(input.signature);
-  const artifact = ObservedReleaseArtifactSchema.parse(input.artifact);
   const trustedKeys = input.trustedKeys.map((key) =>
     TrustedReleaseKeySchema.parse(key),
   );
@@ -130,6 +145,14 @@ export function verifyRelease(input: VerifyReleaseInput): VerifiedRelease {
       'The release manifest signature is invalid.',
     );
   }
+
+  return { manifest, signature, canonicalManifest, manifestSha256 };
+}
+
+export function verifyRelease(input: VerifyReleaseInput): VerifiedRelease {
+  const verified = verifyReleaseManifest(input);
+  const { manifest, signature, canonicalManifest, manifestSha256 } = verified;
+  const artifact = ObservedReleaseArtifactSchema.parse(input.artifact);
 
   const descriptor = manifest.artifacts.find(
     (candidate) =>

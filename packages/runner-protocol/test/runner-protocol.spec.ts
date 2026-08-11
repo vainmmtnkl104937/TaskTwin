@@ -6,6 +6,8 @@ import {
   RunnerCapabilitiesSchema,
   RunnerHeartbeatRequestSchema,
   RunnerCompatibilityAcknowledgementSchema,
+  RunnerComplianceAcknowledgementSchema,
+  RunnerDesiredVersionAcknowledgementSchema,
   RunnerDeviceMetadataSchema,
   StoredRunnerCredentialSchema,
   canTransitionPairingStatus,
@@ -37,6 +39,25 @@ describe('runner capabilities', () => {
       RunnerCompatibilityAcknowledgementSchema.safeParse('force_update')
         .success,
     ).toBe(false);
+  });
+
+  it('accepts declarative desired/compliance metadata without executable instructions', () => {
+    expect(RunnerDesiredVersionAcknowledgementSchema.parse('1.2.3')).toBe(
+      '1.2.3',
+    );
+    expect(
+      RunnerComplianceAcknowledgementSchema.parse('update_available'),
+    ).toBe('update_available');
+    for (const unsafe of [
+      { command: 'update' },
+      { downloadUrl: 'https://example.invalid/runner.zip' },
+      { artifactBytes: 'AA==' },
+      { localPath: 'C:\\runner' },
+    ]) {
+      expect(
+        RunnerComplianceAcknowledgementSchema.safeParse(unsafe).success,
+      ).toBe(false);
+    }
   });
 
   it('accepts only matching safe software identity metadata', () => {

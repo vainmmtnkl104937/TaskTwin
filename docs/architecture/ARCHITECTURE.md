@@ -964,3 +964,25 @@ before this controller has a verified rollback base. See
 [update guide](../runner-update.md), [installation layout](../windows-runner-update-layout.md),
 [rollback guide](../runner-update-rollback.md) and
 [recovery guide](../runner-update-recovery.md).
+
+## Session 33: Trusted release catalog and declarative fleet rollout
+
+The Control Plane now maintains a trusted Runner Release Catalog populated only
+from verified Session 31 signed manifests. A release's canonical manifest digest
+is immutable identity; governance can only deprecate or block history. The
+framework-independent `@tasktwin/runner-rollout` package owns compliance,
+rollout transitions, ordering, conflicts, convergence and rollback observation.
+
+Each Workspace rollout targets one available release and uses ordered stages
+with explicit Runner membership. Stage activation transactionally revalidates
+tenancy, revocation, compatibility and conflicts, then changes desired-release
+metadata only. Actual version remains authenticated heartbeat identity, and
+compatibility remains based on explicit protocol/schema contracts rather than
+newness. Next-stage activation is always manual.
+
+The heartbeat reconciler records convergence and observes a return to the
+previous version as rollback requiring review. Blocking a target pauses its
+rollouts and actual blocked software cannot claim new work. Alerts, audit and
+telemetry use bounded, safe metadata. The Runner protocol carries only desired
+version and compliance status; Session 32 local CLI operations remain the sole
+update/rollback execution path.

@@ -17,6 +17,10 @@ export const AUDIT_ENTITY_KINDS = [
   'operational_alert',
   'notification_outbox_message',
   'runner_device',
+  'runner_release',
+  'runner_release_rollout',
+  'runner_release_rollout_stage',
+  'runner_release_rollout_assignment',
 ] as const;
 
 export const AuditEntityKindSchema = z.enum(AUDIT_ENTITY_KINDS);
@@ -33,9 +37,7 @@ export const AuditEntityRefSchema = z
   })
   .strict();
 
-export const RelatedAuditEntitiesSchema = z
-  .array(AuditEntityRefSchema)
-  .max(8);
+export const RelatedAuditEntitiesSchema = z.array(AuditEntityRefSchema).max(8);
 
 export type AuditEntityKind = z.infer<typeof AuditEntityKindSchema>;
 export type AuditEntityRef = z.infer<typeof AuditEntityRefSchema>;

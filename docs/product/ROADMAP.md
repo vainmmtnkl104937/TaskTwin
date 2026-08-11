@@ -446,3 +446,18 @@ rollout, remote rollback/shell, forced update, schema or vault migration,
 arbitrary install scripts, MSI/Authenticode, delta patches and non-Windows-x64
 targets remain out of scope. Existing unmanaged installations require a
 separately controlled bootstrap before using this controller.
+
+# Session 33: Trusted Runner release catalog and fleet rollout
+
+Implemented trusted signed-manifest import with immutable digest identity and
+bounded available/deprecated/blocked governance; actual/desired/compatible
+version separation; framework-independent compliance and rollout logic;
+Workspace-scoped explicit staged rollouts; manual stage progression; heartbeat
+convergence and rollback observation; conflict, revocation and platform checks;
+blocked-release claim enforcement; safe audit, one focused operator alert and
+low-cardinality compliance telemetry; and Fleet/catalog/rollout operator pages.
+
+The Control Plane remains declarative. Automatic download/install, remote update
+or rollback, remote shell/PowerShell, random or percentage cohorts, automatic
+promotion, GitHub polling, global automation, auto-remediation and forced
+downgrade remain out of scope.

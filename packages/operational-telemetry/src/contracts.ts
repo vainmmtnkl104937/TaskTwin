@@ -66,6 +66,10 @@ export const RunnerSummarySchema = z
     revoked: CountSchema,
     busy: CountSchema,
     available: CountSchema,
+    compliant: CountSchema,
+    updateAvailable: CountSchema,
+    updateRequired: CountSchema,
+    unsupported: CountSchema,
   })
   .strict();
 

@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common';
 import {
   RUNNER_COMPATIBILITY_HEADER,
+  RUNNER_COMPLIANCE_HEADER,
+  RUNNER_DESIRED_VERSION_HEADER,
   type RunnerDeviceListResponse,
   type RunnerDeviceRevokeResponse,
   type RunnerHeartbeatResponse,
@@ -44,6 +46,10 @@ export class RunnerController {
   ): Promise<RunnerHeartbeatResponse> {
     const result = await this.service.heartbeat(runner, body);
     response.setHeader(RUNNER_COMPATIBILITY_HEADER, result.compatibilityStatus);
+    response.setHeader(RUNNER_COMPLIANCE_HEADER, result.complianceStatus);
+    if (result.desiredVersion !== null) {
+      response.setHeader(RUNNER_DESIRED_VERSION_HEADER, result.desiredVersion);
+    }
     return result.response;
   }
 

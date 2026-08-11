@@ -37,6 +37,11 @@ import { appendAuditEventTransactional } from '../audit-trail/audit-appender.rep
 import { WorkspaceAuditTrailRepository } from '../audit-trail/audit-trail.repository.js';
 import type { RunnerSoftwareIdentity } from '@tasktwin/runner-release';
 import {
+  deriveRunnerCompliance,
+  observeAssignmentVersion,
+  stageHasConverged,
+} from '@tasktwin/runner-rollout';
+import {
   evaluatePersistedRunnerCompatibility,
   toPersistedRunnerSoftwareIdentity,
   toRunnerReleasePlatform,
@@ -100,6 +105,9 @@ function toDeviceRecord(row: {
   secretUnlockMode?: string | null;
   restartResilient?: boolean | null;
   runtimeMetadataRevision?: number;
+  desiredRelease?: { version: string } | null;
+  desiredRolloutAssignment?: { status: string } | null;
+  actualReleaseStatus?: 'available' | 'deprecated' | 'blocked' | null;
   secretInventory?: {
     storeStatus: string;
     vaultRevision: number;
@@ -108,6 +116,22 @@ function toDeviceRecord(row: {
     entries: Array<{ alias: string; secretVersionId: string }>;
   } | null;
 }): RunnerDeviceRecord {
+  const softwareIdentity = toPersistedRunnerSoftwareIdentity({
+    runnerVersion: row.runnerVersion,
+    platform: row.platform,
+    architecture: row.architecture,
+    runProtocolVersion: row.runProtocolVersion ?? null,
+    workflowSchemaVersion: row.workflowSchemaVersion ?? null,
+    localStateSchemaVersion: row.localStateSchemaVersion ?? null,
+  });
+  const compatibility = evaluatePersistedRunnerCompatibility({
+    runnerVersion: row.runnerVersion,
+    platform: row.platform,
+    architecture: row.architecture,
+    runProtocolVersion: row.runProtocolVersion ?? null,
+    workflowSchemaVersion: row.workflowSchemaVersion ?? null,
+    localStateSchemaVersion: row.localStateSchemaVersion ?? null,
+  });
   return {
     id: row.id,
     workspaceId: row.workspaceId,
@@ -118,14 +142,7 @@ function toDeviceRecord(row: {
       runnerVersion: row.runnerVersion,
       installationId: row.installationId,
     },
-    softwareIdentity: toPersistedRunnerSoftwareIdentity({
-      runnerVersion: row.runnerVersion,
-      platform: row.platform,
-      architecture: row.architecture,
-      runProtocolVersion: row.runProtocolVersion ?? null,
-      workflowSchemaVersion: row.workflowSchemaVersion ?? null,
-      localStateSchemaVersion: row.localStateSchemaVersion ?? null,
-    }),
+    softwareIdentity,
     capabilities: row.capabilities as RunnerCapability[],
     lastSeenAt: row.lastSeenAt,
     revokedAt: row.revokedAt,
@@ -151,6 +168,23 @@ function toDeviceRecord(row: {
             restartResilient: row.restartResilient,
             runtimeMetadataRevision: row.runtimeMetadataRevision ?? 0,
           }),
+    desiredVersion: row.desiredRelease?.version ?? null,
+    complianceStatus: deriveRunnerCompliance({
+      actualIdentity: softwareIdentity,
+      compatibility,
+      actualReleaseStatus: row.actualReleaseStatus ?? null,
+      desiredVersion: row.desiredRelease?.version ?? null,
+      assignmentStatus:
+        (row.desiredRolloutAssignment?.status as
+          | 'pending'
+          | 'target_assigned'
+          | 'converged'
+          | 'rolled_back'
+          | 'failed'
+          | 'cancelled'
+          | undefined) ?? null,
+      localMaintenanceObserved: row.serviceStatus === 'draining',
+    }),
     localSecretStore:
       row.secretInventory === null || row.secretInventory === undefined
         ? null
@@ -523,6 +557,8 @@ export class RunnerRepository {
         secretUnlockMode: true,
         restartResilient: true,
         runtimeMetadataRevision: true,
+        desiredRelease: { select: { version: true } },
+        desiredRolloutAssignment: { select: { status: true } },
         secretInventory: {
           select: {
             storeStatus: true,
@@ -534,10 +570,31 @@ export class RunnerRepository {
         },
       },
     });
+    const actualReleases =
+      this.prisma.runnerRelease === undefined
+        ? []
+        : await this.prisma.runnerRelease.findMany({
+            where: {
+              product: 'tasktwin-runner',
+              version: {
+                in: [...new Set(devices.map((device) => device.runnerVersion))],
+              },
+            },
+            select: { version: true, status: true },
+          });
+    const actualStatusByVersion = new Map(
+      actualReleases.map((release) => [release.version, release.status]),
+    );
     return {
       workspaceId,
       access,
-      devices: devices.map(toDeviceRecord),
+      devices: devices.map((device) =>
+        toDeviceRecord({
+          ...device,
+          actualReleaseStatus:
+            actualStatusByVersion.get(device.runnerVersion) ?? null,
+        }),
+      ),
     };
   }
 
@@ -599,6 +656,27 @@ export class RunnerRepository {
           secretUnlockMode: true,
           restartResilient: true,
           runtimeMetadataRevision: true,
+          desiredRelease: { select: { id: true, version: true } },
+          desiredRolloutAssignment: {
+            select: {
+              id: true,
+              status: true,
+              baselineVersion: true,
+              stage: {
+                select: {
+                  id: true,
+                  stageNumber: true,
+                  rollout: {
+                    select: {
+                      id: true,
+                      workspaceId: true,
+                      targetRelease: { select: { version: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
           credential: {
             select: { id: true, revokedAt: true },
           },
@@ -742,6 +820,13 @@ export class RunnerRepository {
           });
         }
       }
+      const assignmentStatus = await this.observeRolloutAssignment({
+        transaction,
+        assignment: device.desiredRolloutAssignment ?? null,
+        runnerDeviceId: input.runnerDeviceId,
+        actualVersion: input.runnerVersion,
+        observedAt: databaseNow,
+      });
       const runtime =
         input.runtime === undefined
           ? null
@@ -749,15 +834,45 @@ export class RunnerRepository {
               ...input.runtime,
               runtimeMetadataRevision: nextRuntimeRevision,
             });
+      const compatibility = evaluatePersistedRunnerCompatibility({
+        runnerVersion: input.runnerVersion,
+        platform: device.platform,
+        architecture: device.architecture,
+        runProtocolVersion: reportedRunProtocolVersion,
+        workflowSchemaVersion: reportedWorkflowSchemaVersion,
+        localStateSchemaVersion: reportedLocalStateSchemaVersion,
+      });
+      const actualRelease =
+        transaction.runnerRelease === undefined
+          ? null
+          : await transaction.runnerRelease.findUnique({
+              where: {
+                product_version: {
+                  product: 'tasktwin-runner',
+                  version: input.runnerVersion,
+                },
+              },
+              select: { status: true },
+            });
+      const desiredVersion = device.desiredRelease?.version ?? null;
       return {
         runtime,
-        compatibility: evaluatePersistedRunnerCompatibility({
-          runnerVersion: input.runnerVersion,
-          platform: device.platform,
-          architecture: device.architecture,
-          runProtocolVersion: reportedRunProtocolVersion,
-          workflowSchemaVersion: reportedWorkflowSchemaVersion,
-          localStateSchemaVersion: reportedLocalStateSchemaVersion,
+        compatibility,
+        desiredVersion,
+        complianceStatus: deriveRunnerCompliance({
+          actualIdentity: toPersistedRunnerSoftwareIdentity({
+            runnerVersion: input.runnerVersion,
+            platform: device.platform,
+            architecture: device.architecture,
+            runProtocolVersion: reportedRunProtocolVersion,
+            workflowSchemaVersion: reportedWorkflowSchemaVersion,
+            localStateSchemaVersion: reportedLocalStateSchemaVersion,
+          }),
+          compatibility,
+          actualReleaseStatus: actualRelease?.status ?? null,
+          desiredVersion,
+          assignmentStatus,
+          localMaintenanceObserved: input.runtime?.serviceStatus === 'draining',
         }),
       };
     });
@@ -1026,6 +1141,223 @@ export class RunnerRepository {
           where: { id: ids[0].id },
           select: pairingSelect,
         });
+  }
+
+  private async observeRolloutAssignment(input: {
+    transaction: Prisma.TransactionClient;
+    assignment: {
+      id: string;
+      status:
+        | 'pending'
+        | 'target_assigned'
+        | 'converged'
+        | 'rolled_back'
+        | 'failed'
+        | 'cancelled';
+      baselineVersion: string | null;
+      stage: {
+        id: string;
+        stageNumber: number;
+        rollout: {
+          id: string;
+          workspaceId: string;
+          targetRelease: { version: string };
+        };
+      };
+    } | null;
+    runnerDeviceId: string;
+    actualVersion: string;
+    observedAt: Date;
+  }): Promise<
+    | 'pending'
+    | 'target_assigned'
+    | 'converged'
+    | 'rolled_back'
+    | 'failed'
+    | 'cancelled'
+    | null
+  > {
+    const assignment = input.assignment;
+    if (assignment === null) return null;
+    const observation = observeAssignmentVersion({
+      assignmentStatus: assignment.status,
+      targetVersion: assignment.stage.rollout.targetRelease.version,
+      baselineVersion: assignment.baselineVersion,
+      actualVersion: input.actualVersion,
+    });
+    await input.transaction.runnerReleaseRolloutAssignment.update({
+      where: { id: assignment.id },
+      data: {
+        lastObservedVersion: input.actualVersion,
+        lastObservedAt: input.observedAt,
+        ...(observation.outcome === 'converged'
+          ? { status: 'converged', convergedAt: input.observedAt }
+          : observation.outcome === 'rolled_back'
+            ? { status: 'rolled_back', rolledBackAt: input.observedAt }
+            : observation.outcome === 'failed'
+              ? { status: 'failed', failedAt: input.observedAt }
+              : {}),
+      },
+    });
+    if (observation.outcome === 'converged') {
+      await appendAuditEventTransactional(input.transaction, this.auditTrail, {
+        workspaceId: assignment.stage.rollout.workspaceId,
+        eventType: 'runner.rollout.assignment.converged',
+        actor: { type: 'runner', runnerDeviceId: input.runnerDeviceId },
+        primaryEntity: {
+          kind: 'runner_release_rollout_assignment',
+          id: assignment.id,
+        },
+        relatedEntities: [
+          {
+            kind: 'runner_release_rollout',
+            id: assignment.stage.rollout.id,
+          },
+          { kind: 'runner_device', id: input.runnerDeviceId },
+        ],
+        occurredAt: input.observedAt,
+        sourceId: `runner-rollout-converged:${assignment.id}`,
+        payload: {
+          rolloutId: assignment.stage.rollout.id,
+          stageId: assignment.stage.id,
+          assignmentId: assignment.id,
+          runnerDeviceId: input.runnerDeviceId,
+          stageNumber: assignment.stage.stageNumber,
+          observedAt: input.observedAt,
+        },
+      });
+      const statuses =
+        await input.transaction.runnerReleaseRolloutAssignment.findMany({
+          where: { stageId: assignment.stage.id },
+          select: { status: true },
+        });
+      if (stageHasConverged(statuses.map((value) => value.status))) {
+        await input.transaction.runnerReleaseRolloutStage.update({
+          where: { id: assignment.stage.id },
+          data: { status: 'completed', completedAt: input.observedAt },
+        });
+        const remainingStages =
+          await input.transaction.runnerReleaseRolloutStage.count({
+            where: {
+              rolloutId: assignment.stage.rollout.id,
+              status: { not: 'completed' },
+            },
+          });
+        if (remainingStages === 0) {
+          await input.transaction.runnerReleaseRollout.update({
+            where: { id: assignment.stage.rollout.id },
+            data: { status: 'completed', completedAt: input.observedAt },
+          });
+          const completedAssignments =
+            await input.transaction.runnerReleaseRolloutAssignment.findMany({
+              where: { rolloutId: assignment.stage.rollout.id },
+              select: { id: true, runnerDeviceId: true },
+            });
+          for (const completed of completedAssignments) {
+            await input.transaction.runnerDevice.updateMany({
+              where: {
+                id: completed.runnerDeviceId,
+                desiredRolloutAssignmentId: completed.id,
+              },
+              data: {
+                desiredRolloutAssignmentId: null,
+                desiredAssignedAt: null,
+              },
+            });
+          }
+        }
+      }
+    }
+    if (
+      observation.outcome === 'rolled_back' ||
+      observation.outcome === 'failed'
+    ) {
+      const reason =
+        observation.outcome === 'rolled_back'
+          ? 'assignment_rolled_back'
+          : 'unexpected_version_after_convergence';
+      await input.transaction.runnerReleaseRolloutStage.update({
+        where: { id: assignment.stage.id },
+        data: {
+          status: 'failed_review',
+          reviewReason: reason,
+          failedReviewAt: input.observedAt,
+        },
+      });
+      await input.transaction.runnerReleaseRollout.update({
+        where: { id: assignment.stage.rollout.id },
+        data: {
+          status: 'paused',
+          reviewReason: reason,
+          pausedAt: input.observedAt,
+        },
+      });
+      if (observation.outcome === 'rolled_back') {
+        await appendAuditEventTransactional(
+          input.transaction,
+          this.auditTrail,
+          {
+            workspaceId: assignment.stage.rollout.workspaceId,
+            eventType: 'runner.rollout.assignment.rolled_back',
+            actor: { type: 'runner', runnerDeviceId: input.runnerDeviceId },
+            primaryEntity: {
+              kind: 'runner_release_rollout_assignment',
+              id: assignment.id,
+            },
+            relatedEntities: [
+              {
+                kind: 'runner_release_rollout',
+                id: assignment.stage.rollout.id,
+              },
+              { kind: 'runner_device', id: input.runnerDeviceId },
+            ],
+            occurredAt: input.observedAt,
+            sourceId: `runner-rollout-rolled-back:${assignment.id}`,
+            payload: {
+              rolloutId: assignment.stage.rollout.id,
+              stageId: assignment.stage.id,
+              assignmentId: assignment.id,
+              runnerDeviceId: input.runnerDeviceId,
+              stageNumber: assignment.stage.stageNumber,
+              observedAt: input.observedAt,
+            },
+          },
+        );
+        await this.operationalAlerts?.append(input.transaction, {
+          schemaVersion: 1,
+          workspaceId: assignment.stage.rollout.workspaceId,
+          type: 'runner_rollout_requires_review',
+          source: {
+            type: 'runner_release_rollout_assignment',
+            id: assignment.id,
+          },
+          primaryEntity: {
+            type: 'runner_release_rollout',
+            id: assignment.stage.rollout.id,
+          },
+          relatedEntities: [
+            {
+              type: 'runner_release_rollout_assignment',
+              id: assignment.id,
+            },
+          ],
+          template: {
+            schemaVersion: 1,
+            templateKey: 'runner_rollout_requires_review.v1',
+            rolloutId: assignment.stage.rollout.id,
+            reason: 'assignment_rolled_back',
+            observedAt: input.observedAt.toISOString(),
+          },
+          actionTarget: {
+            schemaVersion: 1,
+            kind: 'runner_rollout',
+            workspaceId: assignment.stage.rollout.workspaceId,
+            rolloutId: assignment.stage.rollout.id,
+          },
+        });
+      }
+    }
+    return observation.assignmentStatus;
   }
 
   private async lockPairingByDeviceCode(

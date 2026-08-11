@@ -9,6 +9,7 @@ describe('AuthController', () => {
       id: 'user-id',
       email: 'owner@example.com',
       displayName: 'Owner',
+      isSystemAdministrator: false,
       isActive: true,
       createdAt: new Date('2026-07-29T00:00:00.000Z'),
       updatedAt: new Date('2026-07-29T00:00:00.000Z'),
@@ -23,6 +24,7 @@ describe('AuthController', () => {
         id: user.id,
         email: user.email,
         displayName: user.displayName,
+        isSystemAdministrator: false,
       }),
     ).resolves.toEqual({ user });
     expect(getCurrentUser).toHaveBeenCalledWith(user.id);

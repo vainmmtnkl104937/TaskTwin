@@ -382,6 +382,52 @@ export const VALID_PAYLOADS: AuditPayloadByType = {
     previousUnlockMode: 'manual',
     unlockMode: 'os_native',
   },
+  'runner.rollout.created': {
+    rolloutId: RUN_ID,
+    targetReleaseId: WORKFLOW_VERSION_ID,
+    stageCount: 3,
+    assignmentCount: 5,
+  },
+  'runner.rollout.activated': {
+    rolloutId: RUN_ID,
+    status: 'active',
+    changedAt: OCCURRED_AT,
+  },
+  'runner.rollout.paused': {
+    rolloutId: RUN_ID,
+    status: 'paused',
+    reason: 'assignment_rolled_back',
+    changedAt: OCCURRED_AT,
+  },
+  'runner.rollout.cancelled': {
+    rolloutId: RUN_ID,
+    status: 'cancelled',
+    reason: 'manual',
+    changedAt: OCCURRED_AT,
+  },
+  'runner.rollout.stage.activated': {
+    rolloutId: RUN_ID,
+    stageId: APPROVAL_ID,
+    stageNumber: 1,
+    targetReleaseId: WORKFLOW_VERSION_ID,
+    assignmentCount: 2,
+  },
+  'runner.rollout.assignment.converged': {
+    rolloutId: RUN_ID,
+    stageId: APPROVAL_ID,
+    assignmentId: REPAIR_ID,
+    runnerDeviceId: RUNNER_ID,
+    stageNumber: 1,
+    observedAt: OCCURRED_AT,
+  },
+  'runner.rollout.assignment.rolled_back': {
+    rolloutId: RUN_ID,
+    stageId: APPROVAL_ID,
+    assignmentId: REPAIR_ID,
+    runnerDeviceId: RUNNER_ID,
+    stageNumber: 1,
+    observedAt: OCCURRED_AT,
+  },
 };
 
 export function auditInput<EventType extends AuditEventType>(

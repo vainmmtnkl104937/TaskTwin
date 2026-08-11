@@ -34,6 +34,8 @@
     "@tasktwin/recording-schema": "workspace:*",
     "@tasktwin/run-protocol": "workspace:*",
     "@tasktwin/runner-protocol": "workspace:*",
+    "@tasktwin/runner-release": "workspace:*",
+    "@tasktwin/runner-rollout": "workspace:*",
     "@tasktwin/secure-run-inputs": "workspace:*",
     "@tasktwin/shared-types": "workspace:*",
     "@tasktwin/workflow-editor-core": "workspace:*",

@@ -69,6 +69,8 @@ describe('RunnerRepository heartbeat compatibility acknowledgement', () => {
     ).resolves.toEqual({
       runtime: null,
       compatibility: { status: 'compatible', reasons: [] },
+      desiredVersion: null,
+      complianceStatus: 'unknown',
     });
     expect(test.runnerUpdate).toHaveBeenCalledWith(
       expect.objectContaining({

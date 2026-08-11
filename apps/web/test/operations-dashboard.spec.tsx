@@ -26,6 +26,10 @@ const snapshot: WorkspaceOperationsSnapshot = {
     revoked: 1,
     busy: 1,
     available: 1,
+    compliant: 1,
+    updateAvailable: 1,
+    updateRequired: 1,
+    unsupported: 1,
   },
   runs: {
     total: 5,

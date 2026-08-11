@@ -11,7 +11,8 @@ export type OrganizationResourceKind =
   | 'runnerDevice'
   | 'approvalRequest'
   | 'repairRequest'
-  | 'schedule';
+  | 'schedule'
+  | 'runnerRollout';
 
 export interface OrganizationResourceMetadata {
   kind: OrganizationResourceKind;

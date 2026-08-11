@@ -67,6 +67,8 @@ function safeDevice(record: RunnerDeviceRecord, now: Date) {
     createdAt: record.createdAt.toISOString(),
     softwareIdentity: record.softwareIdentity,
     compatibility,
+    desiredVersion: record.desiredVersion,
+    complianceStatus: record.complianceStatus,
     runtime: record.runtime,
     localSecretStore:
       record.localSecretStore === null
@@ -82,6 +84,15 @@ function safeDevice(record: RunnerDeviceRecord, now: Date) {
 export interface RunnerHeartbeatResult {
   response: RunnerHeartbeatResponse;
   compatibilityStatus: RunnerCompatibilityAcknowledgement;
+  desiredVersion: string | null;
+  complianceStatus:
+    | 'compliant'
+    | 'update_available'
+    | 'update_required'
+    | 'updating_external'
+    | 'rolled_back'
+    | 'unsupported'
+    | 'unknown';
 }
 
 @Injectable()
@@ -164,6 +175,8 @@ export class RunnerService {
           nextHeartbeatInSeconds: DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
         }),
         compatibilityStatus: persisted.compatibility.status,
+        desiredVersion: persisted.desiredVersion,
+        complianceStatus: persisted.complianceStatus,
       };
     } catch (error: unknown) {
       if (

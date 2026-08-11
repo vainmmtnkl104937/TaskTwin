@@ -1,8 +1,12 @@
 import {
   RUNNER_COMPATIBILITY_HEADER,
+  RUNNER_COMPLIANCE_HEADER,
+  RUNNER_DESIRED_VERSION_HEADER,
   PairingPollingResponseSchema,
   PairingSessionCreateResponseSchema,
   RunnerCompatibilityAcknowledgementSchema,
+  RunnerComplianceAcknowledgementSchema,
+  RunnerDesiredVersionAcknowledgementSchema,
   RunnerHeartbeatResponseSchema,
   type PairingPollingResponse,
   type PairingSessionCreateRequest,
@@ -11,6 +15,8 @@ import {
   type StoredRunnerCredential,
   type RunnerCapability,
   type RunnerCompatibilityAcknowledgement,
+  type RunnerComplianceAcknowledgement,
+  type RunnerDesiredVersionAcknowledgement,
 } from '@tasktwin/runner-protocol';
 import type { RunnerRuntimeReport } from '@tasktwin/runner-service-runtime';
 import type { RunnerSoftwareIdentity } from '@tasktwin/runner-release';
@@ -100,6 +106,8 @@ export interface RunnerControlPlaneTransport {
 export interface RunnerHeartbeatTransportResult {
   readonly response: RunnerHeartbeatResponse;
   readonly compatibilityAcknowledgement?: RunnerCompatibilityAcknowledgement;
+  readonly desiredVersion?: RunnerDesiredVersionAcknowledgement;
+  readonly complianceStatus?: RunnerComplianceAcknowledgement;
 }
 
 export interface RunnerJobTransport {
@@ -239,11 +247,27 @@ export class HttpRunnerControlPlaneTransport
       header === null
         ? undefined
         : RunnerCompatibilityAcknowledgementSchema.safeParse(header);
+    const desiredHeader = result.headers.get(RUNNER_DESIRED_VERSION_HEADER);
+    const desiredVersion =
+      desiredHeader === null
+        ? undefined
+        : RunnerDesiredVersionAcknowledgementSchema.safeParse(desiredHeader);
+    const complianceHeader = result.headers.get(RUNNER_COMPLIANCE_HEADER);
+    const compliance =
+      complianceHeader === null
+        ? undefined
+        : RunnerComplianceAcknowledgementSchema.safeParse(complianceHeader);
     return {
       response: result.data,
       ...(acknowledgement === undefined || !acknowledgement.success
         ? {}
         : { compatibilityAcknowledgement: acknowledgement.data }),
+      ...(desiredVersion === undefined || !desiredVersion.success
+        ? {}
+        : { desiredVersion: desiredVersion.data }),
+      ...(compliance === undefined || !compliance.success
+        ? {}
+        : { complianceStatus: compliance.data }),
     };
   }
 

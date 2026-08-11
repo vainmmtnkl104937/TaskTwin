@@ -52,6 +52,13 @@ export const AUDIT_EVENT_TYPES = [
   'runner.software_version.changed',
   'runner.runtime_mode.changed',
   'runner.secret_protector.changed',
+  'runner.rollout.created',
+  'runner.rollout.activated',
+  'runner.rollout.paused',
+  'runner.rollout.cancelled',
+  'runner.rollout.stage.activated',
+  'runner.rollout.assignment.converged',
+  'runner.rollout.assignment.rolled_back',
 ] as const;
 
 export const AuditEventTypeSchema = z.enum(AUDIT_EVENT_TYPES);

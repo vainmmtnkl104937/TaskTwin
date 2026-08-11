@@ -481,6 +481,7 @@ const AlertTypeSchema = z.enum([
   'run_interrupted',
   'schedule_auto_paused',
   'audit_integrity_failed',
+  'runner_rollout_requires_review',
 ]);
 const AlertSeveritySchema = z.enum(['info', 'warning', 'error', 'critical']);
 const AlertSourceTypeSchema = z.enum([
@@ -490,6 +491,8 @@ const AlertSourceTypeSchema = z.enum([
   'workflow_schedule',
   'workflow_schedule_occurrence',
   'audit_verification_failure',
+  'runner_release_rollout',
+  'runner_release_rollout_assignment',
 ]);
 
 export const NotificationAlertCreatedPayloadSchema = z
@@ -588,6 +591,55 @@ export const RunnerSecretProtectorChangedPayloadSchema = z
   })
   .strict();
 
+const RolloutStatusSchema = z.enum([
+  'draft',
+  'active',
+  'paused',
+  'completed',
+  'cancelled',
+]);
+
+export const RunnerRolloutCreatedPayloadSchema = z
+  .object({
+    rolloutId: UuidSchema,
+    targetReleaseId: UuidSchema,
+    stageCount: CountSchema,
+    assignmentCount: CountSchema,
+  })
+  .strict();
+
+export const RunnerRolloutStatusPayloadSchema = z
+  .object({
+    rolloutId: UuidSchema,
+    status: RolloutStatusSchema,
+    reason: z
+      .enum(['manual', 'target_release_blocked', 'assignment_rolled_back'])
+      .optional(),
+    changedAt: AuditTimestampSchema,
+  })
+  .strict();
+
+export const RunnerRolloutStageActivatedPayloadSchema = z
+  .object({
+    rolloutId: UuidSchema,
+    stageId: UuidSchema,
+    stageNumber: SequenceSchema,
+    targetReleaseId: UuidSchema,
+    assignmentCount: CountSchema,
+  })
+  .strict();
+
+export const RunnerRolloutAssignmentObservedPayloadSchema = z
+  .object({
+    rolloutId: UuidSchema,
+    stageId: UuidSchema,
+    assignmentId: UuidSchema,
+    runnerDeviceId: UuidSchema,
+    stageNumber: SequenceSchema,
+    observedAt: AuditTimestampSchema,
+  })
+  .strict();
+
 export const AUDIT_PAYLOAD_SCHEMAS = {
   'workflow.created': WorkflowCreatedPayloadSchema,
   'workflow_version.created': WorkflowVersionCreatedPayloadSchema,
@@ -644,6 +696,15 @@ export const AUDIT_PAYLOAD_SCHEMAS = {
   'runner.software_version.changed': RunnerSoftwareVersionChangedPayloadSchema,
   'runner.runtime_mode.changed': RunnerRuntimeModeChangedPayloadSchema,
   'runner.secret_protector.changed': RunnerSecretProtectorChangedPayloadSchema,
+  'runner.rollout.created': RunnerRolloutCreatedPayloadSchema,
+  'runner.rollout.activated': RunnerRolloutStatusPayloadSchema,
+  'runner.rollout.paused': RunnerRolloutStatusPayloadSchema,
+  'runner.rollout.cancelled': RunnerRolloutStatusPayloadSchema,
+  'runner.rollout.stage.activated': RunnerRolloutStageActivatedPayloadSchema,
+  'runner.rollout.assignment.converged':
+    RunnerRolloutAssignmentObservedPayloadSchema,
+  'runner.rollout.assignment.rolled_back':
+    RunnerRolloutAssignmentObservedPayloadSchema,
 } as const satisfies Record<AuditEventType, z.ZodType>;
 
 export function parseAuditPayload<EventType extends AuditEventType>(

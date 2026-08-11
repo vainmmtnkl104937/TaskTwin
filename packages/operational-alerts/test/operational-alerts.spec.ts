@@ -15,6 +15,8 @@ import {
 const workspaceId = '00000000-0000-4000-8000-000000000001';
 const approvalRequestId = '00000000-0000-4000-8000-000000000002';
 const workflowRunId = '00000000-0000-4000-8000-000000000003';
+const rolloutId = '00000000-0000-4000-8000-000000000004';
+const assignmentId = '00000000-0000-4000-8000-000000000005';
 
 const approvalAlert = {
   schemaVersion: 1,
@@ -81,6 +83,59 @@ describe('operational alert contracts', () => {
         },
       }).success,
     ).toBe(true);
+  });
+
+  it('routes a deduplicated rollout review alert to OWNER and ADMIN only', () => {
+    const alert = TrustedOperationalAlertInputSchema.parse({
+      schemaVersion: 1,
+      workspaceId,
+      type: 'runner_rollout_requires_review',
+      source: { type: 'runner_release_rollout_assignment', id: assignmentId },
+      primaryEntity: { type: 'runner_release_rollout', id: rolloutId },
+      relatedEntities: [
+        { type: 'runner_release_rollout_assignment', id: assignmentId },
+      ],
+      template: {
+        schemaVersion: 1,
+        templateKey: 'runner_rollout_requires_review.v1',
+        rolloutId,
+        reason: 'assignment_rolled_back',
+        observedAt: '2026-08-11T12:00:00.000Z',
+      },
+      actionTarget: {
+        schemaVersion: 1,
+        kind: 'runner_rollout',
+        workspaceId,
+        rolloutId,
+      },
+    });
+    const ownerId = '00000000-0000-4000-8000-000000000010';
+    const adminId = '00000000-0000-4000-8000-000000000011';
+    const memberships = [
+      { userId: ownerId, role: 'OWNER' as const, isActive: true },
+      { userId: adminId, role: 'ADMIN' as const, isActive: true },
+      {
+        userId: '00000000-0000-4000-8000-000000000012',
+        role: 'MEMBER' as const,
+        isActive: true,
+      },
+      {
+        userId: '00000000-0000-4000-8000-000000000013',
+        role: 'VIEWER' as const,
+        isActive: true,
+      },
+    ];
+
+    expect(deriveOperationalAlertSeverity(alert.type)).toBe('error');
+    expect(
+      resolveOperationalAlertRecipients({ type: alert.type, memberships }),
+    ).toEqual([adminId, ownerId].sort());
+    expect(createOperationalAlertDeduplicationKey(alert)).toBe(
+      createOperationalAlertDeduplicationKey(alert),
+    );
+    expect(
+      JSON.stringify(createSafeOperationalAlertSummary(alert.template)),
+    ).not.toMatch(/private|signature|artifact|path|command/i);
   });
 
   it('rejects invalid alert types and unexpected properties', () => {

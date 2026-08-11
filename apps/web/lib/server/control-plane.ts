@@ -50,6 +50,11 @@ import {
   NotificationUnreadCountSchema,
   NotificationReadResponseSchema,
   NotificationReadAllResponseSchema,
+  RunnerReleaseSchema,
+  RunnerRolloutListResponseSchema,
+  RunnerRolloutDetailResponseSchema,
+  RunnerRolloutMutationResponseSchema,
+  RunnerRolloutCreateResponseSchema,
 } from '../control-plane-contracts';
 import type { WorkspaceExecutionPolicyDefinition } from '@tasktwin/workflow-policy';
 import {
@@ -258,6 +263,87 @@ export function revokeRunnerDevice(
   return request(
     `/runner-devices/${encodeURIComponent(runnerDeviceId)}/revoke`,
     RunnerDeviceRevokeResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: '{}',
+    },
+  );
+}
+
+export function listRunnerReleases(accessToken: string) {
+  return request('/runner-releases', RunnerReleaseSchema.array(), {
+    method: 'GET',
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export function listRunnerRollouts(accessToken: string, workspaceId: string) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/runner-rollouts`,
+    RunnerRolloutListResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function getRunnerRollout(accessToken: string, rolloutId: string) {
+  return request(
+    `/runner-rollouts/${encodeURIComponent(rolloutId)}`,
+    RunnerRolloutDetailResponseSchema,
+    {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
+}
+
+export function createRunnerRollout(
+  accessToken: string,
+  workspaceId: string,
+  input: {
+    clientRolloutId: string;
+    targetReleaseId: string;
+    stages: Array<{ stageNumber: number; runnerDeviceIds: string[] }>;
+  },
+) {
+  return request(
+    `/workspaces/${encodeURIComponent(workspaceId)}/runner-rollouts`,
+    RunnerRolloutCreateResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function mutateRunnerRollout(
+  accessToken: string,
+  rolloutId: string,
+  action: 'activate' | 'pause' | 'cancel',
+) {
+  return request(
+    `/runner-rollouts/${encodeURIComponent(rolloutId)}/${action}`,
+    RunnerRolloutMutationResponseSchema,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+      body: '{}',
+    },
+  );
+}
+
+export function activateRunnerRolloutStage(
+  accessToken: string,
+  rolloutId: string,
+  stageNumber: number,
+) {
+  return request(
+    `/runner-rollouts/${encodeURIComponent(rolloutId)}/stages/${stageNumber}/activate`,
+    RunnerRolloutMutationResponseSchema,
     {
       method: 'POST',
       headers: { authorization: `Bearer ${accessToken}` },

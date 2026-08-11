@@ -7,3 +7,4 @@ export * from './preflight.js';
 export * from './semver.js';
 export * from './summaries.js';
 export * from './verification.js';
+export * from './trusted-release-keys.js';

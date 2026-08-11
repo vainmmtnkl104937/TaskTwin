@@ -1267,6 +1267,21 @@ export class WorkflowRunRepository {
       ) {
         return { status: 'no_job' };
       }
+      const actualRelease =
+        transaction.runnerRelease === undefined
+          ? null
+          : await transaction.runnerRelease.findUnique({
+              where: {
+                product_version: {
+                  product: 'tasktwin-runner',
+                  version: runner.runnerVersion,
+                },
+              },
+              select: { status: true },
+            });
+      if (actualRelease?.status === 'blocked') {
+        return { status: 'no_job' };
+      }
 
       const retried = await transaction.workflowRun.findUnique({
         where: {

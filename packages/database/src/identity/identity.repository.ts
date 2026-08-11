@@ -20,6 +20,7 @@ const safeUserSelect = {
   email: true,
   displayName: true,
   isActive: true,
+  isSystemAdministrator: true,
   createdAt: true,
   updatedAt: true,
 } as const;

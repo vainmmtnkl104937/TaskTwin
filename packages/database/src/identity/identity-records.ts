@@ -5,6 +5,7 @@ export interface SafeUserRecord {
   email: string;
   displayName: string;
   isActive: boolean;
+  isSystemAdministrator: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -59,6 +59,12 @@ importers:
       '@tasktwin/runner-protocol':
         specifier: workspace:*
         version: link:../../packages/runner-protocol
+      '@tasktwin/runner-release':
+        specifier: workspace:*
+        version: link:../../packages/runner-release
+      '@tasktwin/runner-rollout':
+        specifier: workspace:*
+        version: link:../../packages/runner-rollout
       '@tasktwin/secure-run-inputs':
         specifier: workspace:*
         version: link:../../packages/secure-run-inputs
@@ -309,6 +315,12 @@ importers:
       '@tasktwin/runner-protocol':
         specifier: workspace:*
         version: link:../../packages/runner-protocol
+      '@tasktwin/runner-release':
+        specifier: workspace:*
+        version: link:../../packages/runner-release
+      '@tasktwin/runner-rollout':
+        specifier: workspace:*
+        version: link:../../packages/runner-rollout
       '@tasktwin/secure-run-inputs':
         specifier: workspace:*
         version: link:../../packages/secure-run-inputs
@@ -483,6 +495,9 @@ importers:
       '@tasktwin/runner-release':
         specifier: workspace:*
         version: link:../runner-release
+      '@tasktwin/runner-rollout':
+        specifier: workspace:*
+        version: link:../runner-rollout
       '@tasktwin/runner-service-runtime':
         specifier: workspace:*
         version: link:../runner-service-runtime
@@ -792,6 +807,9 @@ importers:
       '@tasktwin/runner-release':
         specifier: workspace:*
         version: link:../runner-release
+      '@tasktwin/runner-rollout':
+        specifier: workspace:*
+        version: link:../runner-rollout
       '@tasktwin/runner-service-runtime':
         specifier: workspace:*
         version: link:../runner-service-runtime
@@ -839,6 +857,31 @@ importers:
       '@types/semver':
         specifier: 7.7.1
         version: 7.7.1
+      eslint:
+        specifier: 9.39.5
+        version: 9.39.5(jiti@2.7.0)
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@22.19.1)(happy-dom@20.11.1)(vite@8.1.5(@types/node@22.19.1)(jiti@2.7.0)(terser@5.49.0))
+
+  packages/runner-rollout:
+    dependencies:
+      '@tasktwin/runner-release':
+        specifier: workspace:*
+        version: link:../runner-release
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@tasktwin/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 22.19.1
+        version: 22.19.1
       eslint:
         specifier: 9.39.5
         version: 9.39.5(jiti@2.7.0)
