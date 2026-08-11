@@ -1,61 +1,86 @@
 # TaskTwin AI Agent Instructions
 
-You are working on TaskTwin, a local-first browser workflow automation platform.
+TaskTwin is a local-first browser workflow automation platform. The Control
+Plane coordinates trusted metadata and work; browser execution and sensitive
+runtime behavior remain on the user's Runner.
 
-## Core architecture
+## Default context
 
-TaskTwin contains:
+For a normal task, read only this default set first:
 
-* `apps/web`: Next.js dashboard
-* `apps/api`: NestJS control-plane API
-* `apps/extension`: Chrome Extension recorder
-* `apps/local-runner`: local Node.js and Playwright execution service
-* `packages/workflow-schema`: shared workflow contracts and validation
-* `packages/workflow-engine`: deterministic workflow execution logic
-* `packages/locator-engine`: semantic browser locator logic
-* `packages/policy-engine`: action risk and authorization rules
-* `packages/shared-types`: shared TypeScript types
+1. `AGENTS.md`
+2. `docs/ai/PROJECT_CONTEXT.md`
+3. `docs/ai/CURRENT_STATE.md`
+4. `docs/ai/MODULE_MAP.md`
+5. `docs/ai/INVARIANTS.md`
 
-The API is the control plane. Browser automation runs locally on the user's machine.
+Then inspect only the code, schemas, migrations and tests relevant to the task.
+Do not read `docs/sessions/*` or every ADR by default. Historical session and
+ADR documents are on-demand references: open one only when a concrete design
+question remains unresolved after inspecting current code and the default
+context. Code, schemas, migrations and tests are the implementation source of
+truth.
 
-## Working rules
+## Engineering rules
 
-1. Inspect the repository and relevant documentation before changing code.
-2. Do not modify files outside the current task's scope.
-3. Do not introduce a new dependency unless it is necessary and explained.
-4. Use TypeScript strict mode.
-5. Do not use `any` unless there is a documented technical reason.
-6. Validate external input at system boundaries.
-7. Keep domain logic independent from UI and framework code.
-8. Prefer deterministic execution over free-form AI behavior.
-9. Never store passwords, cookies, access tokens, OTPs or other secrets in source code, logs, screenshots or recording events.
-10. AI-generated suggestions must never bypass policy checks or human approval.
-11. Published workflow versions must be immutable.
-12. Write or update tests for changed behavior.
-13. Run lint, typecheck, tests and build before reporting completion.
-14. Update relevant documentation when behavior or architecture changes.
-15. Never silently repair or change a production workflow.
+- Preserve the requested scope and unrelated user changes.
+- Use TypeScript strict mode. Avoid `any`; document a genuine exception.
+- Validate external input at every system boundary.
+- Reuse existing contracts and abstractions before creating new ones.
+- Keep domain packages framework-independent where they are currently designed
+  that way.
+- Prefer deterministic behavior over free-form agent behavior.
+- Do not add dependencies unless necessary and explained.
+- Never edit an old Prisma migration; create a new migration.
+- Add or update tests for behavior changes.
+- Update relevant current documentation when architecture or behavior changes.
+- Never silently repair or alter a production workflow.
 
-## Implementation process
+## Durable product and security rules
 
-Before implementation:
+- Published `WorkflowVersion` records are immutable.
+- AI suggestions cannot bypass policy or human authorization.
+- Policy deny wins; approval never overrides deny.
+- Plaintext local secrets never reach the Control Plane. Do not put secrets,
+  runtime inputs or ephemeral output values in Audit, Alerts or Telemetry.
+- Crashed `WorkflowRun` instances are not silently resumed; expired run leases
+  are not reused.
+- There is no remote shell or arbitrary Control Plane command execution.
+- Unsigned Runner software metadata is never trusted.
+- Runner update uses verify-before-mutate; unsafe rollback is blocked.
+- Fleet desired version is declarative metadata, never an install/update/
+  rollback command.
 
-* Summarize your understanding.
-* Inspect existing code.
-* Propose a file-level implementation plan.
-* Identify risks and assumptions.
-* Do not edit code until explicitly instructed to implement.
+See `docs/ai/INVARIANTS.md` for the complete compact invariant set.
 
-After implementation, report:
+## Working method
 
-* Summary of changes
-* Files created or modified
-* Dependencies added or removed
-* Tests added
-* Commands executed
-* Test, lint, typecheck and build results
-* Security considerations
-* Remaining limitations
-* Recommended manual test steps
+Before coding:
 
-Do not claim success when a required command has not been executed successfully.
+1. Read the default context files.
+2. Inspect only relevant modules and tests.
+3. Identify existing abstractions, risks and assumptions.
+4. Produce a concise file-level plan.
+5. Do not edit code until the user has authorized implementation.
+
+After coding:
+
+1. Run relevant tests.
+2. Run lint.
+3. Run typecheck.
+4. Run build when applicable.
+5. Report files, dependencies, tests, commands, exact results, security
+   considerations and limitations. Never claim an unexecuted check passed.
+
+## AI context maintenance
+
+After a future completed session, update only:
+
+- `docs/ai/CURRENT_STATE.md` when current capabilities change;
+- `docs/ai/MODULE_MAP.md` when modules are added or removed;
+- `docs/ai/INVARIANTS.md` only when a durable invariant changes;
+- `docs/ai/SESSION_INDEX.md` with one compact line.
+
+`docs/ai/PROJECT_CONTEXT.md` should change rarely. Change `AGENTS.md` only for
+durable agent-working rules. Compress these files when they grow beyond their
+purpose; never append full session completion reports.
