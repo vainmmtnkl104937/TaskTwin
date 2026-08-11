@@ -3,11 +3,14 @@ import {
   ReleaseArtifactDescriptorSchema,
   ReleaseManifestSchema,
   RunnerReleaseArchitectureSchema,
+  RunnerReleaseIdSchema,
   RunnerReleasePlatformSchema,
   RunnerSoftwareIdentitySchema,
   Sha256HexSchema,
   SourceCommitSchema,
   expectedRunnerArtifactFileName,
+  deriveRunnerReleaseId,
+  type RunnerReleaseId,
 } from '@tasktwin/runner-release';
 import { z } from 'zod';
 
@@ -39,10 +42,6 @@ export const RunnerUpdateTimestampSchema = z
 export const RunnerUpdateIdSchema = z
   .string()
   .regex(new RegExp(`^${RUNNER_UPDATE_ID_PREFIX}[0-9a-f]{64}$`));
-
-export const RunnerReleaseIdSchema = z
-  .string()
-  .regex(new RegExp(`^${RUNNER_RELEASE_ID_PREFIX}[0-9a-f]{64}$`));
 
 export const RunnerActivationIdSchema = z
   .string()
@@ -254,11 +253,7 @@ export const RunnerStartupStatusSchema = z.strictObject({
   controlPlaneAcknowledgement: RunnerControlPlaneAcknowledgementSchema,
 });
 
-export function deriveRunnerReleaseId(manifestSha256: string): RunnerReleaseId {
-  return RunnerReleaseIdSchema.parse(
-    `${RUNNER_RELEASE_ID_PREFIX}${Sha256HexSchema.parse(manifestSha256)}`,
-  );
-}
+export { RunnerReleaseIdSchema, deriveRunnerReleaseId };
 
 export type RunnerUpdateOperation = z.infer<typeof RunnerUpdateOperationSchema>;
 export type RunnerUpdateState = z.infer<typeof RunnerUpdateStateSchema>;
@@ -267,7 +262,7 @@ export type InstalledReleaseRecord = z.infer<
   typeof InstalledReleaseRecordSchema
 >;
 export type ActiveReleaseRecord = z.infer<typeof ActiveReleaseRecordSchema>;
-export type RunnerReleaseId = z.infer<typeof RunnerReleaseIdSchema>;
+export type { RunnerReleaseId };
 export type RunnerUpdateId = z.infer<typeof RunnerUpdateIdSchema>;
 export type RunnerActivationId = z.infer<typeof RunnerActivationIdSchema>;
 export type RunnerStartupAttemptId = z.infer<

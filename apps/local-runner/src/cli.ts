@@ -48,6 +48,9 @@ import {
   reportedSoftwareIdentity,
 } from './release/build-identity.js';
 import { runReleaseCli } from './release/release-cli.js';
+import { LocalRunnerReleaseAcquisitionService } from './release/acquisition/release-acquisition-service.js';
+import { FileReleaseCacheStore } from './release/acquisition/release-cache-store.js';
+import { TRUSTED_RUNNER_RELEASE_SOURCES } from './release/acquisition/trusted-release-sources.js';
 import type { TrustedReleaseKey } from '@tasktwin/runner-release';
 import { TRUSTED_RUNNER_RELEASE_KEYS } from './release/trusted-release-keys.js';
 import { runUpdateCli } from './update/update-cli.js';
@@ -56,6 +59,11 @@ import type { RunnerUpdateController } from './update/update-controller.js';
 import { FileRunnerUpdateJournalStore } from './update/update-record-stores.js';
 import { FileRunnerStartupStatusStore } from './runtime/startup-status-store.js';
 import { LocalRunnerStartupHealthProbe } from './service/startup-health.js';
+
+type ReleaseAcquisitionCommandService = Pick<
+  LocalRunnerReleaseAcquisitionService,
+  'acquire' | 'list' | 'status'
+>;
 
 function optionalFixtureWait(value: string | undefined): number | undefined {
   if (value === undefined) {
@@ -116,6 +124,11 @@ export async function runCli(
     createUpdateController?: (
       dataRoot: string,
     ) => RunnerUpdateController | Promise<RunnerUpdateController>;
+    createReleaseAcquisitionService?: (
+      dataRoot: string,
+    ) =>
+      | ReleaseAcquisitionCommandService
+      | Promise<ReleaseAcquisitionCommandService>;
     validateRunnerInstallationAcl?: (input: {
       activationConfigPath: string;
       runnerDeviceId: string;
@@ -132,11 +145,29 @@ export async function runCli(
     return 0;
   }
   if (command === 'release' || command === 'upgrade') {
+    const buildIdentity = await readBuildIdentity();
+    const trustedKeys =
+      dependencies.trustedReleaseKeys ?? TRUSTED_RUNNER_RELEASE_KEYS;
     return runReleaseCli({
       argv,
-      buildIdentity: await readBuildIdentity(),
+      buildIdentity,
       output,
-      trustedKeys: dependencies.trustedReleaseKeys,
+      trustedKeys,
+      createAcquisitionService: async (dataRoot) => {
+        if (dependencies.createReleaseAcquisitionService !== undefined) {
+          return dependencies.createReleaseAcquisitionService(dataRoot);
+        }
+        const cache = new FileReleaseCacheStore(dataRoot, trustedKeys);
+        return new LocalRunnerReleaseAcquisitionService(
+          cache,
+          trustedKeys,
+          TRUSTED_RUNNER_RELEASE_SOURCES,
+          {
+            platform: buildIdentity.platform,
+            architecture: buildIdentity.architecture,
+          },
+        );
+      },
     });
   }
   if (command === 'update') {

@@ -106,6 +106,52 @@ describe('Local Runner runtime mode parsing', () => {
     ]);
   });
 
+  it('routes explicit release acquisition without constructing the updater', async () => {
+    const messages: string[] = [];
+    const acquire = vi.fn(async () => ({
+      idempotent: false,
+      release: {
+        releaseId: `rr1_${'b'.repeat(64)}`,
+        version: '1.5.0',
+        target: 'windows/x64',
+        verifiedAt: '2026-08-12T01:00:00.000Z',
+      },
+    }));
+    const createUpdateController = vi.fn();
+
+    await expect(
+      runCli(
+        ['release', 'acquire', '1.5.0', '--data-root', 'D:\\TaskTwinData'],
+        { write: (message) => messages.push(message) },
+        {
+          readBuildIdentity: async () => ({
+            product: 'tasktwin-runner',
+            version: '1.4.0',
+            sourceCommit: 'a'.repeat(40),
+            platform: 'windows',
+            architecture: 'x64',
+            runnerProtocolVersion: 2,
+            workflowSchemaVersion: 1,
+            localStateSchemaVersion: 1,
+            localSecretVaultSchemaVersion: 1,
+          }),
+          createReleaseAcquisitionService: async () => ({
+            acquire,
+            list: vi.fn(),
+            status: vi.fn(),
+          }),
+          createUpdateController,
+        },
+      ),
+    ).resolves.toBe(0);
+
+    expect(acquire).toHaveBeenCalledWith('1.5.0');
+    expect(createUpdateController).not.toHaveBeenCalled();
+    expect(messages.join('\n')).not.toMatch(
+      /command|install|rollback|url|path/i,
+    );
+  });
+
   it('derives explicit modes and rejects interactive service components', () => {
     expect(
       determineRuntimeMode({

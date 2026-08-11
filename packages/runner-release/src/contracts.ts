@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import {
   RUNNER_RELEASE_ARCHIVE_FORMAT,
+  RUNNER_RELEASE_ID_PREFIX,
   RUNNER_RELEASE_MANIFEST_SCHEMA_VERSION,
   RUNNER_RELEASE_PRODUCT,
   RUNNER_RELEASE_SIGNATURE_ALGORITHM,
@@ -26,6 +27,9 @@ export const RunnerReleasePlatformSchema = z.enum([
 export const RunnerReleaseArchitectureSchema = z.enum(['x64', 'arm64']);
 export const RunnerReleaseChannelSchema = z.literal('stable');
 export const Sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/);
+export const RunnerReleaseIdSchema = z
+  .string()
+  .regex(new RegExp(`^${RUNNER_RELEASE_ID_PREFIX}[0-9a-f]{64}$`));
 export const SourceCommitSchema = z.string().regex(/^[0-9a-f]{40}$/);
 export const ReleaseBase64UrlSchema = z.string().regex(/^[A-Za-z0-9_-]+$/);
 
@@ -270,3 +274,10 @@ export type ReleaseArtifactDescriptor = z.infer<
 export type ReleaseManifest = z.infer<typeof ReleaseManifestSchema>;
 export type ReleaseSignature = z.infer<typeof ReleaseSignatureSchema>;
 export type TrustedReleaseKey = z.infer<typeof TrustedReleaseKeySchema>;
+export type RunnerReleaseId = z.infer<typeof RunnerReleaseIdSchema>;
+
+export function deriveRunnerReleaseId(manifestSha256: string): RunnerReleaseId {
+  return RunnerReleaseIdSchema.parse(
+    `${RUNNER_RELEASE_ID_PREFIX}${Sha256HexSchema.parse(manifestSha256)}`,
+  );
+}
