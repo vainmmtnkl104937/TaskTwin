@@ -193,6 +193,9 @@ importers:
       '@tasktwin/run-protocol':
         specifier: workspace:*
         version: link:../../packages/run-protocol
+      '@tasktwin/runner-acquisition':
+        specifier: workspace:*
+        version: link:../../packages/runner-acquisition
       '@tasktwin/runner-protocol':
         specifier: workspace:*
         version: link:../../packages/runner-protocol
@@ -779,6 +782,31 @@ importers:
       '@tasktwin/workflow-verification':
         specifier: workspace:*
         version: link:../workflow-verification
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@tasktwin/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 22.19.1
+        version: 22.19.1
+      eslint:
+        specifier: 9.39.5
+        version: 9.39.5(jiti@2.7.0)
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@22.19.1)(happy-dom@20.11.1)(vite@8.1.5(@types/node@22.19.1)(jiti@2.7.0)(terser@5.49.0))
+
+  packages/runner-acquisition:
+    dependencies:
+      '@tasktwin/runner-release':
+        specifier: workspace:*
+        version: link:../runner-release
       zod:
         specifier: 4.4.3
         version: 4.4.3

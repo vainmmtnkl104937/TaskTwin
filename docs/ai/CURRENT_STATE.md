@@ -1,6 +1,6 @@
 # TaskTwin Current State
 
-Last completed session: **33**
+Last completed session: **34**
 
 ## Workflow
 
@@ -75,6 +75,11 @@ Last completed session: **33**
   before mutation, drain active work, use versioned installation state, require
   local startup health and fail to manual recovery when rollback is ambiguous
   or unsafe.
+- Explicit local release acquisition accepts only a version or signed-manifest
+  digest reference from a static allowlisted HTTPS source. It streams bounded
+  bytes into an isolated partial cache, safely resumes only with exact strong
+  remote identity, verifies signed size and SHA-256, and atomically promotes
+  inert data into a verified cache. Acquisition never invokes installation.
 - The trusted release catalog stores verified signed manifest history as
   available, deprecated or blocked. Unsigned metadata cannot become trusted.
 - Runner compliance separates actual authenticated identity, declarative
@@ -99,8 +104,10 @@ Last completed session: **33**
 - Production Runner artifacts currently target Windows x64. The trusted public
   key registry is intentionally empty until deployment supplies reviewed public
   keys.
-- Runner update has no discovery/download, background update, schema migration,
-  remote installation or remote rollback. Existing unmanaged installations
-  need a separately controlled bootstrap.
+- Runner update has no discovery feed, GitHub polling, background download,
+  automatic install, schema migration, remote installation or remote rollback.
+  The default release-source registry remains empty until deployment supplies
+  a reviewed HTTPS source, and unmanaged installations need a separately
+  controlled bootstrap.
 - Fleet rollout has no percentage/random cohorts, automatic stage promotion,
   auto-remediation or forced downgrade.

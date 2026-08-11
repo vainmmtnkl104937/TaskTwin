@@ -84,6 +84,9 @@ contracts or deterministic domain decisions.
   reconnect, drain, lifecycle and capability derivation.
 - `packages/runner-release` — signed release identity, manifest/signature trust,
   compatibility and upgrade-preflight contracts.
+- `packages/runner-acquisition` — pure trusted-source, acquisition, partial
+  resume, verified-cache and safe-summary contracts; network and filesystem
+  adapters remain in the Local Runner.
 - `packages/runner-update` — pure local update/rollback planning, health,
   recovery and retention decisions.
 - `packages/runner-rollout` — release catalog status, compliance, staged rollout,

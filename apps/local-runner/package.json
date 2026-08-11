@@ -29,6 +29,7 @@
     "@tasktwin/privacy-engine": "workspace:*",
     "@tasktwin/run-protocol": "workspace:*",
     "@tasktwin/runner-protocol": "workspace:*",
+    "@tasktwin/runner-acquisition": "workspace:*",
     "@tasktwin/runner-release": "workspace:*",
     "@tasktwin/runner-service-runtime": "workspace:*",
     "@tasktwin/runner-update": "workspace:*",

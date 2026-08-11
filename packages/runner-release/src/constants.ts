@@ -7,3 +7,4 @@ export const RUNNER_RELEASE_PLATFORM = 'windows';
 export const RUNNER_RELEASE_ARCHITECTURE = 'x64';
 export const RUNNER_RELEASE_ARCHIVE_FORMAT = 'zip';
 export const RUNNER_RELEASE_SIGNATURE_ALGORITHM = 'Ed25519';
+export const RUNNER_RELEASE_ID_PREFIX = 'rr1_' as const;

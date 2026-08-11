@@ -96,11 +96,19 @@ migrations and tests define their exact implementation.
 
 - Unsigned release metadata is never trusted. A release must pass strict
   manifest, trusted-key, detached-signature, digest and compatibility checks.
+- Release acquisition accepts no user-provided URL. Metadata and artifact
+  locations derive only from a static allowlisted HTTPS source and the verified
+  signed manifest.
 - Production signing private keys are never stored in the repository or
   Control Plane.
 - Release history and signed manifest identity are immutable.
+- Partial downloads are isolated and never supplied to update. Resume requires
+  exact signed identity, local byte count, a strong ETag and exact range
+  semantics; final size and SHA-256 verification precede atomic cache promotion.
 - Local update verifies before installation mutation and executes no
   archive-supplied script.
+- Acquisition leaves downloaded files inert and never automatically invokes
+  installation, service mutation, shell execution or rollback.
 - Update drains active work rather than cancelling it solely for maintenance.
 - Rollback requires retained trusted proof and current compatibility; unsafe or
   ambiguous rollback is blocked for manual recovery.
