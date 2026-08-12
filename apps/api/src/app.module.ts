@@ -21,6 +21,7 @@ import { OperationalTelemetryModule } from './operational-telemetry/operational-
 import { OperationsModule } from './operations/operations.module.js';
 import { RunnerReleaseModule } from './runner-release/runner-release.module.js';
 import { RunnerRolloutModule } from './runner-rollout/runner-rollout.module.js';
+import { HttpSecurityModule } from './http-security/http-security.module.js';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { RunnerRolloutModule } from './runner-rollout/runner-rollout.module.js';
     OperationsModule,
     RunnerReleaseModule,
     RunnerRolloutModule,
+    HttpSecurityModule,
   ],
   controllers: [HealthController],
   providers: [HealthService],

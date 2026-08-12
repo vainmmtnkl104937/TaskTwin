@@ -16,21 +16,25 @@ import { CurrentRunLease } from './current-run-lease.decorator.js';
 import type { AuthenticatedRunLease } from './runner-job-lease-context.js';
 import { RunnerJobLeaseGuard } from './runner-job-lease.guard.js';
 import { RunnerJobsService } from './runner-jobs.service.js';
+import { ScopedThrottle } from '../http-security/scoped-throttle.decorator.js';
+import { AuthenticatedRunnerThrottleGuard } from '../http-security/authenticated-runner-throttle.guard.js';
 
 @Controller()
+@ScopedThrottle('runner_standard')
+@UseGuards(RunnerCredentialGuard, AuthenticatedRunnerThrottleGuard)
 export class RunnerJobsController {
   constructor(private readonly service: RunnerJobsService) {}
 
   @Post('runner/jobs/claim')
+  @ScopedThrottle('runner_claim')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RunnerCredentialGuard)
   claim(@CurrentRunner() runner: AuthenticatedRunner, @Body() body: unknown) {
     return this.service.claim(runner, body);
   }
 
   @Post('runner/jobs/:workflowRunId/lease/renew')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  @UseGuards(RunnerJobLeaseGuard)
   renew(
     @CurrentRunner() runner: AuthenticatedRunner,
     @CurrentRunLease() lease: AuthenticatedRunLease,
@@ -40,8 +44,9 @@ export class RunnerJobsController {
   }
 
   @Post('runner/jobs/:workflowRunId/progress')
+  @ScopedThrottle('runner_progress')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  @UseGuards(RunnerJobLeaseGuard)
   progress(
     @CurrentRunner() runner: AuthenticatedRunner,
     @CurrentRunLease() lease: AuthenticatedRunLease,
@@ -52,7 +57,7 @@ export class RunnerJobsController {
 
   @Post('runner/jobs/:workflowRunId/complete')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  @UseGuards(RunnerJobLeaseGuard)
   complete(
     @CurrentRunner() runner: AuthenticatedRunner,
     @CurrentRunLease() lease: AuthenticatedRunLease,
@@ -63,7 +68,7 @@ export class RunnerJobsController {
 
   @Post('runner/jobs/:workflowRunId/approval-requests')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  @UseGuards(RunnerJobLeaseGuard)
   createApproval(
     @CurrentRunner() runner: AuthenticatedRunner,
     @CurrentRunLease() lease: AuthenticatedRunLease,
@@ -73,7 +78,7 @@ export class RunnerJobsController {
   }
 
   @Get('runner/jobs/:workflowRunId/approval-requests/:approvalRequestId')
-  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  @UseGuards(RunnerJobLeaseGuard)
   approvalStatus(
     @CurrentRunner() runner: AuthenticatedRunner,
     @CurrentRunLease() lease: AuthenticatedRunLease,
@@ -84,7 +89,7 @@ export class RunnerJobsController {
 
   @Post('runner/jobs/:workflowRunId/repair-requests')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  @UseGuards(RunnerJobLeaseGuard)
   createRepair(
     @CurrentRunner() runner: AuthenticatedRunner,
     @CurrentRunLease() lease: AuthenticatedRunLease,
@@ -94,7 +99,7 @@ export class RunnerJobsController {
   }
 
   @Get('runner/jobs/:workflowRunId/repair-requests/:repairRequestId')
-  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  @UseGuards(RunnerJobLeaseGuard)
   repairStatus(
     @CurrentRunner() runner: AuthenticatedRunner,
     @CurrentRunLease() lease: AuthenticatedRunLease,
@@ -104,7 +109,7 @@ export class RunnerJobsController {
   }
 
   @Get('runner/jobs/:workflowRunId/locator-repairs/discovery/:repairRequestId')
-  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  @UseGuards(RunnerJobLeaseGuard)
   locatorRepairDiscovery(
     @CurrentRunner() runner: AuthenticatedRunner,
     @CurrentRunLease() lease: AuthenticatedRunLease,
@@ -115,7 +120,7 @@ export class RunnerJobsController {
 
   @Post('runner/jobs/:workflowRunId/locator-repairs')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  @UseGuards(RunnerJobLeaseGuard)
   createLocatorRepair(
     @CurrentRunner() runner: AuthenticatedRunner,
     @CurrentRunLease() lease: AuthenticatedRunLease,
@@ -125,7 +130,7 @@ export class RunnerJobsController {
   }
 
   @Get('runner/jobs/:workflowRunId/locator-repairs/:proposalId/poll')
-  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  @UseGuards(RunnerJobLeaseGuard)
   pollLocatorRepair(
     @CurrentRunner() runner: AuthenticatedRunner,
     @CurrentRunLease() lease: AuthenticatedRunLease,
@@ -138,7 +143,7 @@ export class RunnerJobsController {
     'runner/jobs/:workflowRunId/locator-repairs/:proposalId/candidates/:candidateId/result',
   )
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RunnerCredentialGuard, RunnerJobLeaseGuard)
+  @UseGuards(RunnerJobLeaseGuard)
   locatorRepairResult(
     @CurrentRunner() runner: AuthenticatedRunner,
     @CurrentRunLease() lease: AuthenticatedRunLease,

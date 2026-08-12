@@ -76,7 +76,39 @@ export function getWebReadinessTimeoutMs(): number {
   return value;
 }
 
+function getBoundedInteger(
+  name: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  loadRootEnvironment();
+  const raw = process.env[name];
+  const value = raw === undefined ? fallback : Number(raw);
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new Error(
+      `${name} must be an integer between ${minimum} and ${maximum}.`,
+    );
+  }
+  return value;
+}
+
+export function getControlPlaneRequestTimeoutMs(): number {
+  return getBoundedInteger(
+    'TASKTWIN_CONTROL_PLANE_REQUEST_TIMEOUT_MS',
+    30_000,
+    1_000,
+    120_000,
+  );
+}
+
+export function getSessionMaxAgeSeconds(): number {
+  return getBoundedInteger('TASKTWIN_SESSION_MAX_AGE_SECONDS', 900, 60, 3_600);
+}
+
 export function validateWebEnvironment(): void {
   getControlPlaneOrigin();
   getWebReadinessTimeoutMs();
+  getControlPlaneRequestTimeoutMs();
+  getSessionMaxAgeSeconds();
 }

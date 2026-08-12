@@ -1,30 +1,48 @@
 import 'server-only';
 
 import { cookies } from 'next/headers';
+import { getSessionMaxAgeSeconds } from './environment';
 
 export const ACCESS_TOKEN_COOKIE = 'tasktwin_access_token';
 
-const COOKIE_OPTIONS = {
-  httpOnly: true,
-  sameSite: 'lax',
-  secure: process.env.NODE_ENV === 'production',
-  path: '/',
-} as const;
+export interface AuthCookieOptions {
+  httpOnly: true;
+  sameSite: 'lax';
+  secure: boolean;
+  path: '/';
+  maxAge: number;
+  priority: 'high';
+  expires?: Date;
+}
+
+function cookieOptions(): AuthCookieOptions {
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: getSessionMaxAgeSeconds(),
+    priority: 'high',
+  };
+}
 
 export interface AuthCookieStore {
-  set(name: string, value: string, options: typeof COOKIE_OPTIONS): void;
-  delete(name: string): void;
+  set(name: string, value: string, options: AuthCookieOptions): void;
 }
 
 export function writeAccessTokenCookie(
   store: AuthCookieStore,
   accessToken: string,
 ): void {
-  store.set(ACCESS_TOKEN_COOKIE, accessToken, COOKIE_OPTIONS);
+  store.set(ACCESS_TOKEN_COOKIE, accessToken, cookieOptions());
 }
 
 export function clearAccessTokenCookie(store: AuthCookieStore): void {
-  store.delete(ACCESS_TOKEN_COOKIE);
+  store.set(ACCESS_TOKEN_COOKIE, '', {
+    ...cookieOptions(),
+    maxAge: 0,
+    expires: new Date(0),
+  });
 }
 
 export async function getAccessToken(): Promise<string | null> {

@@ -27,6 +27,8 @@ import { CurrentRunner } from '../runner-auth/current-runner.decorator.js';
 import type { AuthenticatedRunner } from '../runner-auth/runner-authenticated-request.js';
 import { RunnerCredentialGuard } from '../runner-auth/runner-credential.guard.js';
 import { RunnerService } from './runner.service.js';
+import { ScopedThrottle } from '../http-security/scoped-throttle.decorator.js';
+import { AuthenticatedRunnerThrottleGuard } from '../http-security/authenticated-runner-throttle.guard.js';
 
 interface HeaderResponse {
   setHeader(name: string, value: string): void;
@@ -37,8 +39,9 @@ export class RunnerController {
   constructor(private readonly service: RunnerService) {}
 
   @Post('runner/heartbeat')
+  @ScopedThrottle('runner_standard')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RunnerCredentialGuard)
+  @UseGuards(RunnerCredentialGuard, AuthenticatedRunnerThrottleGuard)
   async heartbeat(
     @CurrentRunner() runner: AuthenticatedRunner,
     @Body() body: unknown,
@@ -54,8 +57,9 @@ export class RunnerController {
   }
 
   @Post('runner/secret-inventory')
+  @ScopedThrottle('runner_standard')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RunnerCredentialGuard)
+  @UseGuards(RunnerCredentialGuard, AuthenticatedRunnerThrottleGuard)
   synchronizeSecretInventory(
     @CurrentRunner() runner: AuthenticatedRunner,
     @Body() body: unknown,
@@ -64,8 +68,9 @@ export class RunnerController {
   }
 
   @Post('runner/encryption-keys')
+  @ScopedThrottle('runner_standard')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(RunnerCredentialGuard)
+  @UseGuards(RunnerCredentialGuard, AuthenticatedRunnerThrottleGuard)
   registerEncryptionKey(
     @CurrentRunner() runner: AuthenticatedRunner,
     @Body() body: unknown,

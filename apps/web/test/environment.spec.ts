@@ -55,4 +55,13 @@ describe('web server environment', () => {
     vi.stubEnv('TASKTWIN_ALLOW_HTTP_INTERNAL_API', 'true');
     expect(getControlPlaneOrigin()).toBe('http://api:3001');
   });
+
+  it('bounds session and Control Plane request timeouts', async () => {
+    vi.stubEnv('TASKTWIN_SESSION_MAX_AGE_SECONDS', '3601');
+    const { getSessionMaxAgeSeconds } =
+      await import('@/lib/server/environment');
+    expect(() => getSessionMaxAgeSeconds()).toThrow(
+      'TASKTWIN_SESSION_MAX_AGE_SECONDS must be an integer between 60 and 3600.',
+    );
+  });
 });

@@ -4,6 +4,7 @@ import {
   getApiHost,
   getApiLogLevels,
   getApiPort,
+  getHttpSecurityConfiguration,
   getJwtAccessConfiguration,
   getRunnerSecurityConfiguration,
 } from './environment.js';
@@ -95,6 +96,32 @@ describe('environment configuration', () => {
 
     expect(() => getRunnerSecurityConfiguration()).toThrow(
       'TASKTWIN_WEB_BASE_URL is required',
+    );
+  });
+
+  it('validates bounded HTTP security settings', () => {
+    process.env.TASKTWIN_WEB_BASE_URL = 'https://tasktwin.example';
+    process.env.TASKTWIN_HTTP_BODY_LIMIT_BYTES = '65536';
+    process.env.TASKTWIN_TRUSTED_PROXY_HOPS = '1';
+
+    expect(getHttpSecurityConfiguration()).toMatchObject({
+      allowedOrigin: 'https://tasktwin.example',
+      bodyLimitBytes: 65_536,
+      trustedProxyHops: 1,
+    });
+  });
+
+  it('rejects unsafe HTTP limits and proxy depth', () => {
+    process.env.TASKTWIN_WEB_BASE_URL = 'https://tasktwin.example';
+    process.env.TASKTWIN_HTTP_BODY_LIMIT_BYTES = '8388608';
+    expect(() => getHttpSecurityConfiguration()).toThrow(
+      'TASKTWIN_HTTP_BODY_LIMIT_BYTES must be an integer between 16384 and 4194304',
+    );
+
+    process.env.TASKTWIN_HTTP_BODY_LIMIT_BYTES = '65536';
+    process.env.TASKTWIN_TRUSTED_PROXY_HOPS = '3';
+    expect(() => getHttpSecurityConfiguration()).toThrow(
+      'TASKTWIN_TRUSTED_PROXY_HOPS must be an integer between 0 and 2',
     );
   });
 });
