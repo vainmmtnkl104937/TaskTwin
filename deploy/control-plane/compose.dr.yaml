@@ -1,0 +1,117 @@
+services:
+  postgres-restore:
+    image: postgres:17.10-alpine
+    profiles: [dr]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${TASKTWIN_RESTORE_DATABASE_NAME:-tasktwin_restore}
+    secrets: [postgres_password]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    volumes: [tasktwin-restore-postgres:/var/lib/postgresql/data]
+    networks: [backend]
+    restart: 'no'
+    stop_grace_period: 60s
+
+  backup:
+    image: postgres:17.10-alpine
+    profiles: [dr]
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      TASKTWIN_POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      TASKTWIN_BACKUP_ROOT: /backups
+      TASKTWIN_BACKUP_REASON: ${TASKTWIN_BACKUP_REASON:-manual}
+    secrets: [postgres_password]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ['sh', '/dr/backup.sh']
+    volumes:
+      - ./deploy/control-plane/dr:/dr:ro
+      - ${TASKTWIN_BACKUP_DIRECTORY:?Set TASKTWIN_BACKUP_DIRECTORY}:/backups
+    networks: [backend]
+    read_only: true
+    restart: 'no'
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    tmpfs:
+      - '/tmp:size=16m,mode=0700,noexec,nosuid,nodev'
+
+  restore:
+    image: postgres:17.10-alpine
+    profiles: [dr]
+    environment:
+      PGHOST: ${TASKTWIN_RESTORE_DATABASE_HOST:-postgres-restore}
+      PGPORT: ${TASKTWIN_RESTORE_DATABASE_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_DB: ${TASKTWIN_RESTORE_DATABASE_NAME:-tasktwin_restore}
+      TASKTWIN_RESTORE_CONFIRM_DATABASE: ${TASKTWIN_RESTORE_CONFIRM_DATABASE:-__confirmation_required__}
+      TASKTWIN_RESTORE_BACKUP_REF: ${TASKTWIN_RESTORE_BACKUP_REF:-__backup_ref_required__}
+      TASKTWIN_POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      TASKTWIN_BACKUP_ROOT: /backups
+    secrets: [postgres_password]
+    depends_on:
+      postgres-restore:
+        condition: service_healthy
+    command: ['sh', '/dr/restore.sh']
+    volumes:
+      - ./deploy/control-plane/dr:/dr:ro
+      - ${TASKTWIN_BACKUP_DIRECTORY:?Set TASKTWIN_BACKUP_DIRECTORY}:/backups:ro
+    networks: [backend]
+    read_only: true
+    restart: 'no'
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    tmpfs:
+      - '/tmp:size=16m,mode=0700,noexec,nosuid,nodev'
+
+  migrate-restore:
+    image: ${TASKTWIN_IMAGE_PREFIX:-tasktwin}/migrate:${TASKTWIN_IMAGE_TAG:-local}
+    profiles: [dr]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL_FILE: /run/secrets/restore_database_url
+    secrets: [restore_database_url]
+    command: ['node', 'scripts/migrate-deploy.mjs']
+    networks: [backend]
+    read_only: true
+    restart: 'no'
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    tmpfs:
+      - '/tmp:size=16m,mode=0700,noexec,nosuid,nodev'
+
+  verify-restore:
+    image: ${TASKTWIN_IMAGE_PREFIX:-tasktwin}/migrate:${TASKTWIN_IMAGE_TAG:-local}
+    profiles: [dr]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL_FILE: /run/secrets/restore_database_url
+      TASKTWIN_RESTORE_REQUIRE_RECOVERED_RUNS: ${TASKTWIN_RESTORE_REQUIRE_RECOVERED_RUNS:-false}
+    secrets: [restore_database_url]
+    depends_on:
+      migrate-restore:
+        condition: service_completed_successfully
+    command: ['node', 'scripts/verify-restored-database.mjs']
+    networks: [backend]
+    read_only: true
+    restart: 'no'
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    tmpfs:
+      - '/tmp:size=16m,mode=0700,noexec,nosuid,nodev'
+
+secrets:
+  restore_database_url:
+    file: ${TASKTWIN_RESTORE_DATABASE_URL_FILE:?Set TASKTWIN_RESTORE_DATABASE_URL_FILE}
+
+volumes:
+  tasktwin-restore-postgres:

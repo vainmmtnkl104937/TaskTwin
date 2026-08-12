@@ -17,3 +17,4 @@ Thumbs.db
 apps/local-runner/windows/vendor/**/*.exe
 .release-work/
 runner-release-output/
+deploy/control-plane/backups/

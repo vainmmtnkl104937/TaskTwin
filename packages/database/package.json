@@ -18,6 +18,7 @@
     "db:migrate:deploy": "node scripts/migrate-deploy.mjs",
     "db:reset": "node scripts/reset-development-database.mjs",
     "db:status": "prisma migrate status",
+    "dr:verify": "node scripts/verify-restored-database.mjs",
     "lint": "eslint .",
     "perf:baseline": "node scripts/performance-baseline.mjs",
     "test": "vitest run --exclude test/**/*.integration.spec.ts",

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 import { ReleaseManifestSchema } from '@tasktwin/runner-release';
 import {
@@ -8,7 +8,6 @@ import {
 } from '@tasktwin/runner-rollout';
 
 import { Prisma, type PrismaClient } from '../generated/prisma/client.js';
-import { createCanonicalJsonDigest } from '../recording/canonical-json.js';
 import { appendAuditEventTransactional } from '../audit-trail/audit-appender.repository.js';
 import { WorkspaceAuditTrailRepository } from '../audit-trail/audit-trail.repository.js';
 import type { OperationalAlertTransactionAppender } from '../operational-alerts/operational-alert-port.js';
@@ -17,8 +16,12 @@ import type {
   RunnerReleaseRecord,
   TrustedRunnerReleaseImport,
 } from './runner-release-records.js';
+import {
+  createRunnerReleaseSystemAuditHash,
+  RUNNER_RELEASE_SYSTEM_AUDIT_SCOPE,
+} from './system-audit-hash.js';
 
-const SYSTEM_AUDIT_SCOPE = 'runner-release-catalog';
+const SYSTEM_AUDIT_SCOPE = RUNNER_RELEASE_SYSTEM_AUDIT_SCOPE;
 
 function toRecord(row: {
   id: string;
@@ -72,7 +75,17 @@ async function appendSystemAudit(input: {
       scope_sourceId: { scope: SYSTEM_AUDIT_SCOPE, sourceId: input.sourceId },
     },
   });
-  const payloadDigest = createCanonicalJsonDigest(input.payload);
+  const payloadDigest = createRunnerReleaseSystemAuditHash({
+    scope: SYSTEM_AUDIT_SCOPE,
+    sequence: 1,
+    eventType: input.eventType,
+    actorUserId: input.actorUserId,
+    releaseId: input.releaseId,
+    occurredAt: input.occurredAt,
+    sourceId: input.sourceId,
+    payload: input.payload,
+    previousHash: '0'.repeat(64),
+  }).payloadDigest;
   if (existing !== null) {
     if (existing.payloadDigest !== payloadDigest) {
       throw new RunnerReleaseRepositoryError('RELEASE_IMPORT_CONFLICT');
@@ -90,22 +103,17 @@ async function appendSystemAudit(input: {
   if (head === undefined)
     throw new Error('System audit chain head unavailable.');
   const sequence = head.last_sequence + 1;
-  const eventHash = createHash('sha256')
-    .update(
-      JSON.stringify({
-        scope: SYSTEM_AUDIT_SCOPE,
-        sequence,
-        eventType: input.eventType,
-        actorUserId: input.actorUserId,
-        releaseId: input.releaseId,
-        occurredAt: input.occurredAt.toISOString(),
-        sourceId: input.sourceId,
-        payloadDigest,
-        previousHash: head.last_event_hash,
-      }),
-      'utf8',
-    )
-    .digest('hex');
+  const { eventHash } = createRunnerReleaseSystemAuditHash({
+    scope: SYSTEM_AUDIT_SCOPE,
+    sequence,
+    eventType: input.eventType,
+    actorUserId: input.actorUserId,
+    releaseId: input.releaseId,
+    occurredAt: input.occurredAt,
+    sourceId: input.sourceId,
+    payload: input.payload,
+    previousHash: head.last_event_hash,
+  });
   await input.tx.systemAuditEvent.create({
     data: {
       id: randomUUID(),

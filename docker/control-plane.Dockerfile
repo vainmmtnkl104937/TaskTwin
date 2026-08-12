@@ -25,6 +25,8 @@ RUN pnpm --filter @tasktwin/api... \
 RUN pnpm --filter @tasktwin/api deploy --prod --legacy /output/api \
     && pnpm --filter @tasktwin/notification-worker deploy --prod --legacy /output/notification-worker \
     && pnpm --filter @tasktwin/database deploy --legacy /output/migrate \
+    && rm -f /output/migrate/scripts/seed-drill-database.mjs \
+      /output/migrate/scripts/verify-drill-recovery.mjs \
     && for output in /output/api /output/notification-worker /output/migrate; do \
       rm -rf "$output/src" "$output/test" "$output/coverage"; \
       for package in "$output"/node_modules/@tasktwin/*; do \
