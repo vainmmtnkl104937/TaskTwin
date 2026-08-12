@@ -136,11 +136,39 @@ export class RunnerReleaseRepository {
     private readonly operationalAlerts?: OperationalAlertTransactionAppender,
   ) {}
 
-  async list(): Promise<RunnerReleaseRecord[]> {
+  async list(
+    input: {
+      limit: number;
+      cursor?: { builtAt: Date; id: string };
+    } = { limit: 50 },
+  ): Promise<{
+    releases: RunnerReleaseRecord[];
+    nextCursor: { builtAt: Date; id: string } | null;
+  }> {
     const releases = await this.prisma.runnerRelease.findMany({
+      ...(input.cursor === undefined
+        ? {}
+        : {
+            where: {
+              OR: [
+                { builtAt: { lt: input.cursor.builtAt } },
+                { builtAt: input.cursor.builtAt, id: { gt: input.cursor.id } },
+              ],
+            },
+          }),
       orderBy: [{ builtAt: 'desc' }, { id: 'asc' }],
+      take: input.limit + 1,
     });
-    return releases.map(toRecord);
+    const hasMore = releases.length > input.limit;
+    const page = releases.slice(0, input.limit);
+    const last = page.at(-1);
+    return {
+      releases: page.map(toRecord),
+      nextCursor:
+        hasMore && last !== undefined
+          ? { builtAt: last.builtAt, id: last.id }
+          : null,
+    };
   }
 
   async get(id: string): Promise<RunnerReleaseRecord | null> {

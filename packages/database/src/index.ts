@@ -130,6 +130,7 @@ export type {
   ProgressBatchResult,
   WorkflowRunAccess,
   WorkflowRunListRecord,
+  WorkflowRunListItemRecord,
   WorkflowRunRecord,
   WorkflowRunStepRecord,
 } from './workflow-run/workflow-run-records.js';

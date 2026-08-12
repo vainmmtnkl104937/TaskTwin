@@ -35,7 +35,13 @@ export interface WorkflowScheduleOccurrenceRecord {
   workflowRunId: string | null;
   scheduledFor: Date;
   startDeadlineAt: Date;
-  status: 'PENDING' | 'DISPATCHED' | 'SUCCEEDED' | 'SKIPPED' | 'TIMED_OUT' | 'CANCELLED';
+  status:
+    | 'PENDING'
+    | 'DISPATCHED'
+    | 'SUCCEEDED'
+    | 'SKIPPED'
+    | 'TIMED_OUT'
+    | 'CANCELLED';
   skipReason: string | null;
   skippedAt: Date | null;
   dispatchedAt: Date | null;

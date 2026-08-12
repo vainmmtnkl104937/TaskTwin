@@ -41,4 +41,41 @@ describe('SchedulerService lifecycle', () => {
     expect(heartbeat.register).toHaveBeenCalledOnce();
     expect(heartbeat.stop).toHaveBeenCalledOnce();
   });
+
+  it('bounds parallel schedule dispatch to ten operations', async () => {
+    let active = 0;
+    let maximum = 0;
+    const schedules = {
+      selectDueSchedules: vi.fn().mockResolvedValue(
+        Array.from({ length: 25 }, (_, index) => ({
+          scheduleId: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+          workspaceId: '00000000-0000-4000-8000-000000000001',
+          nextOccurrenceAt: new Date(),
+        })),
+      ),
+      processOccurrence: vi.fn(async () => {
+        active += 1;
+        maximum = Math.max(maximum, active);
+        await Promise.resolve();
+        active -= 1;
+        return null;
+      }),
+    };
+    const heartbeat = {
+      register: vi.fn(),
+      refresh: vi.fn(),
+      stop: vi.fn(),
+    };
+    const service = new SchedulerService(
+      schedules as unknown as WorkflowScheduleRepository,
+      heartbeat as unknown as ComponentHeartbeatRepository,
+    );
+    await (
+      service as unknown as {
+        processDueSchedules(now: Date): Promise<void>;
+      }
+    ).processDueSchedules(new Date());
+    expect(maximum).toBe(10);
+    expect(schedules.processOccurrence).toHaveBeenCalledTimes(25);
+  });
 });

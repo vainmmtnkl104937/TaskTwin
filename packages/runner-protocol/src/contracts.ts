@@ -257,7 +257,8 @@ export const RunnerDeviceListResponseSchema = z.strictObject({
     role: OrganizationRoleSchema,
     canManage: z.boolean(),
   }),
-  devices: z.array(SafeRunnerDeviceSchema).max(1_000),
+  devices: z.array(SafeRunnerDeviceSchema).max(100),
+  nextCursor: z.string().max(512).nullable(),
 });
 
 export const RunnerDeviceRevokeResponseSchema = z.strictObject({

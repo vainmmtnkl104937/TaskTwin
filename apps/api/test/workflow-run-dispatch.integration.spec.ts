@@ -1027,8 +1027,10 @@ describe('workflow run dispatch integration', () => {
           runnerVersion: '0.1.0',
           claimAttemptId: randomUUID(),
         });
-    const claims = await Promise.all([claimRequest(), claimRequest()]);
-    expect(claims.map((response) => response.status)).toEqual([200, 200]);
+    const claims = await Promise.all(
+      Array.from({ length: 8 }, () => claimRequest()),
+    );
+    expect(claims.every((response) => response.status === 200)).toBe(true);
     const claimed = claims.find(
       (response) => response.body.status === 'claimed',
     );
@@ -1037,7 +1039,7 @@ describe('workflow run dispatch integration', () => {
     ).toHaveLength(1);
     expect(
       claims.filter((response) => response.body.status === 'no_job'),
-    ).toHaveLength(1);
+    ).toHaveLength(7);
     if (claimed === undefined) {
       throw new Error('A concurrent claim must succeed.');
     }

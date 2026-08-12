@@ -38,6 +38,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "turbo run lint",
+    "perf:baseline": "pnpm --filter @tasktwin/database perf:baseline",
     "recording:check": "pnpm --filter @tasktwin/api test:integration:recording",
     "runner-pairing:check": "pnpm --filter @tasktwin/api test:integration:runner-pairing",
     "runner-release:dry-run": "pnpm --filter @tasktwin/local-runner release:dry-run",

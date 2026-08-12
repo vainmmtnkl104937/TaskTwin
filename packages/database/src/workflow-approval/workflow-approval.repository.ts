@@ -369,12 +369,17 @@ export class WorkflowApprovalRepository {
           primaryEntity: { type: 'approval_request', id: created.id },
           relatedEntities: [{ type: 'workflow_run', id: run.id }],
           template: {
-            schemaVersion: 1, templateKey: 'approval_required.v1',
-            approvalRequestId: created.id, workflowRunId: run.id,
-            riskLevel: binding.riskLevel, expiresAt: expiresAt.toISOString(),
+            schemaVersion: 1,
+            templateKey: 'approval_required.v1',
+            approvalRequestId: created.id,
+            workflowRunId: run.id,
+            riskLevel: binding.riskLevel,
+            expiresAt: expiresAt.toISOString(),
           },
           actionTarget: {
-            schemaVersion: 1, kind: 'approval', workspaceId: run.workspaceId,
+            schemaVersion: 1,
+            kind: 'approval',
+            workspaceId: run.workspaceId,
             approvalRequestId: created.id,
           },
         });
@@ -417,9 +422,14 @@ export class WorkflowApprovalRepository {
   async listForWorkspace(
     userId: string,
     workspaceId: string,
+    input: {
+      limit: number;
+      cursor?: { requestedAt: Date; id: string };
+    } = { limit: 50 },
   ): Promise<{
     access: WorkflowApprovalAccess;
     records: WorkflowApprovalRecord[];
+    nextCursor: { requestedAt: Date; id: string } | null;
   }> {
     const membership = await this.prisma.organizationMember.findFirst({
       where: {
@@ -431,24 +441,28 @@ export class WorkflowApprovalRepository {
     if (membership === null) {
       throw new WorkflowApprovalRepositoryError('APPROVAL_FORBIDDEN');
     }
-    const expired = await this.prisma.workflowApprovalRequest.findMany({
+    const rows = await this.prisma.workflowApprovalRequest.findMany({
       where: {
         workflowRun: { workspaceId },
-        status: WorkflowApprovalRequestStatus.PENDING,
-        expiresAt: { lte: new Date() },
+        ...(input.cursor === undefined
+          ? {}
+          : {
+              OR: [
+                { requestedAt: { lt: input.cursor.requestedAt } },
+                {
+                  requestedAt: input.cursor.requestedAt,
+                  id: { gt: input.cursor.id },
+                },
+              ],
+            }),
       },
-      select: { id: true },
-      take: 1000,
-    });
-    for (const request of expired) {
-      await this.expire(request.id, new Date());
-    }
-    const rows = await this.prisma.workflowApprovalRequest.findMany({
-      where: { workflowRun: { workspaceId } },
       orderBy: [{ requestedAt: 'desc' }, { id: 'asc' }],
-      take: 1000,
+      take: input.limit + 1,
       include: approvalInclude,
     });
+    const hasMore = rows.length > input.limit;
+    const page = rows.slice(0, input.limit);
+    const last = page.at(-1);
     return {
       access: {
         userId,
@@ -456,8 +470,26 @@ export class WorkflowApprovalRepository {
         workspaceId,
         role: membership.role,
       },
-      records: rows.map(toRecord),
+      records: page.map(toRecord),
+      nextCursor:
+        hasMore && last !== undefined
+          ? { requestedAt: last.requestedAt, id: last.id }
+          : null,
     };
+  }
+
+  async reconcileExpired(now: Date, limit: number = 100): Promise<number> {
+    const expired = await this.prisma.workflowApprovalRequest.findMany({
+      where: {
+        status: WorkflowApprovalRequestStatus.PENDING,
+        expiresAt: { lte: now },
+      },
+      select: { id: true },
+      orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }],
+      take: Math.max(1, Math.min(100, Math.trunc(limit))),
+    });
+    for (const request of expired) await this.expire(request.id, now);
+    return expired.length;
   }
 
   async getForUser(
@@ -491,6 +523,14 @@ export class WorkflowApprovalRepository {
   }): Promise<WorkflowApprovalDecisionResult> {
     await this.expire(input.approvalRequestId, input.now);
     return this.prisma.$transaction(async (transaction) => {
+      const locked = await transaction.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "workflow_approval_requests"
+        WHERE "id" = ${input.approvalRequestId}::uuid
+        FOR UPDATE
+      `;
+      if (locked.length === 0) {
+        throw new WorkflowApprovalRepositoryError('APPROVAL_NOT_FOUND');
+      }
       const reusedDecision =
         await transaction.workflowApprovalRequest.findUnique({
           where: { clientDecisionId: input.clientDecisionId },
@@ -576,14 +616,15 @@ export class WorkflowApprovalRepository {
           actor: { type: 'user', userId: input.userId },
           approvalRequestId: row.id,
           workflowRunId: row.workflowRunId,
-          decision:
-            input.decision === 'APPROVED' ? 'approved' : 'rejected',
+          decision: input.decision === 'APPROVED' ? 'approved' : 'rejected',
           resolvedAt: input.now,
         }),
       );
       await this.operationalAlerts?.resolve(transaction, {
         workspaceId: row.workflowRun.workspaceId,
-        type: 'approval_required', sourceType: 'approval_request', sourceId: row.id,
+        type: 'approval_required',
+        sourceType: 'approval_request',
+        sourceId: row.id,
         reason: input.decision === 'APPROVED' ? 'approved' : 'rejected',
         resolvedByUserId: input.userId,
       });
@@ -597,6 +638,12 @@ export class WorkflowApprovalRepository {
     terminateRun = true,
   ): Promise<void> {
     await this.prisma.$transaction(async (transaction) => {
+      const locked = await transaction.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "workflow_approval_requests"
+        WHERE "id" = ${approvalRequestId}::uuid
+        FOR UPDATE
+      `;
+      if (locked.length === 0) return;
       const request = await transaction.workflowApprovalRequest.findFirst({
         where: {
           id: approvalRequestId,
@@ -632,7 +679,9 @@ export class WorkflowApprovalRepository {
       );
       await this.operationalAlerts?.resolve(transaction, {
         workspaceId: request.workflowRun.workspaceId,
-        type: 'approval_required', sourceType: 'approval_request', sourceId: request.id,
+        type: 'approval_required',
+        sourceType: 'approval_request',
+        sourceId: request.id,
         reason: 'expired',
       });
       if (!terminateRun) return;
@@ -651,14 +700,24 @@ export class WorkflowApprovalRepository {
       });
       if (timedOutRun.count === 1) {
         await this.operationalAlerts?.append(transaction, {
-          schemaVersion: 1, workspaceId: request.workflowRun.workspaceId, type: 'run_timed_out',
+          schemaVersion: 1,
+          workspaceId: request.workflowRun.workspaceId,
+          type: 'run_timed_out',
           source: { type: 'workflow_run', id: request.workflowRunId },
           primaryEntity: { type: 'workflow_run', id: request.workflowRunId },
           relatedEntities: [{ type: 'approval_request', id: request.id }],
-          template: { schemaVersion: 1, templateKey: 'run_timed_out.v1',
-            workflowRunId: request.workflowRunId, timedOutAt: now.toISOString() },
-          actionTarget: { schemaVersion: 1, kind: 'run', workspaceId: request.workflowRun.workspaceId,
-            workflowRunId: request.workflowRunId },
+          template: {
+            schemaVersion: 1,
+            templateKey: 'run_timed_out.v1',
+            workflowRunId: request.workflowRunId,
+            timedOutAt: now.toISOString(),
+          },
+          actionTarget: {
+            schemaVersion: 1,
+            kind: 'run',
+            workspaceId: request.workflowRun.workspaceId,
+            workflowRunId: request.workflowRunId,
+          },
           creatorUserId: request.workflowRun.createdByUserId,
         });
       }
@@ -708,8 +767,10 @@ export class WorkflowApprovalRepository {
     );
     await this.operationalAlerts?.resolve(transaction, {
       workspaceId: input.workspaceId,
-      type: 'approval_required', sourceType: 'approval_request',
-      sourceId: input.approvalRequestId, reason: input.reason,
+      type: 'approval_required',
+      sourceType: 'approval_request',
+      sourceId: input.approvalRequestId,
+      reason: input.reason,
     });
   }
 }

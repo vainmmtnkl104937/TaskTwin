@@ -9,3 +9,8 @@ export const CreateRunnerRolloutRequestSchema = z.strictObject({
 });
 
 export const StageNumberSchema = z.coerce.number().int().positive().max(10_000);
+
+export const RunnerRolloutListQuerySchema = z.strictObject({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().min(1).max(512).optional(),
+});

@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -84,8 +85,13 @@ export class RunnerController {
   list(
     @CurrentUser() user: AuthenticatedUser,
     @Param('workspaceId') workspaceId: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
   ): Promise<RunnerDeviceListResponse> {
-    return this.service.listDevices(user.id, workspaceId);
+    return this.service.listDevices(user.id, workspaceId, {
+      ...(limit === undefined ? {} : { limit }),
+      ...(cursor === undefined ? {} : { cursor }),
+    });
   }
 
   @Post('runner-devices/:runnerDeviceId/revoke')

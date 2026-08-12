@@ -17,8 +17,13 @@ import {
 
 import {
   CreateRunnerRolloutRequestSchema,
+  RunnerRolloutListQuerySchema,
   StageNumberSchema,
 } from './runner-rollout.contracts.js';
+import {
+  decodeTimeIdCursor,
+  encodeTimeIdCursor,
+} from '../common/time-id-cursor.js';
 
 function rethrow(error: unknown): never {
   if (error instanceof RunnerRolloutError) {
@@ -72,10 +77,40 @@ export class RunnerRolloutService {
     }
   }
 
-  async list(actorUserId: string, workspaceId: string) {
-    const result = await this.repository.list(actorUserId, workspaceId);
+  async list(
+    actorUserId: string,
+    workspaceId: string,
+    rawQuery: { limit?: string; cursor?: string } = {},
+  ) {
+    const query = RunnerRolloutListQuerySchema.safeParse(rawQuery);
+    if (!query.success)
+      throw new BadRequestException({ code: 'ROLLOUT_INVALID' });
+    let cursor: ReturnType<typeof decodeTimeIdCursor> | undefined;
+    try {
+      cursor =
+        query.data.cursor === undefined
+          ? undefined
+          : decodeTimeIdCursor(query.data.cursor);
+    } catch {
+      throw new BadRequestException({ code: 'ROLLOUT_INVALID_CURSOR' });
+    }
+    const result = await this.repository.list(actorUserId, workspaceId, {
+      limit: query.data.limit,
+      ...(cursor === undefined
+        ? {}
+        : { cursor: { createdAt: cursor.time, id: cursor.id } }),
+    });
     if (result === null) throw new NotFoundException();
-    return result;
+    return {
+      ...result,
+      nextCursor:
+        result.nextCursor === null
+          ? null
+          : encodeTimeIdCursor({
+              time: result.nextCursor.createdAt,
+              id: result.nextCursor.id,
+            }),
+    };
   }
 
   async get(actorUserId: string, rolloutId: string) {

@@ -39,7 +39,6 @@ import type { RunnerSoftwareIdentity } from '@tasktwin/runner-release';
 import {
   deriveRunnerCompliance,
   observeAssignmentVersion,
-  stageHasConverged,
 } from '@tasktwin/runner-rollout';
 import {
   evaluatePersistedRunnerCompatibility,
@@ -524,6 +523,10 @@ export class RunnerRepository {
   async listRunnerDevices(
     actorUserId: string,
     workspaceId: string,
+    input: {
+      limit: number;
+      cursor?: { createdAt: Date; id: string };
+    } = { limit: 50 },
   ): Promise<RunnerDeviceListRecord | null> {
     const access = await this.resolveWorkspaceAccessWithClient(
       this.prisma,
@@ -534,8 +537,22 @@ export class RunnerRepository {
       return null;
     }
     const devices = await this.prisma.runnerDevice.findMany({
-      where: { workspaceId },
+      where: {
+        workspaceId,
+        ...(input.cursor === undefined
+          ? {}
+          : {
+              OR: [
+                { createdAt: { lt: input.cursor.createdAt } },
+                {
+                  createdAt: input.cursor.createdAt,
+                  id: { gt: input.cursor.id },
+                },
+              ],
+            }),
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      take: input.limit + 1,
       select: {
         id: true,
         workspaceId: true,
@@ -570,6 +587,9 @@ export class RunnerRepository {
         },
       },
     });
+    const hasMore = devices.length > input.limit;
+    const page = devices.slice(0, input.limit);
+    const last = page.at(-1);
     const actualReleases =
       this.prisma.runnerRelease === undefined
         ? []
@@ -577,7 +597,7 @@ export class RunnerRepository {
             where: {
               product: 'tasktwin-runner',
               version: {
-                in: [...new Set(devices.map((device) => device.runnerVersion))],
+                in: [...new Set(page.map((device) => device.runnerVersion))],
               },
             },
             select: { version: true, status: true },
@@ -588,13 +608,17 @@ export class RunnerRepository {
     return {
       workspaceId,
       access,
-      devices: devices.map((device) =>
+      devices: page.map((device) =>
         toDeviceRecord({
           ...device,
           actualReleaseStatus:
             actualStatusByVersion.get(device.runnerVersion) ?? null,
         }),
       ),
+      nextCursor:
+        hasMore && last !== undefined
+          ? { createdAt: last.createdAt, id: last.id }
+          : null,
     };
   }
 
@@ -1177,8 +1201,25 @@ export class RunnerRepository {
     | 'cancelled'
     | null
   > {
-    const assignment = input.assignment;
-    if (assignment === null) return null;
+    const assignmentSnapshot = input.assignment;
+    if (assignmentSnapshot === null) return null;
+    const locked = await input.transaction.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "runner_release_rollout_assignments"
+      WHERE "id" = ${assignmentSnapshot.id}::uuid
+      FOR UPDATE
+    `;
+    if (locked.length === 0) return null;
+    const current =
+      await input.transaction.runnerReleaseRolloutAssignment.findUnique({
+        where: { id: assignmentSnapshot.id },
+        select: { status: true, baselineVersion: true },
+      });
+    if (current === null) return null;
+    const assignment = {
+      ...assignmentSnapshot,
+      status: current.status,
+      baselineVersion: current.baselineVersion,
+    };
     const observation = observeAssignmentVersion({
       assignmentStatus: assignment.status,
       targetVersion: assignment.stage.rollout.targetRelease.version,
@@ -1226,12 +1267,11 @@ export class RunnerRepository {
           observedAt: input.observedAt,
         },
       });
-      const statuses =
-        await input.transaction.runnerReleaseRolloutAssignment.findMany({
-          where: { stageId: assignment.stage.id },
-          select: { status: true },
+      const notConverged =
+        await input.transaction.runnerReleaseRolloutAssignment.count({
+          where: { stageId: assignment.stage.id, status: { not: 'converged' } },
         });
-      if (stageHasConverged(statuses.map((value) => value.status))) {
+      if (notConverged === 0) {
         await input.transaction.runnerReleaseRolloutStage.update({
           where: { id: assignment.stage.id },
           data: { status: 'completed', completedAt: input.observedAt },
@@ -1248,23 +1288,17 @@ export class RunnerRepository {
             where: { id: assignment.stage.rollout.id },
             data: { status: 'completed', completedAt: input.observedAt },
           });
-          const completedAssignments =
-            await input.transaction.runnerReleaseRolloutAssignment.findMany({
-              where: { rolloutId: assignment.stage.rollout.id },
-              select: { id: true, runnerDeviceId: true },
-            });
-          for (const completed of completedAssignments) {
-            await input.transaction.runnerDevice.updateMany({
-              where: {
-                id: completed.runnerDeviceId,
-                desiredRolloutAssignmentId: completed.id,
-              },
-              data: {
-                desiredRolloutAssignmentId: null,
-                desiredAssignedAt: null,
-              },
-            });
-          }
+          await input.transaction.$executeRaw`
+            UPDATE "runner_devices" AS runner
+            SET "desired_rollout_assignment_id" = NULL,
+                "desired_assigned_at" = NULL,
+                "updated_at" = clock_timestamp()
+            WHERE runner."desired_rollout_assignment_id" IN (
+              SELECT assignment."id"
+              FROM "runner_release_rollout_assignments" assignment
+              WHERE assignment."rollout_id" = ${assignment.stage.rollout.id}::uuid
+            )
+          `;
         }
       }
     }

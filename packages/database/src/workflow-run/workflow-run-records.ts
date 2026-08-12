@@ -65,6 +65,11 @@ export interface WorkflowRunRecord {
   outputs: WorkflowRunOutputRecord[];
 }
 
+export type WorkflowRunListItemRecord = Omit<
+  WorkflowRunRecord,
+  'steps' | 'outputs'
+> & { stepCount: number };
+
 export interface WorkflowRunAccess {
   organizationId: string;
   userId: string;
@@ -132,5 +137,6 @@ export interface CompletionInput {
 export interface WorkflowRunListRecord {
   workspaceId: string;
   access: WorkflowRunAccess;
-  runs: WorkflowRunRecord[];
+  runs: WorkflowRunListItemRecord[];
+  nextCursor: { createdAt: Date; id: string } | null;
 }

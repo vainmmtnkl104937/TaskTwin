@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { OrganizationRole } from '@tasktwin/database';
@@ -42,8 +43,13 @@ export class WorkflowApprovalsController {
   list(
     @CurrentUser() user: AuthenticatedUser,
     @Param('workspaceId') workspaceId: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
   ) {
-    return this.service.list(user.id, workspaceId);
+    return this.service.list(user.id, workspaceId, {
+      ...(limit === undefined ? {} : { limit }),
+      ...(cursor === undefined ? {} : { cursor }),
+    });
   }
 
   @Get('approval-requests/:approvalRequestId')

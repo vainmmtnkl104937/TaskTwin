@@ -126,18 +126,47 @@ export class RunnerRolloutRepository {
   async list(
     actorUserId: string,
     workspaceId: string,
+    input: {
+      limit: number;
+      cursor?: { createdAt: Date; id: string };
+    } = { limit: 50 },
   ): Promise<{
     access: RunnerRolloutAccess;
     rollouts: RunnerRolloutRecord[];
+    nextCursor: { createdAt: Date; id: string } | null;
   } | null> {
     const access = await this.resolveWorkspaceAccess(actorUserId, workspaceId);
     if (access === null) return null;
     const rows = await this.prisma.runnerReleaseRollout.findMany({
-      where: { workspaceId },
+      where: {
+        workspaceId,
+        ...(input.cursor === undefined
+          ? {}
+          : {
+              OR: [
+                { createdAt: { lt: input.cursor.createdAt } },
+                {
+                  createdAt: input.cursor.createdAt,
+                  id: { gt: input.cursor.id },
+                },
+              ],
+            }),
+      },
       include: rolloutInclude,
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      take: input.limit + 1,
     });
-    return { access, rollouts: rows.map(toRecord) };
+    const hasMore = rows.length > input.limit;
+    const page = rows.slice(0, input.limit);
+    const last = page.at(-1);
+    return {
+      access,
+      rollouts: page.map(toRecord),
+      nextCursor:
+        hasMore && last !== undefined
+          ? { createdAt: last.createdAt, id: last.id }
+          : null,
+    };
   }
 
   async get(
@@ -285,6 +314,14 @@ export class RunnerRolloutRepository {
     stageNumber: number;
   }): Promise<RunnerRolloutRecord> {
     return this.runSerializable(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "runner_release_rollouts"
+        WHERE "id" = ${input.rolloutId}::uuid
+        FOR UPDATE
+      `;
+      if (locked.length === 0) {
+        throw new RunnerRolloutRepositoryError('ROLLOUT_NOT_FOUND');
+      }
       const rollout = await tx.runnerReleaseRollout.findUnique({
         where: { id: input.rolloutId },
         include: {
@@ -438,6 +475,14 @@ export class RunnerRolloutRepository {
     action: 'activate' | 'pause' | 'cancel';
   }): Promise<RunnerRolloutRecord> {
     return this.runSerializable(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "runner_release_rollouts"
+        WHERE "id" = ${input.rolloutId}::uuid
+        FOR UPDATE
+      `;
+      if (locked.length === 0) {
+        throw new RunnerRolloutRepositoryError('ROLLOUT_NOT_FOUND');
+      }
       const rollout = await tx.runnerReleaseRollout.findUnique({
         where: { id: input.rolloutId },
         include: { targetRelease: true },

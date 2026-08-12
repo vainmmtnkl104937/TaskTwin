@@ -560,6 +560,7 @@ model OperationalComponentHeartbeat {
   latestHeartbeatAt DateTime                 @map("latest_heartbeat_at") @db.Timestamptz(3)
   gracefulStoppedAt DateTime?                @map("graceful_stopped_at") @db.Timestamptz(3)
 
+  @@index([componentType, gracefulStoppedAt, latestHeartbeatAt(sort: Desc)], map: "operational_component_heartbeats_component_state_latest_idx")
   @@map("operational_component_heartbeats")
 }
 
@@ -661,6 +662,7 @@ model RunnerDevice {
   rolloutAssignments         RunnerReleaseRolloutAssignment[] @relation("RunnerRolloutAssignments")
 
   @@index([workspaceId, revokedAt, lastSeenAt], map: "runner_devices_workspace_id_revoked_at_last_seen_at_idx")
+  @@index([workspaceId, createdAt(sort: Desc), id], map: "runner_devices_workspace_created_id_idx")
   @@index([revokedById], map: "runner_devices_revoked_by_id_idx")
   @@index([desiredReleaseId], map: "runner_devices_desired_release_id_idx")
   @@map("runner_devices")
@@ -687,6 +689,7 @@ model RunnerRelease {
 
   @@unique([product, version], map: "runner_releases_product_version_key")
   @@index([status, createdAt], map: "runner_releases_status_created_at_idx")
+  @@index([builtAt(sort: Desc), id], map: "runner_releases_built_id_idx")
   @@map("runner_releases")
 }
 
@@ -715,6 +718,7 @@ model RunnerReleaseRollout {
 
   @@unique([workspaceId, clientRolloutId], map: "runner_release_rollouts_workspace_client_key")
   @@index([workspaceId, status, createdAt], map: "runner_release_rollouts_workspace_status_created_idx")
+  @@index([workspaceId, createdAt(sort: Desc), id], map: "runner_release_rollouts_workspace_created_id_idx")
   @@index([targetReleaseId, status], map: "runner_release_rollouts_target_status_idx")
   @@map("runner_release_rollouts")
 }
@@ -932,6 +936,7 @@ model WorkflowRun {
   @@unique([scheduleId], map: "workflow_runs_schedule_active_scheduled_key")
   @@index([runnerDeviceId, status, createdAt], map: "workflow_runs_runner_device_id_status_created_at_idx")
   @@index([workspaceId, createdAt], map: "workflow_runs_workspace_id_created_at_idx")
+  @@index([workspaceId, createdAt(sort: Desc), id], map: "workflow_runs_workspace_created_id_idx")
   @@index([workspaceId, status, finishedAt], map: "workflow_runs_workspace_status_finished_idx")
   @@index([workflowId, createdAt], map: "workflow_runs_workflow_id_created_at_idx")
   @@index([workflowVersionId, createdAt], map: "workflow_runs_workflow_version_id_created_at_idx")
@@ -1510,5 +1515,7 @@ model WorkspaceAuditEvent {
   @@index([workspaceId, eventType], map: "workspace_audit_events_workspace_event_type_idx")
   @@index([primaryEntityKind, primaryEntityId], map: "workspace_audit_events_entity_idx")
   @@index([correlationId], map: "workspace_audit_events_correlation_id_idx")
+  @@index([workspaceId, primaryEntityKind, primaryEntityId, sequence], map: "workspace_audit_events_workspace_entity_sequence_idx")
+  @@index([workspaceId, correlationId, sequence], map: "workspace_audit_events_workspace_correlation_sequence_idx")
   @@map("workspace_audit_events")
 }

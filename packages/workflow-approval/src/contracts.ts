@@ -152,7 +152,8 @@ export const ApprovalRequestListResponseSchema = z.strictObject({
     role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']),
     canDecide: z.boolean(),
   }),
-  requests: z.array(SafeApprovalRequestSchema).max(1000),
+  requests: z.array(SafeApprovalRequestSchema).max(100),
+  nextCursor: z.string().max(512).nullable(),
 });
 
 export const ApprovalRequestDetailResponseSchema = z.strictObject({

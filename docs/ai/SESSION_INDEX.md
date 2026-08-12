@@ -39,3 +39,4 @@ specific historical design question unresolved.
 34 [Secure Runner release acquisition](../sessions/session-34.md)
 35 [Production Control Plane deployment](../sessions/session-35.md)
 36 [Control Plane security hardening](../sessions/session-36.md)
+37 [Performance and concurrency hardening](../sessions/session-37.md)

@@ -39,6 +39,16 @@ import {
 } from '@tasktwin/secure-run-inputs';
 
 import type { AuthenticatedRunner } from '../runner-auth/runner-authenticated-request.js';
+import { z } from 'zod';
+import {
+  decodeTimeIdCursor,
+  encodeTimeIdCursor,
+} from '../common/time-id-cursor.js';
+
+const RunnerListQuerySchema = z.strictObject({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().min(1).max(512).optional(),
+});
 
 function safeDevice(record: RunnerDeviceRecord, now: Date) {
   const compatibility = evaluatePersistedRunnerCompatibility({
@@ -246,10 +256,29 @@ export class RunnerService {
   async listDevices(
     actorUserId: string,
     workspaceId: string,
+    rawQuery: { limit?: string; cursor?: string } = {},
   ): Promise<RunnerDeviceListResponse> {
+    const query = RunnerListQuerySchema.safeParse(rawQuery);
+    if (!query.success)
+      throw new BadRequestException('Invalid Runner list query.');
+    let cursor: ReturnType<typeof decodeTimeIdCursor> | undefined;
+    try {
+      cursor =
+        query.data.cursor === undefined
+          ? undefined
+          : decodeTimeIdCursor(query.data.cursor);
+    } catch {
+      throw new BadRequestException('Invalid Runner list cursor.');
+    }
     const result = await this.repository.listRunnerDevices(
       actorUserId,
       workspaceId,
+      {
+        limit: query.data.limit,
+        ...(cursor === undefined
+          ? {}
+          : { cursor: { createdAt: cursor.time, id: cursor.id } }),
+      },
     );
     if (result === null) {
       throw new NotFoundException();
@@ -264,6 +293,13 @@ export class RunnerService {
           result.access.role === 'OWNER' || result.access.role === 'ADMIN',
       },
       devices: result.devices.map((device) => safeDevice(device, now)),
+      nextCursor:
+        result.nextCursor === null
+          ? null
+          : encodeTimeIdCursor({
+              time: result.nextCursor.createdAt,
+              id: result.nextCursor.id,
+            }),
     });
   }
 

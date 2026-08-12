@@ -125,6 +125,7 @@ function activationFixture(input?: {
   const assignmentUpdate = vi.fn(async () => undefined);
   const stageUpdate = vi.fn(async () => undefined);
   const transaction = {
+    $queryRaw: vi.fn(async () => [{ id: rolloutId }]),
     organizationMember: {
       findFirst: vi.fn(async () => ({ userId: current.createdByUserId })),
     },

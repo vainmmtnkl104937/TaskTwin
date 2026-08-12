@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { OrganizationRole } from '@tasktwin/database';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
@@ -44,8 +52,13 @@ export class RunnerRolloutController {
   list(
     @CurrentUser() user: AuthenticatedUser,
     @Param('workspaceId') workspaceId: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
   ) {
-    return this.service.list(user.id, workspaceId);
+    return this.service.list(user.id, workspaceId, {
+      ...(limit === undefined ? {} : { limit }),
+      ...(cursor === undefined ? {} : { cursor }),
+    });
   }
 
   @Get('runner-rollouts/:id')

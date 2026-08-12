@@ -872,14 +872,13 @@ export class WorkflowScheduleRepository {
   async listByWorkspace(
     actorUserId: string,
     workspaceId: string,
-    _now: Date,
+    input: { limit: number; cursor?: { createdAt: Date; id: string } },
   ): Promise<{
     workspaceId: string;
     access: WorkflowScheduleAccess;
     schedules: WorkflowScheduleRecord[];
-    nextCursor: string | null;
+    nextCursor: { createdAt: Date; id: string } | null;
   } | null> {
-    void _now;
     const access = await this.resolveWorkspaceAccess(
       this.prisma,
       actorUserId,
@@ -892,18 +891,34 @@ export class WorkflowScheduleRepository {
       where: {
         workspaceId,
         status: { not: WorkflowScheduleStatus.ARCHIVED },
+        ...(input.cursor === undefined
+          ? {}
+          : {
+              OR: [
+                { createdAt: { lt: input.cursor.createdAt } },
+                {
+                  createdAt: input.cursor.createdAt,
+                  id: { gt: input.cursor.id },
+                },
+              ],
+            }),
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-      take: 100,
+      take: input.limit + 1,
     });
+    const hasMore = rows.length > input.limit;
+    const page = rows.slice(0, input.limit);
+    const last = page.at(-1);
     return {
       workspaceId,
       access,
-      schedules: rows.map((row) =>
+      schedules: page.map((row) =>
         toScheduleRecord(row as unknown as Record<string, unknown>),
       ),
       nextCursor:
-        rows.length === 100 ? (rows[rows.length - 1]?.id ?? null) : null,
+        hasMore && last !== undefined
+          ? { createdAt: last.createdAt, id: last.id }
+          : null,
     };
   }
 
@@ -911,11 +926,11 @@ export class WorkflowScheduleRepository {
     actorUserId: string,
     scheduleId: string,
     limit: number = 50,
-    beforeCursor?: string,
+    cursor?: { createdAt: Date; id: string },
   ): Promise<{
     access: WorkflowScheduleAccess;
     occurrences: WorkflowScheduleOccurrenceRecord[];
-    nextCursor: string | null;
+    nextCursor: { createdAt: Date; id: string } | null;
   } | null> {
     const schedule = await this.prisma.workflowSchedule.findFirst({
       where: {
@@ -956,25 +971,33 @@ export class WorkflowScheduleRepository {
       role,
     };
 
-    const beforeDate = beforeCursor
-      ? await this.getOccurrenceCreatedAt(beforeCursor)
-      : undefined;
-
     const rows = await this.prisma.workflowScheduleOccurrence.findMany({
       where: {
         scheduleId,
-        ...(beforeDate ? { createdAt: { lt: beforeDate } } : {}),
+        ...(cursor === undefined
+          ? {}
+          : {
+              OR: [
+                { createdAt: { lt: cursor.createdAt } },
+                { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+              ],
+            }),
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit,
+      take: limit + 1,
     });
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    const last = page.at(-1);
     return {
       access,
-      occurrences: rows.map((row) =>
+      occurrences: page.map((row) =>
         toOccurrenceRecord(row as unknown as Record<string, unknown>),
       ),
       nextCursor:
-        rows.length === limit ? (rows[rows.length - 1]?.id ?? null) : null,
+        hasMore && last !== undefined
+          ? { createdAt: last.createdAt, id: last.id }
+          : null,
     };
   }
 
@@ -1259,10 +1282,10 @@ export class WorkflowScheduleRepository {
       const locked = await transaction.$queryRaw<Array<{ id: string }>>`
         SELECT "id" FROM "workflow_schedules"
         WHERE "id" = ${input.scheduleId}::uuid
-        FOR UPDATE
+        FOR UPDATE SKIP LOCKED
       `;
       if (locked.length === 0) {
-        throw new WorkflowScheduleRepositoryError('SCHEDULE_NOT_FOUND');
+        return null;
       }
 
       const schedule = await transaction.workflowSchedule.findUnique({
@@ -2415,17 +2438,6 @@ export class WorkflowScheduleRepository {
           userId,
           role,
         };
-  }
-
-  private async getOccurrenceCreatedAt(occurrenceId: string): Promise<Date> {
-    const occ = await this.prisma.workflowScheduleOccurrence.findUnique({
-      where: { id: occurrenceId },
-      select: { createdAt: true },
-    });
-    if (occ === null) {
-      throw new WorkflowScheduleRepositoryError('OCCURRENCE_NOT_FOUND');
-    }
-    return occ.createdAt;
   }
 
   private async runSerializable<Result>(
