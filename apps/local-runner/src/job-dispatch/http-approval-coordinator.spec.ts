@@ -89,4 +89,27 @@ describe('HttpApprovalCoordinator', () => {
       vi.useRealTimers();
     }
   });
+
+  it('flushes progress before creating the approval request', async () => {
+    vi.useFakeTimers();
+    try {
+      const current = transport('APPROVED');
+      const beforeCreate = vi.fn(async () => undefined);
+      const pending = new HttpApprovalCoordinator(
+        current,
+        credential,
+        request.executionId,
+        'lease-token',
+        beforeCreate,
+      ).awaitApproval(request, new AbortController().signal);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await pending;
+      expect(beforeCreate).toHaveBeenCalledTimes(1);
+      expect(beforeCreate.mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(current.createApprovalRequest).mock.invocationCallOrder[0]!,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

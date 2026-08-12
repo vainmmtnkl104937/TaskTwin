@@ -30,12 +30,14 @@ export class HttpApprovalCoordinator implements WorkflowApprovalCoordinator {
     private readonly credential: StoredRunnerCredential,
     private readonly runId: string,
     private readonly leaseToken: string,
+    private readonly beforeCreate: () => Promise<void> = async () => undefined,
   ) {}
 
   async awaitApproval(
     request: ApprovalCoordinatorRequest,
     signal: AbortSignal,
   ): Promise<ApprovalCoordinatorResult> {
+    await this.beforeCreate();
     const clientRequestId = randomUUID();
     let created: Awaited<
       ReturnType<RunnerJobTransport['createApprovalRequest']>

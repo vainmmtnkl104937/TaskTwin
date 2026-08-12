@@ -116,9 +116,7 @@ function buildWorkflowVersionTransitionInput(input: {
       kind: 'workflow_version',
       id: input.version.id,
     },
-    relatedEntities: [
-      { kind: 'workflow', id: input.version.workflowId },
-    ],
+    relatedEntities: [{ kind: 'workflow', id: input.version.workflowId }],
     occurredAt: input.occurredAt,
     sourceId: input.sourceId,
     payload: {
@@ -595,6 +593,10 @@ export class WorkflowLifecycleRepository {
         current.workspaceId,
         current.definition,
       );
+      const publishedDefinition = WorkflowDefinitionSchema.parse({
+        ...WorkflowDefinitionSchema.parse(current.definition),
+        status: 'published',
+      });
 
       const previousPublished = await transaction.workflowVersion.findMany({
         where: {
@@ -626,6 +628,7 @@ export class WorkflowLifecycleRepository {
         },
         data: {
           status: 'published',
+          definition: publishedDefinition as Prisma.InputJsonValue,
           publishedAt: occurredAt,
           publishedById: actorUserId,
         },
@@ -642,7 +645,7 @@ export class WorkflowLifecycleRepository {
         workflowVersionId,
       );
 
-      const workflowDigest = createCanonicalJsonDigest(current.definition);
+      const workflowDigest = createCanonicalJsonDigest(publishedDefinition);
       for (const archived of previousPublished) {
         await appendAuditEventTransactional(
           transaction,
@@ -1115,19 +1118,16 @@ export class WorkflowLifecycleRepository {
     workspaceId: string,
     definition: unknown,
   ): Promise<PublishReadinessReport> {
-    const storedPolicy = await transaction.workspaceExecutionPolicyVersion.findFirst(
-      {
+    const storedPolicy =
+      await transaction.workspaceExecutionPolicyVersion.findFirst({
         where: { workspaceId, status: 'ACTIVE' },
         select: { definition: true },
-      },
-    );
+      });
     const parsedPolicy = WorkspaceExecutionPolicyDefinitionSchema.safeParse(
       storedPolicy?.definition,
     );
     if (!parsedPolicy.success) {
-      throw new WorkflowLifecycleRepositoryError(
-        'PERSISTED_WORKFLOW_INVALID',
-      );
+      throw new WorkflowLifecycleRepositoryError('PERSISTED_WORKFLOW_INVALID');
     }
     return analyzePublishReadiness(
       definition,

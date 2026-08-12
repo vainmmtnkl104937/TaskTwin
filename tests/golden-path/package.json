@@ -1,0 +1,31 @@
+{
+  "name": "@tasktwin/golden-path-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "test:e2e": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nestjs/common": "11.1.28",
+    "@nestjs/testing": "11.1.28",
+    "@tasktwin/database": "workspace:*",
+    "@tasktwin/local-secret-store": "workspace:*",
+    "@tasktwin/recording-schema": "workspace:*",
+    "@tasktwin/run-protocol": "workspace:*",
+    "@tasktwin/runner-protocol": "workspace:*",
+    "@tasktwin/secure-run-inputs": "workspace:*",
+    "@tasktwin/workflow-schema": "workspace:*",
+    "playwright": "1.62.0"
+  },
+  "devDependencies": {
+    "@tasktwin/config": "workspace:*",
+    "@types/chrome": "0.1.38",
+    "@types/node": "22.19.1",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

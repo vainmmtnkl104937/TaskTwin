@@ -130,7 +130,7 @@ describe('WorkflowLifecycleRepository', () => {
     expect(updateMany.mock.calls[0]?.[0].data).not.toHaveProperty('revision');
   });
 
-  it('archives the current Published version and publishes the candidate atomically', async () => {
+  it('archives the current Published version and publishes the candidate definition atomically', async () => {
     const findFirst = vi
       .fn()
       .mockResolvedValueOnce(detailRow('testing'))
@@ -181,6 +181,7 @@ describe('WorkflowLifecycleRepository', () => {
       where: { id: versionId, status: 'testing', revision: 4 },
       data: {
         status: 'published',
+        definition: { ...definition(), status: 'published' },
         publishedAt: occurredAt,
         publishedById: actorUserId,
       },

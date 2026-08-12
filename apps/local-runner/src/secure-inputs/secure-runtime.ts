@@ -79,15 +79,14 @@ export async function acquireLocalSecretRuntime(input: {
       input.runtimeInput.secrets,
       input.signal,
     );
+    const variables = createRuntimeValueResolver({});
     const resolver: WorkflowRuntimeValueResolver = {
-      hasVariable: () => false,
+      hasVariable: variables.hasVariable,
       hasSecret: (name) => secretLease?.has(name) ?? false,
-      resolve: (source) =>
+      resolve: (source, target) =>
         source.kind === 'secret'
           ? requireSecret(secretLease, source.secretName)
-          : (() => {
-              throw new Error('Scheduled local-secret runs cannot use runtime variables.');
-            })(),
+          : variables.resolve(source, target),
     };
     return {
       resolver,

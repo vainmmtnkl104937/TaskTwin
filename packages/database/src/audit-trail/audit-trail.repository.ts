@@ -1,6 +1,8 @@
 import {
   AUDIT_ENTITY_KINDS,
+  AuditSystemReasonSchema,
   type AuditEntityKind,
+  type AuditSystemReason,
 } from '@tasktwin/audit-trail';
 import { createHash } from 'node:crypto';
 
@@ -19,14 +21,8 @@ const ENTITY_KIND_SET: ReadonlySet<AuditEntityKind> = new Set(
   AUDIT_ENTITY_KINDS,
 );
 
-function isActorReason(value: string): value is 'run_cancelled' | 'lease_expired' | 'automatic_expiry' | 'completion_reconciliation' | 'policy_supersede' {
-  return (
-    value === 'run_cancelled' ||
-    value === 'lease_expired' ||
-    value === 'automatic_expiry' ||
-    value === 'completion_reconciliation' ||
-    value === 'policy_supersede'
-  );
+function isActorReason(value: string): value is AuditSystemReason {
+  return AuditSystemReasonSchema.safeParse(value).success;
 }
 
 function isEntityKind(value: string): value is AuditEntityKind {

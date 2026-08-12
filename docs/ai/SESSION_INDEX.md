@@ -41,3 +41,4 @@ specific historical design question unresolved.
 36 [Control Plane security hardening](../sessions/session-36.md)
 37 [Performance and concurrency hardening](../sessions/session-37.md)
 38 [Backup, restore and disaster recovery](../sessions/session-38.md)
+39 Full-system golden-path validation and integration hardening

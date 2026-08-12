@@ -177,6 +177,12 @@ export class WorkflowRunsService {
       case 'FORBIDDEN':
         throw new ForbiddenException();
       case 'RUN_NOT_READY':
+        throw new ConflictException({
+          code: error.code,
+          message:
+            'The secure run input operation conflicts with current state.',
+          ...(error.detail === undefined ? {} : { readiness: error.detail }),
+        });
       case 'CAPABILITY_UNAVAILABLE':
       case 'PREPARATION_EXPIRED':
       case 'PREPARATION_CONFLICT':

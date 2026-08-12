@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:17.10-alpine
+    environment:
+      POSTGRES_USER: tasktwin_e2e
+      POSTGRES_PASSWORD: deterministic-local-e2e-password
+      POSTGRES_DB: tasktwin_e2e
+    ports:
+      - '127.0.0.1:${TASKTWIN_E2E_POSTGRES_PORT}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tasktwin_e2e -d tasktwin_e2e']
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql/data
