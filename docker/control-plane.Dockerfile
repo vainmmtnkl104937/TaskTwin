@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_VERSION=22.13.0
+ARG NODE_VERSION=22.23.2
 
 FROM node:${NODE_VERSION}-bookworm-slim AS base
 RUN apt-get update \

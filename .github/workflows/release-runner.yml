@@ -51,7 +51,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          npm install --global corepack@0.34.5
           corepack enable
+          corepack prepare pnpm@10.34.5 --activate
           pnpm install --frozen-lockfile
 
       - name: Lint
@@ -200,7 +202,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          npm install --global corepack@0.34.5
           corepack enable
+          corepack prepare pnpm@10.34.5 --activate
           pnpm install --frozen-lockfile
           pnpm build
 
