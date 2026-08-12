@@ -22,6 +22,9 @@ contracts or deterministic domain decisions.
 - `docker/control-plane.Dockerfile` and `compose.production.yaml` — separate
   production Control Plane images, migration-gated startup, health wiring,
   persistent PostgreSQL and reverse-proxy-ready networks.
+- `deploy/control-plane/dr`, `deploy/control-plane/compose.dr.yaml` and
+  `docs/disaster-recovery.md` — deterministic PostgreSQL backup, clean restore,
+  retention, restored-state verification and the repeatable DR drill.
 
 ## Recording and privacy
 
@@ -101,7 +104,8 @@ contracts or deterministic domain decisions.
 ## Persistence and foundation
 
 - `packages/database` — Prisma schema/client boundary and framework-independent
-  repositories for Control Plane persistence and transactional mutations.
+  repositories for Control Plane persistence, transactional mutations and
+  offline restored-database/audit verification.
 - `packages/shared-types` — small cross-application shared contracts such as
   service health.
 - `packages/config` — shared strict TypeScript and ESLint configuration.

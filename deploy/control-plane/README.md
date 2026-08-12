@@ -46,8 +46,27 @@ docker compose --env-file /secure/tasktwin/production.env \
 PostgreSQL must become healthy before the one-shot `migrate` service runs
 `prisma migrate deploy`. API, Scheduler and Notification Worker start only
 after migration exits successfully; Web starts after API readiness succeeds.
-A migration failure blocks startup. Back up the database before deployment;
-the baseline never rewrites migration history or attempts automatic rollback.
+A migration failure blocks startup. Run the documented `predeploy` backup
+before every deployment. The baseline never rewrites migration history or
+attempts automatic schema rollback. See `docs/disaster-recovery.md` for the
+backup, restore and drill commands.
+
+## Backup and disaster recovery
+
+`compose.dr.yaml` adds operator-invoked backup, clean restore, restore migration
+and verification jobs. It does not run a background backup scheduler. Configure
+an external scheduler for at least one daily `scheduled` backup and store the
+archive, checksum and metadata off-host in encrypted, access-controlled storage.
+
+```sh
+docker compose --env-file /secure/tasktwin/production.env \
+  -f compose.production.yaml -f deploy/control-plane/compose.dr.yaml \
+  --profile dr run --rm -e TASKTWIN_BACKUP_REASON=predeploy backup
+```
+
+Never mount Local Runner state, release caches or a Local Secret Store into the
+backup container. Database backups exclude local secret values and vault keys,
+but contain sensitive Control Plane metadata and credential hashes.
 
 ## Edge and shutdown behavior
 

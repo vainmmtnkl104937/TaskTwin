@@ -235,3 +235,9 @@ export type {
   RunnerSecretInventoryRecord,
   RunnerSecretInventorySyncResult,
 } from './runner-secret-inventory/runner-secret-inventory-records.js';
+export {
+  verifyRestoredDatabase,
+  RestoredDatabaseVerificationError,
+  type RestoredDatabaseVerificationOptions,
+  type RestoredDatabaseVerificationResult,
+} from './disaster-recovery/restored-database-verifier.js';
