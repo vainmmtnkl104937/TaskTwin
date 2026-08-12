@@ -68,6 +68,7 @@ import type {
   ProgressBatchResult,
   WorkflowRunAccess,
   WorkflowRunListRecord,
+  WorkflowRunListItemRecord,
   WorkflowRunRecord,
 } from './workflow-run-records.js';
 import type { OperationalAlertTransactionAppender } from '../operational-alerts/operational-alert-port.js';
@@ -405,7 +406,7 @@ function buildRunTerminalInput(input: {
       terminalStatus: input.terminalStatus,
       ...(input.terminationCause === undefined
         ? {}
-        : { terminationCause: input.terminationCause }),
+        : { terminationCause: input.terminationCause.toUpperCase() }),
       finishedAt: input.finishedAt.toISOString(),
       ...(input.engineResultDigest === undefined
         ? {}
@@ -641,6 +642,64 @@ const runInclude = {
 } as const satisfies Prisma.WorkflowRunInclude;
 
 type RunRow = Prisma.WorkflowRunGetPayload<{ include: typeof runInclude }>;
+
+const runListSelect = {
+  id: true,
+  workspaceId: true,
+  workflowId: true,
+  workflowVersionId: true,
+  workflowVersion: { select: { version: true } },
+  runnerDeviceId: true,
+  createdByUserId: true,
+  clientRunId: true,
+  status: true,
+  definitionDigest: true,
+  policyVersionId: true,
+  policyDigest: true,
+  policyEvaluation: true,
+  lastProgressSequence: true,
+  createdAt: true,
+  updatedAt: true,
+  claimedAt: true,
+  startedAt: true,
+  cancelRequestedAt: true,
+  finishedAt: true,
+  terminationCause: true,
+  _count: { select: { steps: true } },
+} as const satisfies Prisma.WorkflowRunSelect;
+
+type RunListRow = Prisma.WorkflowRunGetPayload<{
+  select: typeof runListSelect;
+}>;
+
+function toListRecord(row: RunListRow): WorkflowRunListItemRecord {
+  const parsed = WorkflowPolicyEvaluationSchema.safeParse(row.policyEvaluation);
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    workflowId: row.workflowId,
+    workflowVersionId: row.workflowVersionId,
+    workflowVersion: row.workflowVersion.version,
+    runnerDeviceId: row.runnerDeviceId,
+    createdByUserId: row.createdByUserId,
+    clientRunId: row.clientRunId,
+    status: row.status as ProtocolRunStatus,
+    definitionDigest: row.definitionDigest,
+    policyVersionId: row.policyVersionId,
+    policyDigest: row.policyDigest,
+    policyDecision: parsed.success ? parsed.data.overallDecision : null,
+    policyHighestRisk: parsed.success ? parsed.data.highestRisk : null,
+    lastProgressSequence: row.lastProgressSequence,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    claimedAt: row.claimedAt,
+    startedAt: row.startedAt,
+    cancelRequestedAt: row.cancelRequestedAt,
+    finishedAt: row.finishedAt,
+    terminationCause: row.terminationCause,
+    stepCount: row._count.steps,
+  };
+}
 
 function isSerializationError(error: unknown): boolean {
   if (
@@ -2757,7 +2816,10 @@ export class WorkflowRunRepository {
   async listRuns(
     actorUserId: string,
     workspaceId: string,
-    now: Date,
+    input: {
+      limit: number;
+      cursor?: { createdAt: Date; id: string };
+    },
   ): Promise<WorkflowRunListRecord | null> {
     const access = await this.resolveWorkspaceAccess(
       this.prisma,
@@ -2767,24 +2829,54 @@ export class WorkflowRunRepository {
     if (access === null) {
       return null;
     }
-    const expired = await this.prisma.workflowRun.findMany({
+    const rows = await this.prisma.workflowRun.findMany({
       where: {
         workspaceId,
+        ...(input.cursor === undefined
+          ? {}
+          : {
+              OR: [
+                { createdAt: { lt: input.cursor.createdAt } },
+                {
+                  createdAt: input.cursor.createdAt,
+                  id: { gt: input.cursor.id },
+                },
+              ],
+            }),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      take: input.limit + 1,
+      select: runListSelect,
+    });
+    const hasMore = rows.length > input.limit;
+    const page = rows.slice(0, input.limit);
+    const last = page.at(-1);
+    return {
+      workspaceId,
+      access,
+      runs: page.map(toListRecord),
+      nextCursor:
+        hasMore && last !== undefined
+          ? { createdAt: last.createdAt, id: last.id }
+          : null,
+    };
+  }
+
+  async reconcileExpiredLeases(
+    now: Date,
+    limit: number = 100,
+  ): Promise<number> {
+    const expired = await this.prisma.workflowRun.findMany({
+      where: {
         status: { in: [...ACTIVE_STATUSES] },
         leaseExpiresAt: { lte: now },
       },
       select: { id: true },
+      orderBy: [{ leaseExpiresAt: 'asc' }, { id: 'asc' }],
+      take: Math.max(1, Math.min(100, Math.trunc(limit))),
     });
-    for (const run of expired) {
-      await this.expireRunIfRequired(run.id, now);
-    }
-    const rows = await this.prisma.workflowRun.findMany({
-      where: { workspaceId },
-      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-      take: 100,
-      include: runInclude,
-    });
-    return { workspaceId, access, runs: rows.map(toRecord) };
+    for (const run of expired) await this.expireRunIfRequired(run.id, now);
+    return expired.length;
   }
 
   private claimedRecord(

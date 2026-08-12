@@ -53,6 +53,7 @@ export interface RunnerDeviceListRecord {
   workspaceId: string;
   access: RunnerOrganizationAccess;
   devices: RunnerDeviceRecord[];
+  nextCursor: { createdAt: Date; id: string } | null;
 }
 
 export interface RunnerAuthenticationRecord {

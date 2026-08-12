@@ -21,6 +21,7 @@ import {
   UuidSchema,
   WorkflowRunCancellationRequestSchema,
 } from '@tasktwin/run-protocol';
+import { z } from 'zod';
 
 import {
   cancellationResponse,
@@ -29,6 +30,15 @@ import {
   listResponse,
   safeRun,
 } from './workflow-run-response.mapper.js';
+import {
+  decodeTimeIdCursor,
+  encodeTimeIdCursor,
+} from '../common/time-id-cursor.js';
+
+const WorkflowRunListQuerySchema = z.strictObject({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().min(1).max(512).optional(),
+});
 
 function rethrow(error: unknown): never {
   if (!(error instanceof WorkflowRunRepositoryError)) {
@@ -195,16 +205,41 @@ export class WorkflowRunsService {
     }
   }
 
-  async list(actorUserId: string, workspaceId: string) {
-    const result = await this.repository.listRuns(
-      actorUserId,
-      workspaceId,
-      new Date(),
-    );
+  async list(
+    actorUserId: string,
+    workspaceId: string,
+    rawQuery: { limit?: string; cursor?: string } = {},
+  ) {
+    const query = WorkflowRunListQuerySchema.safeParse(rawQuery);
+    if (!query.success)
+      throw new BadRequestException('Invalid run list query.');
+    let cursor: ReturnType<typeof decodeTimeIdCursor> | undefined;
+    try {
+      cursor =
+        query.data.cursor === undefined
+          ? undefined
+          : decodeTimeIdCursor(query.data.cursor);
+    } catch {
+      throw new BadRequestException('Invalid run list cursor.');
+    }
+    const result = await this.repository.listRuns(actorUserId, workspaceId, {
+      limit: query.data.limit,
+      ...(cursor === undefined
+        ? {}
+        : { cursor: { createdAt: cursor.time, id: cursor.id } }),
+    });
     if (result === null) {
       throw new NotFoundException();
     }
-    return listResponse(result);
+    return listResponse(
+      result,
+      result.nextCursor === null
+        ? null
+        : encodeTimeIdCursor({
+            time: result.nextCursor.createdAt,
+            id: result.nextCursor.id,
+          }),
+    );
   }
 
   async detail(actorUserId: string, workflowRunId: string) {

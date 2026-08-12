@@ -50,7 +50,7 @@ import {
   NotificationUnreadCountSchema,
   NotificationReadResponseSchema,
   NotificationReadAllResponseSchema,
-  RunnerReleaseSchema,
+  RunnerReleaseListResponseSchema,
   RunnerRolloutListResponseSchema,
   RunnerRolloutDetailResponseSchema,
   RunnerRolloutMutationResponseSchema,
@@ -324,10 +324,10 @@ export function revokeRunnerDevice(
 }
 
 export function listRunnerReleases(accessToken: string) {
-  return request('/runner-releases', RunnerReleaseSchema.array(), {
+  return request('/runner-releases', RunnerReleaseListResponseSchema, {
     method: 'GET',
     headers: { authorization: `Bearer ${accessToken}` },
-  });
+  }).then((response) => response.releases);
 }
 
 export function listRunnerRollouts(accessToken: string, workspaceId: string) {
@@ -956,11 +956,11 @@ export function listScheduleOccurrences(
   accessToken: string,
   scheduleId: string,
   limit?: number,
-  before?: string,
+  cursor?: string,
 ) {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
-  if (before !== undefined) params.set('before', before);
+  if (cursor !== undefined) params.set('cursor', cursor);
   const query = params.toString() ? `?${params.toString()}` : '';
   return request(
     `/workflow-schedules/${encodeURIComponent(scheduleId)}/occurrences${query}`,

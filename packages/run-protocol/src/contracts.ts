@@ -200,6 +200,7 @@ export const WorkflowRunListResponseSchema = z.strictObject({
     canCancel: z.boolean(),
   }),
   runs: z.array(SafeWorkflowRunMetadataSchema).max(MAX_RUN_LIST_ITEMS),
+  nextCursor: z.string().max(512).nullable(),
 });
 
 export const WorkflowRunDetailResponseSchema = z.strictObject({

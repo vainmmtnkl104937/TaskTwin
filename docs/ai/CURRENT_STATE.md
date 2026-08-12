@@ -1,6 +1,6 @@
 # TaskTwin Current State
 
-Last completed session: **36**
+Last completed session: **37**
 
 ## Workflow
 
@@ -57,6 +57,11 @@ Last completed session: **36**
 - Operational telemetry exposes fixed-window, low-cardinality Workspace
   aggregates and component readiness without workflow business data, Runner
   identities, versions or runtime values as public labels.
+- High-volume Workspace lists use bounded stable cursors and hot-path
+  projections. Runner claims, schedule dispatch, notification delivery,
+  approvals, Audit appends and fleet convergence retain database-backed
+  locking/idempotency under concurrent workers; a repeatable read-only query
+  baseline covers the main dispatch and operational paths.
 - The Control Plane has separate production images/processes for Web, API,
   Scheduler and Notification Worker. A persistent PostgreSQL service and
   explicit one-shot migration job gate startup; runtime secrets stay outside
@@ -124,3 +129,5 @@ Last completed session: **36**
   autoscaling, multi-region operation or cloud-specific infrastructure.
 - Abuse limits are in-memory per API process; there is no distributed limiter,
   edge WAF, CAPTCHA, SSO, external SIEM or automated dependency remediation.
+- The performance baseline is intentionally small and local; it is not a
+  production-capacity model and does not replace workload-specific load tests.

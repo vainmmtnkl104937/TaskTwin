@@ -9,12 +9,7 @@ export const CreateWorkflowScheduleRequestSchema = z.strictObject({
   name: z.string().min(1).max(120),
   definition: z.unknown(),
   runnerDeviceId: UuidSchema,
-  maxStartDelaySeconds: z
-    .number()
-    .int()
-    .min(30)
-    .max(3600)
-    .default(300),
+  maxStartDelaySeconds: z.number().int().min(30).max(3600).default(300),
 });
 
 export const WorkflowScheduleDetailSchema = z.strictObject({
@@ -58,7 +53,9 @@ export type CreateWorkflowScheduleRequest = z.infer<
 export type WorkflowScheduleResponse = z.infer<
   typeof WorkflowScheduleResponseSchema
 >;
-export type WorkflowScheduleDetail = z.infer<typeof WorkflowScheduleDetailSchema>;
+export type WorkflowScheduleDetail = z.infer<
+  typeof WorkflowScheduleDetailSchema
+>;
 
 const ScheduleAccessSchema = z.strictObject({
   role: z.enum(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']),
@@ -70,6 +67,7 @@ export const WorkflowScheduleListResponseSchema = z.strictObject({
   workspaceId: UuidSchema,
   access: ScheduleAccessSchema,
   schedules: z.array(WorkflowScheduleDetailSchema),
+  nextCursor: z.string().max(512).nullable(),
 });
 
 export type WorkflowScheduleListResponse = z.infer<
@@ -109,4 +107,6 @@ export const OccurrenceListResponseSchema = z.strictObject({
   nextCursor: z.string().nullable(),
 });
 
-export type OccurrenceListResponse = z.infer<typeof OccurrenceListResponseSchema>;
+export type OccurrenceListResponse = z.infer<
+  typeof OccurrenceListResponseSchema
+>;

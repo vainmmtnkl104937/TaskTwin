@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import {
   ComponentHeartbeatRepository,
+  WorkflowApprovalRepository,
+  WorkflowRunRepository,
   WorkflowScheduleRepository,
 } from '@tasktwin/database';
 
@@ -19,10 +21,13 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   private readonly heartbeat: ComponentHeartbeatReporter;
   private enabled = false;
   private readonly POLL_INTERVAL_MS = 30_000;
+  private readonly DISPATCH_CONCURRENCY = 10;
 
   constructor(
     private readonly repository: WorkflowScheduleRepository,
     heartbeatRepository: ComponentHeartbeatRepository,
+    private readonly approvals?: WorkflowApprovalRepository,
+    private readonly runs?: WorkflowRunRepository,
   ) {
     this.heartbeat = new ComponentHeartbeatReporter(
       heartbeatRepository,
@@ -74,6 +79,13 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
+      await this.runs?.reconcileExpiredLeases(now);
+      await this.approvals?.reconcileExpired(now);
+    } catch {
+      this.logger.error('SCHEDULER_RECONCILE_EXPIRY_FAILED');
+    }
+
+    try {
       await this.reconcileTimedOutOccurrences(now);
     } catch {
       this.logger.error('SCHEDULER_RECONCILE_TIMEOUT_FAILED');
@@ -97,26 +109,34 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
 
     this.logger.log(`Processing ${schedules.length} due schedule(s)`);
 
-    await Promise.allSettled(
-      schedules.map(async (schedule) => {
-        try {
-          const result = await this.repository.processOccurrence({
-            scheduleId: schedule.scheduleId,
-            now,
-          });
-          if (result === null) {
-            return;
+    for (
+      let offset = 0;
+      offset < schedules.length;
+      offset += this.DISPATCH_CONCURRENCY
+    ) {
+      const batch = schedules.slice(offset, offset + this.DISPATCH_CONCURRENCY);
+      await Promise.allSettled(
+        batch.map(async (schedule) => {
+          try {
+            const result = await this.repository.processOccurrence({
+              scheduleId: schedule.scheduleId,
+              now,
+            });
+            if (result === null) {
+              return;
+            }
+            this.logger.log(
+              result.skipReason === undefined
+                ? 'SCHEDULER_OCCURRENCE_DISPATCHED'
+                : 'SCHEDULER_OCCURRENCE_SKIPPED',
+            );
+          } catch {
+            this.logger.error('SCHEDULER_OCCURRENCE_FAILED');
           }
-          this.logger.log(
-            result.skipReason === undefined
-              ? 'SCHEDULER_OCCURRENCE_DISPATCHED'
-              : 'SCHEDULER_OCCURRENCE_SKIPPED',
-          );
-        } catch {
-          this.logger.error('SCHEDULER_OCCURRENCE_FAILED');
-        }
-      }),
-    );
+        }),
+      );
+    }
+
   }
 
   private async reconcileTimedOutOccurrences(now: Date): Promise<void> {

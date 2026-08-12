@@ -27,7 +27,7 @@ const ZERO_HASH = '0'.repeat(64);
 function makeActor() {
   return {
     type: 'user' as const,
-    userId: '00000000-0000-0000-0000-000000000001',
+    userId: '00000000-0000-4000-8000-000000000001',
   };
 }
 
@@ -52,11 +52,11 @@ function buildFixture(input: {
     ),
     payload: {
       workflowRunId: input.runId,
-      workflowId: '00000000-0000-0000-0000-000000000002',
-      workflowVersionId: '00000000-0000-0000-0000-000000000003',
-      runnerDeviceId: '00000000-0000-0000-0000-000000000004',
+      workflowId: '00000000-0000-4000-8000-000000000002',
+      workflowVersionId: '00000000-0000-4000-8000-000000000003',
+      runnerDeviceId: '00000000-0000-4000-8000-000000000004',
       workflowDigest: '0'.repeat(64),
-      policyVersionId: '00000000-0000-0000-0000-000000000005',
+      policyVersionId: '00000000-0000-4000-8000-000000000005',
       policyDigest: '0'.repeat(64),
     },
   };
@@ -78,6 +78,9 @@ async function workspaceIds(prisma: PrismaClient, count: number): Promise<string
         slug: `audit-trail-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`,
       },
     });
+    await prisma.workspaceAuditChainHead.create({
+      data: { workspaceId: workspace.id },
+    });
     ids.push(workspace.id);
   }
   return ids;
@@ -87,27 +90,10 @@ async function cleanupWorkspace(
   prisma: PrismaClient,
   workspaceIds: string[],
 ): Promise<void> {
-  await prisma.workspaceAuditEvent.deleteMany({
-    where: { workspaceId: { in: workspaceIds } },
-  });
-  await prisma.workspaceAuditChainHead.deleteMany({
-    where: { workspaceId: { in: workspaceIds } },
-  });
-  const workspaces = await prisma.workspace.findMany({
-    where: { id: { in: workspaceIds } },
-    select: { organizationId: true },
-  });
-  await prisma.workspace.deleteMany({
-    where: { id: { in: workspaceIds } },
-  });
-  const organizationIds = [
-    ...new Set(workspaces.map((workspace) => workspace.organizationId)),
-  ];
-  if (organizationIds.length > 0) {
-    await prisma.organization.deleteMany({
-      where: { id: { in: organizationIds } },
-    });
-  }
+  // Audit events are deliberately immutable at the database layer. Integration
+  // fixtures remain isolated instead of disabling production triggers.
+  void prisma;
+  void workspaceIds;
 }
 
 describe('workspace audit trail integration', () => {
@@ -202,7 +188,7 @@ describe('workspace audit trail integration', () => {
       const input = buildFixture({
         workspaceId,
         sourceIdSalt: 'first-event',
-        runId: '11111111-1111-1111-1111-111111111111',
+        runId: '11111111-1111-4111-8111-111111111111',
       });
       const result = await appendAuditEventTransactional(prisma, trail, input);
       expect(result.idempotent).toBe(false);
@@ -218,43 +204,44 @@ describe('workspace audit trail integration', () => {
     if (prisma === undefined) {
       throw new Error('Database client was not initialized');
     }
-    const ids = await workspaceIds(prisma, 1);
+    const client = prisma;
+    const ids = await workspaceIds(client, 1);
     const workspaceId = ids[0];
     if (workspaceId === undefined) {
       throw new Error('workspaceId not created');
     }
     try {
-      const trail = new WorkspaceAuditTrailRepository(prisma);
-      const tasks = [
-        appendAuditEventTransactional(
-          prisma,
-          trail,
-          buildFixture({
-            workspaceId,
-            sourceIdSalt: 'concurrent-1',
-            runId: '22222222-2222-2222-2222-222222222221',
-          }),
+      const tasks = Array.from({ length: 20 }, (_, index) =>
+        client.$transaction((transaction) =>
+          appendAuditEventTransactional(
+            transaction,
+            new WorkspaceAuditTrailRepository(transaction),
+            buildFixture({
+              workspaceId,
+              sourceIdSalt: `concurrent-${index}`,
+              runId: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
+            }),
+          ),
         ),
-        appendAuditEventTransactional(
-          prisma,
-          trail,
-          buildFixture({
-            workspaceId,
-            sourceIdSalt: 'concurrent-2',
-            runId: '22222222-2222-2222-2222-222222222222',
-          }),
-        ),
-      ];
+      );
       const results = await Promise.all(tasks);
-      const sequences = results.map((result) => result.event.sequence).sort();
-      expect(sequences).toEqual([1, 2]);
+      const sequences = results
+        .map((result) => result.event.sequence)
+        .sort((left, right) => left - right);
+      expect(sequences).toEqual(
+        Array.from({ length: 20 }, (_, index) => index + 1),
+      );
       const ordered = [...results].sort(
         (a, b) => a.event.sequence - b.event.sequence,
       );
       expect(ordered[0]?.event.previousHash).toBe(ZERO_HASH);
-      expect(ordered[1]?.event.previousHash).toBe(ordered[0]?.event.eventHash);
+      for (let index = 1; index < ordered.length; index += 1) {
+        expect(ordered[index]?.event.previousHash).toBe(
+          ordered[index - 1]?.event.eventHash,
+        );
+      }
     } finally {
-      await cleanupWorkspace(prisma, ids);
+      await cleanupWorkspace(client, ids);
     }
   });
 
@@ -276,7 +263,7 @@ describe('workspace audit trail integration', () => {
         buildFixture({
           workspaceId: workspaceA,
           sourceIdSalt: 'workspace-a-1',
-          runId: '33333333-3333-3333-3333-333333333331',
+          runId: '33333333-3333-4333-8333-333333333331',
         }),
       );
       const workspaceBResult = await appendAuditEventTransactional(
@@ -285,7 +272,7 @@ describe('workspace audit trail integration', () => {
         buildFixture({
           workspaceId: workspaceB,
           sourceIdSalt: 'workspace-b-1',
-          runId: '33333333-3333-3333-3333-333333333332',
+          runId: '33333333-3333-4333-8333-333333333332',
         }),
       );
       expect(workspaceBResult.event.sequence).toBe(1);
@@ -309,7 +296,7 @@ describe('workspace audit trail integration', () => {
       const input = buildFixture({
         workspaceId,
         sourceIdSalt: 'idempotent-sourceId',
-        runId: '44444444-4444-4444-4444-444444444444',
+        runId: '44444444-4444-4444-8444-444444444444',
       });
       const first = await appendAuditEventTransactional(prisma, trail, input);
       const second = await appendAuditEventTransactional(prisma, trail, input);
@@ -337,7 +324,7 @@ describe('workspace audit trail integration', () => {
         ['conflict-sourceId'],
         auditHasherForTrail,
       );
-      const runId = '55555555-5555-5555-5555-555555555555';
+      const runId = '55555555-5555-4555-8555-555555555555';
       const first = await appendAuditEventTransactional(prisma, trail, {
         workspaceId,
         eventType: 'workflow_run.created',
@@ -347,11 +334,11 @@ describe('workspace audit trail integration', () => {
         sourceId,
         payload: {
           workflowRunId: runId,
-          workflowId: '00000000-0000-0000-0000-000000000002',
-          workflowVersionId: '00000000-0000-0000-0000-000000000003',
-          runnerDeviceId: '00000000-0000-0000-0000-000000000004',
+          workflowId: '00000000-0000-4000-8000-000000000002',
+          workflowVersionId: '00000000-0000-4000-8000-000000000003',
+          runnerDeviceId: '00000000-0000-4000-8000-000000000004',
           workflowDigest: '0'.repeat(64),
-          policyVersionId: '00000000-0000-0000-0000-000000000005',
+          policyVersionId: '00000000-0000-4000-8000-000000000005',
           policyDigest: '0'.repeat(64),
         },
       });
@@ -365,12 +352,12 @@ describe('workspace audit trail integration', () => {
           occurredAt: new Date(),
           sourceId,
           payload: {
-            workflowRunId: '66666666-6666-6666-6666-666666666666',
-            workflowId: '00000000-0000-0000-0000-000000000002',
-            workflowVersionId: '00000000-0000-0000-0000-000000000003',
-            runnerDeviceId: '00000000-0000-0000-0000-000000000004',
+            workflowRunId: '66666666-6666-4666-8666-666666666666',
+            workflowId: '00000000-0000-4000-8000-000000000002',
+            workflowVersionId: '00000000-0000-4000-8000-000000000003',
+            runnerDeviceId: '00000000-0000-4000-8000-000000000004',
             workflowDigest: '0'.repeat(64),
-            policyVersionId: '00000000-0000-0000-0000-000000000005',
+            policyVersionId: '00000000-0000-4000-8000-000000000005',
             policyDigest: '0'.repeat(64),
           },
         }),
@@ -397,7 +384,7 @@ describe('workspace audit trail integration', () => {
         buildFixture({
           workspaceId,
           sourceIdSalt: 'immutable-event',
-          runId: '77777777-7777-7777-7777-777777777777',
+          runId: '77777777-7777-4777-8777-777777777777',
         }),
       );
       const eventId = seeded.event.id;

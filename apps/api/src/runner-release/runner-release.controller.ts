@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
@@ -12,8 +20,11 @@ export class RunnerReleaseController {
   constructor(private readonly service: RunnerReleaseService) {}
 
   @Get()
-  list() {
-    return this.service.list();
+  list(@Query('limit') limit?: string, @Query('cursor') cursor?: string) {
+    return this.service.list({
+      ...(limit === undefined ? {} : { limit }),
+      ...(cursor === undefined ? {} : { cursor }),
+    });
   }
 
   @Get(':id')

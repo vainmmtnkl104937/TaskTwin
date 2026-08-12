@@ -40,6 +40,7 @@ describe('WorkflowApprovalsService', () => {
           role: OrganizationRole.OWNER,
         },
         records: [record],
+        nextCursor: null,
       })),
     } as unknown as WorkflowApprovalRepository;
     const response = await new WorkflowApprovalsService(repository).list(

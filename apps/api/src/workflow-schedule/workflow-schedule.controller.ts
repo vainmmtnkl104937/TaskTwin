@@ -58,8 +58,13 @@ export class WorkflowScheduleController {
   async listSchedules(
     @CurrentUser() user: AuthenticatedUser,
     @Param('workspaceId') workspaceId: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
   ): Promise<WorkflowScheduleListResponse> {
-    return this.service.listByWorkspace(user.id, workspaceId);
+    return this.service.listByWorkspace(user.id, workspaceId, {
+      ...(limit === undefined ? {} : { limit }),
+      ...(cursor === undefined ? {} : { cursor }),
+    });
   }
 
   @Get('workflow-schedules/:scheduleId')
@@ -79,10 +84,10 @@ export class WorkflowScheduleController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('scheduleId') scheduleId: string,
     @Query('limit') limitStr?: string,
-    @Query('before') beforeCursor?: string,
+    @Query('cursor') cursor?: string,
   ): Promise<OccurrenceListResponse> {
     const limit = limitStr !== undefined ? parseInt(limitStr, 10) : 50;
-    return this.service.getOccurrences(user.id, scheduleId, limit, beforeCursor);
+    return this.service.getOccurrences(user.id, scheduleId, limit, cursor);
   }
 
   @Post('workflow-schedules/:scheduleId/pause')

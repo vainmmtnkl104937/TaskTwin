@@ -21,7 +21,12 @@ import {
 import {
   ChangeRunnerReleaseStatusRequestSchema,
   ImportRunnerReleaseRequestSchema,
+  RunnerReleaseListQuerySchema,
 } from './runner-release.contracts.js';
+import {
+  decodeTimeIdCursor,
+  encodeTimeIdCursor,
+} from '../common/time-id-cursor.js';
 
 export const RUNNER_RELEASE_TRUSTED_KEYS = Symbol(
   'runner-release-trusted-keys',
@@ -74,8 +79,35 @@ export class RunnerReleaseService {
     private readonly trustedKeys: readonly TrustedReleaseKey[],
   ) {}
 
-  list() {
-    return this.repository.list();
+  async list(rawQuery: { limit?: string; cursor?: string } = {}) {
+    const query = RunnerReleaseListQuerySchema.safeParse(rawQuery);
+    if (!query.success)
+      throw new BadRequestException({ code: 'RELEASE_LIST_INVALID' });
+    let cursor: ReturnType<typeof decodeTimeIdCursor> | undefined;
+    try {
+      cursor =
+        query.data.cursor === undefined
+          ? undefined
+          : decodeTimeIdCursor(query.data.cursor);
+    } catch {
+      throw new BadRequestException({ code: 'RELEASE_LIST_INVALID_CURSOR' });
+    }
+    const result = await this.repository.list({
+      limit: query.data.limit,
+      ...(cursor === undefined
+        ? {}
+        : { cursor: { builtAt: cursor.time, id: cursor.id } }),
+    });
+    return {
+      releases: result.releases,
+      nextCursor:
+        result.nextCursor === null
+          ? null
+          : encodeTimeIdCursor({
+              time: result.nextCursor.builtAt,
+              id: result.nextCursor.id,
+            }),
+    };
   }
 
   async get(id: string) {

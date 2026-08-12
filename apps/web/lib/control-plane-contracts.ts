@@ -179,6 +179,12 @@ const RunnerRolloutAccessSchema = z.strictObject({
 export const RunnerRolloutListResponseSchema = z.strictObject({
   access: RunnerRolloutAccessSchema,
   rollouts: z.array(RunnerRolloutSchema),
+  nextCursor: z.string().max(512).nullable(),
+});
+
+export const RunnerReleaseListResponseSchema = z.strictObject({
+  releases: z.array(RunnerReleaseSchema).max(100),
+  nextCursor: z.string().max(512).nullable(),
 });
 export const RunnerRolloutDetailResponseSchema = z.strictObject({
   access: RunnerRolloutAccessSchema,

@@ -10,6 +10,12 @@ import {
   WorkflowScheduleRepository,
   WorkflowScheduleRepositoryError,
 } from '@tasktwin/database';
+import { z } from 'zod';
+
+import {
+  decodeTimeIdCursor,
+  encodeTimeIdCursor,
+} from '../common/time-id-cursor.js';
 
 import {
   CreateWorkflowScheduleRequestSchema,
@@ -22,6 +28,11 @@ import {
   toWorkflowScheduleListResponse,
   toWorkflowScheduleResponse,
 } from './workflow-schedule-response.mapper.js';
+
+const ScheduleListQuerySchema = z.strictObject({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().min(1).max(512).optional(),
+});
 
 function rethrow(error: unknown): never {
   if (!(error instanceof WorkflowScheduleRepositoryError)) throw error;
@@ -39,7 +50,8 @@ function rethrow(error: unknown): never {
     case 'SCHEDULE_IDEMPOTENCY_CONFLICT':
       throw new ConflictException({
         code: error.code,
-        message: 'A schedule with the same client ID already exists with different content.',
+        message:
+          'A schedule with the same client ID already exists with different content.',
       });
     case 'SCHEDULE_VERSION_UNAVAILABLE':
       throw new BadRequestException({
@@ -59,7 +71,8 @@ function rethrow(error: unknown): never {
     case 'SCHEDULE_POLICY_DENIED':
       throw new ForbiddenException({
         code: error.code,
-        message: 'The workflow is not allowed to run on this runner due to policy.',
+        message:
+          'The workflow is not allowed to run on this runner due to policy.',
       });
     case 'SCHEDULE_NOT_READY': {
       const issues = error.details as unknown[] | undefined;
@@ -196,13 +209,44 @@ export class WorkflowScheduleService {
   async listByWorkspace(
     userId: string,
     workspaceId: string,
+    rawQuery: { limit?: string; cursor?: string } = {},
   ): Promise<WorkflowScheduleListResponse> {
+    const query = ScheduleListQuerySchema.safeParse(rawQuery);
+    if (!query.success)
+      throw new BadRequestException('Invalid schedule list query.');
+    let cursor: ReturnType<typeof decodeTimeIdCursor> | undefined;
     try {
-      const result = await this.repository.listByWorkspace(userId, workspaceId, new Date());
+      cursor =
+        query.data.cursor === undefined
+          ? undefined
+          : decodeTimeIdCursor(query.data.cursor);
+    } catch {
+      throw new BadRequestException('Invalid schedule list cursor.');
+    }
+    try {
+      const result = await this.repository.listByWorkspace(
+        userId,
+        workspaceId,
+        {
+          limit: query.data.limit,
+          ...(cursor === undefined
+            ? {}
+            : { cursor: { createdAt: cursor.time, id: cursor.id } }),
+        },
+      );
       if (result === null) {
         throw new WorkflowScheduleRepositoryError('SCHEDULE_FORBIDDEN');
       }
-      return toWorkflowScheduleListResponse(result.schedules, result.access);
+      return toWorkflowScheduleListResponse(
+        result.schedules,
+        result.access,
+        result.nextCursor === null
+          ? null
+          : encodeTimeIdCursor({
+              time: result.nextCursor.createdAt,
+              id: result.nextCursor.id,
+            }),
+      );
     } catch (error: unknown) {
       rethrow(error);
     }
@@ -212,15 +256,24 @@ export class WorkflowScheduleService {
     userId: string,
     scheduleId: string,
     limit: number,
-    beforeCursor?: string,
+    rawCursor?: string,
   ): Promise<OccurrenceListResponse> {
     const effectiveLimit = Math.min(Math.max(1, limit), 100);
+    let cursor: ReturnType<typeof decodeTimeIdCursor> | undefined;
+    try {
+      cursor =
+        rawCursor === undefined ? undefined : decodeTimeIdCursor(rawCursor);
+    } catch {
+      throw new BadRequestException('Invalid occurrence cursor.');
+    }
     try {
       const result = await this.repository.getOccurrences(
         userId,
         scheduleId,
         effectiveLimit,
-        beforeCursor,
+        cursor === undefined
+          ? undefined
+          : { createdAt: cursor.time, id: cursor.id },
       );
       if (result === null) {
         throw new WorkflowScheduleRepositoryError('SCHEDULE_FORBIDDEN');
@@ -228,7 +281,12 @@ export class WorkflowScheduleService {
       return toOccurrenceListResponse(
         scheduleId,
         result.occurrences,
-        result.nextCursor,
+        result.nextCursor === null
+          ? null
+          : encodeTimeIdCursor({
+              time: result.nextCursor.createdAt,
+              id: result.nextCursor.id,
+            }),
       );
     } catch (error: unknown) {
       rethrow(error);
@@ -240,7 +298,11 @@ export class WorkflowScheduleService {
     scheduleId: string,
   ): Promise<WorkflowScheduleResponse> {
     try {
-      const schedule = await this.repository.pause(userId, scheduleId, new Date());
+      const schedule = await this.repository.pause(
+        userId,
+        scheduleId,
+        new Date(),
+      );
       return toWorkflowScheduleResponse({
         schedule,
         nextOccurrenceAt: schedule.nextOccurrenceAt,
@@ -258,7 +320,11 @@ export class WorkflowScheduleService {
     scheduleId: string,
   ): Promise<WorkflowScheduleResponse> {
     try {
-      const schedule = await this.repository.resume(userId, scheduleId, new Date());
+      const schedule = await this.repository.resume(
+        userId,
+        scheduleId,
+        new Date(),
+      );
       return toWorkflowScheduleResponse({
         schedule,
         nextOccurrenceAt: schedule.nextOccurrenceAt,
@@ -276,7 +342,11 @@ export class WorkflowScheduleService {
     scheduleId: string,
   ): Promise<WorkflowScheduleResponse> {
     try {
-      const schedule = await this.repository.archive(userId, scheduleId, new Date());
+      const schedule = await this.repository.archive(
+        userId,
+        scheduleId,
+        new Date(),
+      );
       return toWorkflowScheduleResponse({
         schedule,
         nextOccurrenceAt: schedule.nextOccurrenceAt,

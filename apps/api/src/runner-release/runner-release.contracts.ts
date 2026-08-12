@@ -14,3 +14,8 @@ export const ImportRunnerReleaseRequestSchema = z.strictObject({
 export const ChangeRunnerReleaseStatusRequestSchema = z.strictObject({
   reasonCode: RunnerReleaseStatusReasonSchema,
 });
+
+export const RunnerReleaseListQuerySchema = z.strictObject({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().min(1).max(512).optional(),
+});

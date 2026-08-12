@@ -9,6 +9,7 @@ import type {
   CreateWorkflowRunResult,
   WorkflowRunAccess,
   WorkflowRunListRecord,
+  WorkflowRunListItemRecord,
   WorkflowRunRecord,
 } from '@tasktwin/database';
 
@@ -29,7 +30,7 @@ export function safeRun(run: WorkflowRunRecord) {
   };
 }
 
-function safeRunMetadata(run: WorkflowRunRecord) {
+function safeRunMetadata(run: WorkflowRunRecord | WorkflowRunListItemRecord) {
   return {
     id: run.id,
     workspaceId: run.workspaceId,
@@ -45,7 +46,7 @@ function safeRunMetadata(run: WorkflowRunRecord) {
     policyDigest: run.policyDigest,
     policyDecision: run.policyDecision,
     policyHighestRisk: run.policyHighestRisk,
-    stepCount: run.steps.length,
+    stepCount: 'stepCount' in run ? run.stepCount : run.steps.length,
     lastProgressSequence: run.lastProgressSequence,
     createdAt: run.createdAt.toISOString(),
     updatedAt: run.updatedAt.toISOString(),
@@ -78,12 +79,16 @@ export function cancellationResponse(result: CompletionResult) {
   });
 }
 
-export function listResponse(result: WorkflowRunListRecord) {
+export function listResponse(
+  result: WorkflowRunListRecord,
+  nextCursor: string | null,
+) {
   return WorkflowRunListResponseSchema.parse({
     schemaVersion: 1,
     workspaceId: result.workspaceId,
     access: access(result.access),
     runs: result.runs.map(safeRunMetadata),
+    nextCursor,
   });
 }
 

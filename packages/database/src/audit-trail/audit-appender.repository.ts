@@ -25,14 +25,18 @@ function actorIdOf(actor: PendingAuditEvent['actor']): string {
   return 'system';
 }
 
-function actorReasonOf(
-  actor: PendingAuditEvent['actor'],
-): string | null {
+function actorReasonOf(actor: PendingAuditEvent['actor']): string | null {
   if (actor.type === 'system') return actor.reason;
   return null;
 }
 
 export class PrismaAuditAppenderDriver implements AuditAppenderDriver {
+  private insertedHeadMetadata: {
+    workspaceId: string;
+    eventType: string;
+    occurredAt: Date;
+  } | null = null;
+
   constructor(
     private readonly prisma: PrismaClient | Prisma.TransactionClient,
     private readonly trail: WorkspaceAuditTrailRepository,
@@ -70,7 +74,8 @@ export class PrismaAuditAppenderDriver implements AuditAppenderDriver {
         actorReason: actorReasonOf(event.actor),
         primaryEntityKind: event.primaryEntity.kind,
         primaryEntityId: event.primaryEntity.id,
-        relatedEntities: event.relatedEntities as unknown as Prisma.InputJsonValue,
+        relatedEntities:
+          event.relatedEntities as unknown as Prisma.InputJsonValue,
         occurredAt: new Date(event.occurredAt),
         sourceId: event.sourceId,
         correlationId: event.correlationId ?? null,
@@ -80,15 +85,11 @@ export class PrismaAuditAppenderDriver implements AuditAppenderDriver {
         eventHash: event.eventHash,
       },
     });
-    const head = await this.trail.getChainHead(event.workspaceId);
-    await this.trail.updateChainHead(tx, {
-      workspaceId: head.workspaceId,
-      lastSequence: event.sequence,
-      lastEventHash: event.eventHash,
-      lastEventType: event.eventType,
-      lastEventAt: created.occurredAt,
-      updatedAt: head.updatedAt,
-    });
+    this.insertedHeadMetadata = {
+      workspaceId: event.workspaceId,
+      eventType: event.eventType,
+      occurredAt: created.occurredAt,
+    };
     return {
       id: created.id,
       schemaVersion: 1,
@@ -113,15 +114,19 @@ export class PrismaAuditAppenderDriver implements AuditAppenderDriver {
 
   async updateChainHead(head: AuditChainHead): Promise<void> {
     const tx = this.prisma as Prisma.TransactionClient;
-    const current = await this.trail.getChainHead(head.workspaceId);
+    const metadata = this.insertedHeadMetadata;
+    if (metadata === null || metadata.workspaceId !== head.workspaceId) {
+      throw new Error('AUDIT_CHAIN_HEAD_METADATA_MISSING');
+    }
     await this.trail.updateChainHead(tx, {
       workspaceId: head.workspaceId,
       lastSequence: head.lastSequence,
       lastEventHash: head.lastEventHash,
-      lastEventType: current.lastEventType,
-      lastEventAt: current.lastEventAt,
-      updatedAt: current.updatedAt,
+      lastEventType: metadata.eventType,
+      lastEventAt: metadata.occurredAt,
+      updatedAt: metadata.occurredAt,
     });
+    this.insertedHeadMetadata = null;
   }
 }
 
@@ -146,7 +151,8 @@ export function createAuditAppenderDriver(
   options: CreateAuditAppenderDriverOptions,
 ): { driver: PrismaAuditAppenderDriver; hasher: AuditHasher } {
   const hasher = options.hasher ?? auditHasherForTrail;
-  const trail = options.trail ?? new WorkspaceAuditTrailRepository(options.client);
+  const trail =
+    options.trail ?? new WorkspaceAuditTrailRepository(options.client);
   return {
     driver: new PrismaAuditAppenderDriver(options.client, trail),
     hasher,

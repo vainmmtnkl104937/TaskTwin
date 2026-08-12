@@ -19,6 +19,7 @@
     "db:reset": "node scripts/reset-development-database.mjs",
     "db:status": "prisma migrate status",
     "lint": "eslint .",
+    "perf:baseline": "node scripts/performance-baseline.mjs",
     "test": "vitest run --exclude test/**/*.integration.spec.ts",
     "test:integration": "pnpm db:generate && vitest run test/**/*.integration.spec.ts --maxWorkers=1 --no-file-parallelism",
     "typecheck": "tsc --project tsconfig.json --noEmit"

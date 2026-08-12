@@ -58,8 +58,7 @@ export function toWorkflowScheduleResponse(
   return WorkflowScheduleResponseSchema.parse({
     schemaVersion: 1,
     schedule: toDetail(creationResult.schedule),
-    nextOccurrenceAt:
-      creationResult.nextOccurrenceAt?.toISOString() ?? null,
+    nextOccurrenceAt: creationResult.nextOccurrenceAt?.toISOString() ?? null,
     ready: creationResult.ready,
     readinessIssues: creationResult.readinessIssues,
     idempotent: creationResult.idempotent,
@@ -69,6 +68,7 @@ export function toWorkflowScheduleResponse(
 export function toWorkflowScheduleListResponse(
   records: WorkflowScheduleRecord[],
   access: WorkflowScheduleAccess,
+  nextCursor: string | null,
 ): WorkflowScheduleListResponse {
   return WorkflowScheduleListResponseSchema.parse({
     schemaVersion: 1,
@@ -78,6 +78,7 @@ export function toWorkflowScheduleListResponse(
       canManage: canManage(access.role),
     },
     schedules: records.map(toDetail),
+    nextCursor,
   });
 }
 
