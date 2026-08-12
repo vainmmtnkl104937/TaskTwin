@@ -18,18 +18,21 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedUser } from '../auth/auth.types.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { RunnerPairingService } from './runner-pairing.service.js';
+import { ScopedThrottle } from '../http-security/scoped-throttle.decorator.js';
 
 @Controller()
 export class RunnerPairingController {
   constructor(private readonly service: RunnerPairingService) {}
 
   @Post('runner-pairing/sessions')
+  @ScopedThrottle('pairing_create')
   @HttpCode(HttpStatus.OK)
   create(@Body() body: unknown): Promise<PairingSessionCreateResponse> {
     return this.service.create(body);
   }
 
   @Post('runner-pairing/token')
+  @ScopedThrottle('pairing_poll')
   @HttpCode(HttpStatus.OK)
   poll(@Body() body: unknown): Promise<PairingPollingResponse> {
     return this.service.poll(body);

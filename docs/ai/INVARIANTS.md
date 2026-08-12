@@ -139,3 +139,8 @@ migrations and tests define their exact implementation.
   inputs or image layers.
 - Control Plane images never bundle the Local Runner, browser execution,
   Runner secret store or Runner update state.
+- Production browser CORS is an exact configured origin, never a wildcard.
+- Correlation and abuse-control identities are diagnostic metadata only; they
+  never weaken Auth, RBAC, Runner revocation or run-lease authorization.
+- Production errors and logs never expose credentials, tokens, cookies,
+  plaintext secrets, runtime inputs or ephemeral output values.

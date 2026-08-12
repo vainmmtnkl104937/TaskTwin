@@ -11,6 +11,11 @@ x-service-hardening: &service-hardening
     - no-new-privileges:true
   cap_drop:
     - ALL
+  pids_limit: 200
+  ulimits:
+    nofile:
+      soft: 1024
+      hard: 4096
   logging:
     driver: json-file
     options:
@@ -75,6 +80,11 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: 3001
       TASKTWIN_LOG_LEVEL: ${TASKTWIN_LOG_LEVEL:-log}
+      TASKTWIN_HTTP_BODY_LIMIT_BYTES: ${TASKTWIN_HTTP_BODY_LIMIT_BYTES:-1048576}
+      TASKTWIN_HTTP_REQUEST_TIMEOUT_MS: ${TASKTWIN_HTTP_REQUEST_TIMEOUT_MS:-30000}
+      TASKTWIN_HTTP_HEADERS_TIMEOUT_MS: ${TASKTWIN_HTTP_HEADERS_TIMEOUT_MS:-15000}
+      TASKTWIN_HTTP_KEEP_ALIVE_TIMEOUT_MS: ${TASKTWIN_HTTP_KEEP_ALIVE_TIMEOUT_MS:-5000}
+      TASKTWIN_TRUSTED_PROXY_HOPS: ${TASKTWIN_TRUSTED_PROXY_HOPS:-0}
       TASKTWIN_WEB_BASE_URL: ${TASKTWIN_WEB_BASE_URL:?Set the public HTTPS Web origin}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-900}
       DATABASE_URL_FILE: /run/secrets/database_url
@@ -111,7 +121,7 @@ services:
       - edge
       - backend
     tmpfs:
-      - /tmp:size=32m,mode=1777
+      - /tmp:size=32m,mode=1777,noexec,nosuid,nodev
 
   scheduler:
     <<: *service-hardening
@@ -137,7 +147,7 @@ services:
     networks:
       - backend
     tmpfs:
-      - /tmp:size=16m,mode=1777
+      - /tmp:size=16m,mode=1777,noexec,nosuid,nodev
 
   notification-worker:
     <<: *service-hardening
@@ -162,7 +172,7 @@ services:
     networks:
       - backend
     tmpfs:
-      - /tmp:size=16m,mode=1777
+      - /tmp:size=16m,mode=1777,noexec,nosuid,nodev
 
   web:
     <<: *service-hardening
@@ -177,6 +187,8 @@ services:
       TASKTWIN_API_BASE_URL: http://api:3001
       TASKTWIN_ALLOW_HTTP_INTERNAL_API: 'true'
       TASKTWIN_WEB_READINESS_TIMEOUT_MS: ${TASKTWIN_WEB_READINESS_TIMEOUT_MS:-3000}
+      TASKTWIN_CONTROL_PLANE_REQUEST_TIMEOUT_MS: ${TASKTWIN_CONTROL_PLANE_REQUEST_TIMEOUT_MS:-30000}
+      TASKTWIN_SESSION_MAX_AGE_SECONDS: ${JWT_ACCESS_EXPIRES_IN:-900}
     depends_on:
       api:
         condition: service_healthy
@@ -199,8 +211,8 @@ services:
     networks:
       - edge
     tmpfs:
-      - /tmp:size=32m,mode=1777
-      - /app/apps/web/.next/cache:size=64m,mode=0750,uid=1000,gid=1000
+      - /tmp:size=32m,mode=1777,noexec,nosuid,nodev
+      - /app/apps/web/.next/cache:size=64m,mode=0750,uid=1000,gid=1000,noexec,nosuid,nodev
 
 secrets:
   postgres_password:

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   cookieDelete: vi.fn(),
@@ -46,7 +46,12 @@ describe('web authentication bridge', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('sets a secure HTTP-only cookie without returning the token to client code', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
     mocks.login.mockResolvedValue({
       user: {
         id: '8f132a7b-b42b-46d9-9848-29f26385096a',
@@ -67,7 +72,10 @@ describe('web authentication bridge', () => {
       expect.objectContaining({
         httpOnly: true,
         sameSite: 'lax',
+        secure: true,
         path: '/',
+        maxAge: 900,
+        priority: 'high',
       }),
     );
     expect(result).toBeUndefined();
@@ -91,8 +99,15 @@ describe('web authentication bridge', () => {
   it('clears the local cookie without exposing its value', () => {
     clearAccessTokenCookie({
       set: mocks.cookieSet,
-      delete: mocks.cookieDelete,
     });
-    expect(mocks.cookieDelete).toHaveBeenCalledWith(ACCESS_TOKEN_COOKIE);
+    expect(mocks.cookieSet).toHaveBeenCalledWith(
+      ACCESS_TOKEN_COOKIE,
+      '',
+      expect.objectContaining({
+        httpOnly: true,
+        maxAge: 0,
+        expires: new Date(0),
+      }),
+    );
   });
 });

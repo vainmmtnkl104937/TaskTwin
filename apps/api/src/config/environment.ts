@@ -12,6 +12,12 @@ const MINIMUM_ACCESS_TOKEN_LIFETIME_SECONDS = 60;
 const MAXIMUM_ACCESS_TOKEN_LIFETIME_SECONDS = 3_600;
 const MINIMUM_JWT_SECRET_LENGTH = 32;
 const MINIMUM_RUNNER_PEPPER_LENGTH = 32;
+const DEFAULT_HTTP_BODY_LIMIT_BYTES = 1_048_576;
+const MINIMUM_HTTP_BODY_LIMIT_BYTES = 16_384;
+const MAXIMUM_HTTP_BODY_LIMIT_BYTES = 4_194_304;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_HEADERS_TIMEOUT_MS = 15_000;
+const DEFAULT_KEEP_ALIVE_TIMEOUT_MS = 5_000;
 
 export interface JwtAccessConfiguration {
   secret: string;
@@ -26,6 +32,15 @@ export interface RunnerSecurityConfiguration {
 
 export interface RunnerJobSecurityConfiguration {
   leasePepper: string;
+}
+
+export interface HttpSecurityConfiguration {
+  allowedOrigin: string;
+  bodyLimitBytes: number;
+  requestTimeoutMs: number;
+  headersTimeoutMs: number;
+  keepAliveTimeoutMs: number;
+  trustedProxyHops: number;
 }
 
 export function loadRootEnvironment(): void {
@@ -125,6 +140,7 @@ export function validateApiEnvironment(): void {
   getJwtAccessConfiguration();
   getRunnerSecurityConfiguration();
   getRunnerJobSecurityConfiguration();
+  getHttpSecurityConfiguration();
 }
 
 export function validateSchedulerEnvironment(): void {
@@ -181,5 +197,57 @@ export function getRunnerSecurityConfiguration(): RunnerSecurityConfiguration {
 export function getRunnerJobSecurityConfiguration(): RunnerJobSecurityConfiguration {
   return {
     leasePepper: getRequiredSecret('RUNNER_JOB_LEASE_PEPPER'),
+  };
+}
+
+function getBoundedInteger(
+  name: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const raw = process.env[name];
+  const value = raw === undefined ? fallback : Number(raw);
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new Error(
+      `${name} must be an integer between ${minimum} and ${maximum}`,
+    );
+  }
+  return value;
+}
+
+export function getHttpSecurityConfiguration(): HttpSecurityConfiguration {
+  return {
+    allowedOrigin: getHttpOrigin(
+      'TASKTWIN_WEB_BASE_URL',
+      process.env.NODE_ENV === 'production'
+        ? undefined
+        : 'http://127.0.0.1:3000',
+    ),
+    bodyLimitBytes: getBoundedInteger(
+      'TASKTWIN_HTTP_BODY_LIMIT_BYTES',
+      DEFAULT_HTTP_BODY_LIMIT_BYTES,
+      MINIMUM_HTTP_BODY_LIMIT_BYTES,
+      MAXIMUM_HTTP_BODY_LIMIT_BYTES,
+    ),
+    requestTimeoutMs: getBoundedInteger(
+      'TASKTWIN_HTTP_REQUEST_TIMEOUT_MS',
+      DEFAULT_REQUEST_TIMEOUT_MS,
+      1_000,
+      120_000,
+    ),
+    headersTimeoutMs: getBoundedInteger(
+      'TASKTWIN_HTTP_HEADERS_TIMEOUT_MS',
+      DEFAULT_HEADERS_TIMEOUT_MS,
+      1_000,
+      60_000,
+    ),
+    keepAliveTimeoutMs: getBoundedInteger(
+      'TASKTWIN_HTTP_KEEP_ALIVE_TIMEOUT_MS',
+      DEFAULT_KEEP_ALIVE_TIMEOUT_MS,
+      1_000,
+      30_000,
+    ),
+    trustedProxyHops: getBoundedInteger('TASKTWIN_TRUSTED_PROXY_HOPS', 0, 0, 2),
   };
 }

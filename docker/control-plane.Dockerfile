@@ -34,6 +34,9 @@ RUN pnpm --filter @tasktwin/api deploy --prod --legacy /output/api \
 
 FROM base AS runtime
 ENV NODE_ENV=production
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+      /usr/local/bin/pnpm /usr/local/bin/yarn /usr/local/bin/yarnpkg
 WORKDIR /app
 USER node
 

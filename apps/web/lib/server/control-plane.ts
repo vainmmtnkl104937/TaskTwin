@@ -61,15 +61,66 @@ import {
   WorkspaceOperationsSnapshotSchema,
   type MetricWindow,
 } from '@tasktwin/operational-telemetry';
-import { getControlPlaneOrigin } from './environment';
+import {
+  getControlPlaneOrigin,
+  getControlPlaneRequestTimeoutMs,
+} from './environment';
+
+const MAXIMUM_CONTROL_PLANE_RESPONSE_BYTES = 4_194_304;
 
 export class ControlPlaneError extends Error {
+  declare readonly body: unknown;
+
   constructor(
     readonly status: number,
-    readonly body: unknown,
+    body: unknown,
   ) {
     super(`Control Plane request failed with status ${status}.`);
     this.name = 'ControlPlaneError';
+    Object.defineProperty(this, 'body', {
+      configurable: false,
+      enumerable: false,
+      writable: false,
+      value: body,
+    });
+  }
+}
+
+async function readBoundedJson(response: Response): Promise<unknown> {
+  const declaredLength = response.headers.get('content-length');
+  if (
+    declaredLength !== null &&
+    (!/^\d+$/u.test(declaredLength) ||
+      Number(declaredLength) > MAXIMUM_CONTROL_PLANE_RESPONSE_BYTES)
+  ) {
+    await response.body?.cancel();
+    throw new Error('The Control Plane response is too large.');
+  }
+  if (response.body === null) return null;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = '';
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.byteLength;
+      if (bytes > MAXIMUM_CONTROL_PLANE_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new Error('The Control Plane response is too large.');
+      }
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    text += decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+  if (text === '') return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
   }
 }
 
@@ -85,8 +136,9 @@ async function request<Response>(
       'content-type': 'application/json',
       ...init.headers,
     },
+    signal: AbortSignal.timeout(getControlPlaneRequestTimeoutMs()),
   });
-  const body: unknown = await response.json().catch(() => null);
+  const body = await readBoundedJson(response);
   if (!response.ok) {
     throw new ControlPlaneError(response.status, body);
   }

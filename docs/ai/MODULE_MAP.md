@@ -10,6 +10,9 @@ contracts or deterministic domain decisions.
   workflow review, runs, governance, operations and Runner fleet views.
 - `apps/api` — NestJS Control Plane HTTP boundary plus the separate Scheduler
   process entrypoint, authorization, orchestration and repository integration.
+- `apps/api/src/http-security` — production HTTP headers, correlation IDs,
+  bounded errors/log redaction and scoped abuse protection without changing
+  domain authentication guards.
 - `apps/extension` — Manifest V3 Chrome Recorder, DOM/privacy adapters, local
   recording state, artifact archive and sync outbox.
 - `apps/local-runner` — authenticated local worker, Playwright adapter, CLI,

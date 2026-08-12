@@ -61,3 +61,21 @@ filesystems and graceful stop periods. API uses Nest shutdown hooks, Scheduler
 waits for its current tick, and Notification Worker finishes its current
 claimed batch. `docker compose down` retains the named PostgreSQL volume;
 deleting that volume is a separate destructive operator action.
+
+## HTTP security settings
+
+Keep `TASKTWIN_WEB_BASE_URL` equal to the single public HTTPS Web origin; the
+API does not allow wildcard production CORS or cross-origin credentials. Set
+`TASKTWIN_TRUSTED_PROXY_HOPS` to the exact number of trusted reverse-proxy hops
+and leave it at `0` for direct/loopback use. A value that is too high permits a
+client to influence the address used for abuse controls.
+
+The example environment exposes bounded request-body and connection timeout
+settings. Keep the edge proxy limits at least as strict and never disable its
+own slow-client protections. API throttles are deliberately process-local in
+this portable single-API baseline; a horizontally scaled deployment needs a
+trusted shared limiter before increasing API replicas.
+
+Production dependency audit and image vulnerability checks run in the Control
+Plane image workflow. Image runtimes omit package-manager tooling, run as the
+`node` user and use Compose resource, capability and writable-path limits.

@@ -1,6 +1,6 @@
 # TaskTwin Current State
 
-Last completed session: **35**
+Last completed session: **36**
 
 ## Workflow
 
@@ -61,6 +61,10 @@ Last completed session: **35**
   Scheduler and Notification Worker. A persistent PostgreSQL service and
   explicit one-shot migration job gate startup; runtime secrets stay outside
   image layers and health/readiness supports container orchestration.
+- The HTTP boundary applies exact-origin production CORS, security headers,
+  bounded request/connection handling, correlation IDs, sanitized errors and
+  redacted production logging. Login, registration, pairing and authenticated
+  Runner endpoints have scoped process-local abuse controls.
 
 ## Runner
 
@@ -118,3 +122,5 @@ Last completed session: **35**
 - The production deployment baseline is single-host Docker Compose. It does not
   provide a reverse proxy, managed TLS, database HA/backups, image publishing,
   autoscaling, multi-region operation or cloud-specific infrastructure.
+- Abuse limits are in-memory per API process; there is no distributed limiter,
+  edge WAF, CAPTCHA, SSO, external SIEM or automated dependency remediation.
