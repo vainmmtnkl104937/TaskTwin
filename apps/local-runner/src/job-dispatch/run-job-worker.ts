@@ -291,6 +291,7 @@ export class RunJobWorker {
           credential,
           job.runId,
           job.leaseToken,
+          () => sink.flush(),
         ),
         this.executionConfiguration.headed &&
           this.executionConfiguration.attended

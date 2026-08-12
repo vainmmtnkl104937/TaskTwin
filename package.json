@@ -35,6 +35,7 @@
     "db:status": "pnpm --filter @tasktwin/database db:status",
     "db:up": "docker compose up --detach --wait postgres",
     "dr:drill": "node deploy/control-plane/dr/restore-drill.mjs",
+    "e2e:golden": "node tests/golden-path/scripts/run-golden-path.mjs",
     "auth:check": "pnpm --filter @tasktwin/api test:integration:auth",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

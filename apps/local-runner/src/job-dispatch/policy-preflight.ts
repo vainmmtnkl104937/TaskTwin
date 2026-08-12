@@ -26,11 +26,11 @@ export function assertClaimedJobPolicy(job: ClaimedRunnerJob): void {
     typeof serializeCanonicalJson
   >[0];
   const workflowDigest = sha256(serializeCanonicalJson(workflowJson));
-  if (
-    policyDigest !== job.policy.digest ||
-    workflowDigest !== job.definitionDigest
-  ) {
-    throw new Error('Claimed job policy validation failed.');
+  if (policyDigest !== job.policy.digest) {
+    throw new Error('Claimed job policy digest validation failed.');
+  }
+  if (workflowDigest !== job.definitionDigest) {
+    throw new Error('Claimed job workflow digest validation failed.');
   }
   const evaluation = evaluateWorkflowPolicy({
     policy: job.policy.definition,

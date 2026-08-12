@@ -68,8 +68,6 @@ describe('workflow lifecycle integration', () => {
   let outsider: Registration;
   const suffix = crypto.randomUUID();
   const workflowId = `workflow-session13-${suffix}`;
-  const userIds: string[] = [];
-  const organizationIds: string[] = [];
   const password = 'Session13 integration password';
   let publishedVersionId: string;
   let draftVersionId: string;
@@ -88,8 +86,6 @@ describe('workflow lifecycle integration', () => {
       })
       .expect(201);
     const registration = response.body as Registration;
-    userIds.push(registration.user.id);
-    organizationIds.push(registration.organization.id);
     return registration;
   }
 
@@ -179,13 +175,9 @@ describe('workflow lifecycle integration', () => {
             userId: { in: [member?.user.id, admin?.user.id, viewer?.user.id] },
           },
         });
-        await prisma.workspace.deleteMany({
-          where: { organizationId: { in: organizationIds } },
-        });
-        await prisma.organization.deleteMany({
-          where: { id: { in: organizationIds } },
-        });
-        await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+        // Lifecycle mutations append immutable Audit events. Keep the isolated
+        // identity/workspace fixtures instead of weakening production FK and
+        // append-only protections for test cleanup.
         await prisma.$disconnect();
       }
     } finally {
@@ -283,13 +275,17 @@ describe('workflow lifecycle integration', () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.workflowVersion.status).toBe('published');
+        expect(body.workflowVersion.definition.status).toBe('published');
         expect(body.workflowVersion.revision).toBe(2);
       });
     const afterPublish = await prisma.workflowVersion.findUniqueOrThrow({
       where: { id: draftVersionId },
       select: { definition: true, revision: true },
     });
-    expect(afterPublish).toEqual(beforePublish);
+    expect(afterPublish).toEqual({
+      revision: beforePublish.revision,
+      definition: { ...edited, status: 'published' },
+    });
 
     const firstPublished = await prisma.workflowVersion.findUniqueOrThrow({
       where: { id: publishedVersionId },

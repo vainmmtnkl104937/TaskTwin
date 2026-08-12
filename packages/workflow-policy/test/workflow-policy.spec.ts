@@ -246,6 +246,9 @@ describe('workflow policy', () => {
     expect(digest(canonicalPolicyJson(first))).toBe(
       digest(canonicalPolicyJson(second)),
     );
+    expect(digest(canonicalPolicyJson(DEFAULT_WORKSPACE_EXECUTION_POLICY))).toBe(
+      'e1ced8bdc41f0ee58dce35c2af885982dd1381c6ef41e172331fd17697748d13',
+    );
     const result = evaluate([
       {
         id: 'fill',

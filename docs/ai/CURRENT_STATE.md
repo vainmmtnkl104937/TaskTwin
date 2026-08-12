@@ -1,6 +1,6 @@
 # TaskTwin Current State
 
-Last completed session: **38**
+Last completed session: **39**
 
 ## Workflow
 
@@ -15,6 +15,7 @@ Last completed session: **38**
   value-source compatibility, optimistic revisions and temporary in-memory Run
   Inputs Preview.
 - Workflow versions move through Draft, Testing, Published and Archived states.
+  Publishing persists a definition whose internal status also becomes Published.
   Published definitions are immutable; later changes clone a new Draft.
 
 ## Execution
@@ -50,7 +51,9 @@ Last completed session: **38**
   domain mutations. Typed payloads exclude runtime and sensitive values.
 - Database-backed schedules support one-time, daily and weekly IANA-timezone
   occurrences, DST rules, transactional idempotency and multi-instance claims.
-  Unsafe policy changes or ambiguous outcomes pause scheduling for review.
+  Dispatch materializes complete policy-pinned runs with executable steps,
+  origins, outputs and local-secret inventory pins. Unsafe policy changes or
+  ambiguous outcomes pause scheduling for review.
 - Operational alerts use strict templates, transactional outbox records,
   OWNER/ADMIN-aware routing, idempotent in-app delivery and bounded retry/dead
   letter handling.
@@ -107,6 +110,13 @@ Last completed session: **38**
 - A blocked actual release cannot claim new jobs. Blocking an active rollout
   target pauses progression and emits one action-required alert without
   downgrading the Runner.
+
+## Validation
+
+- `pnpm e2e:golden` runs a Docker-isolated full-system path through fresh
+  migrations, API/Web, extension recording and sync, real Playwright Runner
+  execution, approvals, repair, scheduling, notifications, audit verification,
+  reconnect and sensitive-value leak checks.
 
 ## Current limitations
 

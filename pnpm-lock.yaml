@@ -1406,6 +1406,58 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@22.19.1)(happy-dom@20.11.1)(vite@8.1.5(@types/node@22.19.1)(jiti@2.7.0)(terser@5.49.0))
 
+  tests/golden-path:
+    dependencies:
+      '@nestjs/common':
+        specifier: 11.1.28
+        version: 11.1.28(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/testing':
+        specifier: 11.1.28
+        version: 11.1.28(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(@nestjs/platform-express@11.1.28)
+      '@tasktwin/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@tasktwin/local-secret-store':
+        specifier: workspace:*
+        version: link:../../packages/local-secret-store
+      '@tasktwin/recording-schema':
+        specifier: workspace:*
+        version: link:../../packages/recording-schema
+      '@tasktwin/run-protocol':
+        specifier: workspace:*
+        version: link:../../packages/run-protocol
+      '@tasktwin/runner-protocol':
+        specifier: workspace:*
+        version: link:../../packages/runner-protocol
+      '@tasktwin/secure-run-inputs':
+        specifier: workspace:*
+        version: link:../../packages/secure-run-inputs
+      '@tasktwin/workflow-schema':
+        specifier: workspace:*
+        version: link:../../packages/workflow-schema
+      playwright:
+        specifier: 1.62.0
+        version: 1.62.0
+    devDependencies:
+      '@tasktwin/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@types/chrome':
+        specifier: 0.1.38
+        version: 0.1.38
+      '@types/node':
+        specifier: 22.19.1
+        version: 22.19.1
+      eslint:
+        specifier: 9.39.5
+        version: 9.39.5(jiti@2.7.0)
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@22.19.1)(happy-dom@20.11.1)(vite@8.1.5(@types/node@22.19.1)(jiti@2.7.0)(terser@5.49.0))
+
 packages:
 
   '@adobe/css-tools@4.5.0':
@@ -2528,6 +2580,9 @@ packages:
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
+
+  '@types/chrome@0.1.38':
+    resolution: {integrity: sha512-5aK4m9wZqoWAoB98aElESLm/5pXpqJnFWMNoiCs/XdPsXR6wNdVkJFSdQ9Wr4PnTuUrxD0SuNuDHh3EG5QeBzA==}
 
   '@types/chrome@0.2.2':
     resolution: {integrity: sha512-8rSMZ4cvo2xmaSyQg0sN5yRL7oiDkntLoiHxUhfwQnv1mvnkrdoZ25SlNrKWmYKaeP50WvrfWj1pmc02+U9KKw==}
@@ -6732,6 +6787,11 @@ snapshots:
     dependencies:
       '@types/deep-eql': 4.0.2
       assertion-error: 2.0.1
+
+  '@types/chrome@0.1.38':
+    dependencies:
+      '@types/filesystem': 0.0.36
+      '@types/har-format': 1.2.16
 
   '@types/chrome@0.2.2':
     dependencies:

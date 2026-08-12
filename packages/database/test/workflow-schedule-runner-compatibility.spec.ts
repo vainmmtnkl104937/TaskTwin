@@ -135,6 +135,12 @@ function createRepository(
       return storedOccurrence;
     },
   );
+  const occurrenceUpdate = vi.fn(
+    async ({ data }: { data: Record<string, unknown> }) => {
+      storedOccurrence = { ...storedOccurrence, ...data };
+      return storedOccurrence;
+    },
+  );
   const transaction = {
     $queryRaw: vi.fn(async () => [{ id: scheduleId }]),
     workflowSchedule: {
@@ -144,6 +150,7 @@ function createRepository(
     workflowScheduleOccurrence: {
       findFirst: vi.fn(async () => null),
       create: occurrenceCreate,
+      update: occurrenceUpdate,
       findUnique: vi.fn(async () => storedOccurrence),
     },
     runnerDevice: {
@@ -182,11 +189,13 @@ function createRepository(
     activeRunFind,
     alertAppend,
     occurrenceCreate,
+    occurrenceUpdate,
   };
 }
 
 describe('scheduled Runner software compatibility', () => {
   it('dispatches normally for a compatible Runner', async () => {
+    appendAuditEventTransactional.mockClear();
     const test = createRepository({
       runnerVersion: '0.1.0',
       platform: 'win32',
@@ -203,7 +212,59 @@ describe('scheduled Runner software compatibility', () => {
       idempotent: false,
     });
     expect(test.workflowRunCreate).toHaveBeenCalledOnce();
+    expect(test.workflowRunCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          createdByUserId: creatorUserId,
+          policyEvaluation: expect.objectContaining({
+            overallDecision: 'allow',
+          }),
+          executionOptions: expect.objectContaining({
+            totalTimeoutMs: 600_000,
+            stepTimeoutMs: 60_000,
+            recoveryMode: 'automatic_safe_only',
+          }),
+          steps: {
+            create: [
+              expect.objectContaining({
+                sourceStepId: 'wait-safely',
+                sourceStepIndex: 0,
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+    expect(test.occurrenceCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        id: expect.any(String),
+        status: 'PENDING',
+      }),
+    });
+    expect(test.occurrenceUpdate).toHaveBeenCalledWith({
+      where: { id: expect.any(String) },
+      data: expect.objectContaining({
+        workflowRunId,
+        status: 'DISPATCHED',
+      }),
+    });
     expect(test.alertAppend).not.toHaveBeenCalled();
+    expect(
+      appendAuditEventTransactional.mock.calls.map(
+        (call) => call[2].eventType,
+      ),
+    ).toEqual([
+      'workflow_run.created',
+      'schedule.occurrence.dispatched',
+    ]);
+    expect(appendAuditEventTransactional.mock.calls[0]?.[2]).toMatchObject({
+      actor: { type: 'system', reason: 'scheduler' },
+      primaryEntity: { kind: 'workflow_run', id: workflowRunId },
+      payload: {
+        workflowRunId,
+        runnerDeviceId,
+      },
+    });
     for (const call of test.activeRunFind.mock.calls) {
       expect(call[0]).toEqual(
         expect.objectContaining({

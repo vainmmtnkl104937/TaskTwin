@@ -19,6 +19,10 @@ contracts or deterministic domain decisions.
   local crypto/filesystem adapters and Windows service/update integration.
 - `apps/notification-worker` — non-HTTP transactional outbox consumer for
   crash-safe in-app notification delivery.
+- `tests/golden-path` — Docker-isolated full-system validation spanning fresh
+  PostgreSQL migrations, the real API and Web applications, extension
+  recording/sync, Playwright Runner execution, notification delivery, audit
+  verification, reconnect and sensitive-value leak checks.
 - `docker/control-plane.Dockerfile` and `compose.production.yaml` — separate
   production Control Plane images, migration-gated startup, health wiring,
   persistent PostgreSQL and reverse-proxy-ready networks.

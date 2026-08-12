@@ -102,7 +102,7 @@ export function serializeCanonicalJson(value: JsonValue): string {
     return `[${value.map(serializeCanonicalJson).join(',')}]`;
   }
   return `{${Object.keys(value)
-    .sort((left, right) => left.localeCompare(right))
+    .sort()
     .map(
       (key) =>
         `${JSON.stringify(key)}:${serializeCanonicalJson(value[key] as JsonValue)}`,
