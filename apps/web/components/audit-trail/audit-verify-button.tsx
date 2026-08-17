@@ -12,6 +12,20 @@ interface AuditVerifyButtonProps {
   workspaceId: string;
 }
 
+const STATUS_LABEL: Record<AuditVerifyResponse['status'], string> = {
+  ok: 'Audit chain verified',
+  tampered: 'Audit chain mismatch',
+  sequence_gap: 'Audit chain has a gap',
+};
+
+const FAILURE_KIND_LABEL: Record<string, string> = {
+  SEQUENCE_GAP: 'Sequence gap',
+  PREVIOUS_HASH_MISMATCH: 'Previous hash mismatch',
+  PAYLOAD_DIGEST_MISMATCH: 'Payload digest mismatch',
+  EVENT_HASH_MISMATCH: 'Event hash mismatch',
+  HEAD_HASH_MISMATCH: 'Head hash mismatch',
+};
+
 export function AuditVerifyButton({
   workspaceId,
 }: AuditVerifyButtonProps): JSX.Element {
@@ -41,25 +55,42 @@ export function AuditVerifyButton({
   }
 
   return (
-    <div>
+    <div className="audit-verify-panel panel">
       <button type="button" onClick={onClick} disabled={status === 'pending'}>
         {status === 'pending' ? 'Verifying...' : 'Verify audit chain'}
       </button>
       {result !== null ? (
-        <section>
+        <section aria-live="polite">
           <h2>Verification result</h2>
-          <p>Status: {result.status}</p>
-          <p>Checked: {result.checkedCount}</p>
-          <p>Last sequence: {result.lastSequence}</p>
-          <p>Head hash: {result.headHash}</p>
+          <p>
+            <strong>Status:</strong> {STATUS_LABEL[result.status] ?? result.status}
+          </p>
+          <p>
+            <strong>Checked:</strong> {result.checkedCount} event
+            {result.checkedCount === 1 ? '' : 's'}
+          </p>
+          <p>
+            <strong>First sequence:</strong> {result.firstSequence ?? '—'}
+          </p>
+          <p>
+            <strong>Last sequence:</strong> {result.lastSequence ?? '—'}
+          </p>
+          <p>
+            <strong>Head hash:</strong> <code>{result.headHash.slice(0, 16)}…</code>
+          </p>
           {result.firstFailure !== undefined ? (
-            <p>
-              First failure: sequence {result.firstFailure.sequence} ({result.firstFailure.kind})
+            <p className="error-banner">
+              <strong>First failure:</strong> sequence {result.firstFailure.sequence}{' '}
+              ({FAILURE_KIND_LABEL[result.firstFailure.kind] ?? result.firstFailure.kind})
             </p>
           ) : null}
         </section>
       ) : null}
-      {error !== null ? <p role="alert">{error}</p> : null}
+      {error !== null ? (
+        <p className="error-banner" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -42,6 +42,7 @@ import {
 
 import { LifecycleActions } from '../workflow-lifecycle/lifecycle-actions';
 import { LifecycleStatusBadge } from '../workflow-lifecycle/lifecycle-status-badge';
+import { PolicyDigestPanel } from '../workflow-lifecycle/policy-digest-panel';
 import { PublishReadinessPanel } from '../workflow-lifecycle/publish-readiness-panel';
 import { RunInputsPreview } from './run-inputs-preview';
 import { StepInspector } from './step-inspector';
@@ -563,6 +564,7 @@ export function WorkflowEditor({
       </div>
 
       <ValidationPanel issues={issues} />
+      <PolicyDigestPanel policy={executionPolicy} evaluation={policyEvaluation} />
       <PublishReadinessPanel report={publishReadiness} />
 
       {pendingDeleteStepId === null ? null : (

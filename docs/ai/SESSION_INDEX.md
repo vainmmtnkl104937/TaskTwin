@@ -42,3 +42,4 @@ specific historical design question unresolved.
 37 [Performance and concurrency hardening](../sessions/session-37.md)
 38 [Backup, restore and disaster recovery](../sessions/session-38.md)
 39 Full-system golden-path validation and integration hardening
+40 [Release Candidate preparation and UAT](../sessions/session-40.md)

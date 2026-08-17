@@ -6,11 +6,33 @@ import type {
 
 const WINDOWS: readonly MetricWindow[] = ['1h', '24h', '7d', '30d'];
 
+const HEALTH_STATE_LABEL: Record<string, string> = {
+  healthy: 'Healthy',
+  degraded: 'Degraded',
+  unavailable: 'Unavailable',
+  unknown: 'Unknown',
+};
+
+const AUDIT_INTEGRITY_LABEL: Record<string, string> = {
+  ok: 'Chain intact',
+  tampered: 'Chain mismatch',
+  sequence_gap: 'Sequence gap',
+  unknown: 'Status unknown',
+};
+
 const displayRate = (value: number | null): string =>
   value === null ? 'Not available' : `${(value * 100).toFixed(1)}%`;
 
 const displayDuration = (value: number | null): string =>
   value === null ? 'Not available' : `${Math.round(value / 1_000)}s`;
+
+function describeHealthState(state: string): string {
+  return HEALTH_STATE_LABEL[state] ?? state;
+}
+
+function describeAuditIntegrityState(state: string): string {
+  return AUDIT_INTEGRITY_LABEL[state] ?? state;
+}
 
 function HealthCard({
   label,
@@ -24,7 +46,7 @@ function HealthCard({
   return (
     <article className={`panel operations-card health-${state}`}>
       <h2>{label}</h2>
-      <p className="operations-value">{state.replace('_', ' ')}</p>
+      <p className="operations-value">{describeHealthState(state)}</p>
       <p className="metadata">
         Last seen:{' '}
         {lastSeenAt === null ? 'Never' : new Date(lastSeenAt).toLocaleString()}
@@ -178,7 +200,7 @@ export function OperationsDashboard({
         >
           <h2>Audit integrity</h2>
           <p className="operations-value">
-            {snapshot.auditIntegrity.status.replace('_', ' ')}
+            {describeAuditIntegrityState(snapshot.auditIntegrity.status)}
           </p>
           <dl>
             <dt>Chain head</dt>
