@@ -42,19 +42,40 @@ export function RunEvidenceList({
   }, [workflowRunId]);
 
   if (error !== null) {
-    return <p role="alert">{error}</p>;
+    return (
+      <section className="error-banner" role="alert">
+        <p>
+          <strong>Evidence could not be loaded.</strong> The Control Plane
+          returned an error. The message below is safe to share when you open
+          a support ticket; it never contains secret values, recorded URLs or
+          any text typed on a recorded page.
+        </p>
+        <p className="metadata">{error}</p>
+      </section>
+    );
   }
   if (evidence === null) {
-    return <p>Loading evidence...</p>;
+    return (
+      <p className="metadata" aria-busy="true">
+        Loading evidence…
+      </p>
+    );
   }
   if (evidence.events.length === 0) {
-    return <p>No audit events were recorded for this run.</p>;
+    return (
+      <p className="empty-state">
+        No audit events were recorded for this run. The full list is also
+        visible from the workspace Audit page filtered on this run.
+      </p>
+    );
   }
   return (
-    <ol aria-label="Audit evidence for run">
+    <ol aria-label="Audit evidence for run" className="evidence-list">
       {evidence.events.map((event) => (
         <li key={event.id} className="metadata">
-          #{event.sequence} · {event.eventType} · {event.occurredAt}
+          <span className="ev-seq">#{event.sequence}</span>
+          <span className="ev-type">{event.eventType}</span>
+          <span className="ev-when">{event.occurredAt}</span>
         </li>
       ))}
     </ol>

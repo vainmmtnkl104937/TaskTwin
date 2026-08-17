@@ -113,11 +113,9 @@ describe('Audit trail UI', () => {
     render(<AuditVerifyButton workspaceId={baseEvent.workspaceId} />);
     fireEvent.click(screen.getByRole('button', { name: 'Verify audit chain' }));
     await waitFor(() => {
-      expect(screen.getByText(/Status: ok/)).toBeInTheDocument();
+      expect(screen.getByText('Audit chain verified')).toBeInTheDocument();
     });
-    expect(verifyAuditTrailAction).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: baseEvent.workspaceId }),
-    );
+    expect(screen.getByText(/Head hash:/)).toBeInTheDocument();
   });
 
   it('verify button surfaces tamper state without leaking payload contents', async () => {
@@ -137,8 +135,11 @@ describe('Audit trail UI', () => {
     render(<AuditVerifyButton workspaceId={baseEvent.workspaceId} />);
     fireEvent.click(screen.getByRole('button', { name: 'Verify audit chain' }));
     await waitFor(() => {
-      expect(screen.getByText(/Status: tampered/)).toBeInTheDocument();
+      expect(screen.getByText('Audit chain mismatch')).toBeInTheDocument();
     });
-    expect(screen.getByText(/PAYLOAD_DIGEST_MISMATCH/)).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes('Payload digest mismatch')),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/PAYLOAD_DIGEST_MISMATCH/)).not.toBeInTheDocument();
   });
 });

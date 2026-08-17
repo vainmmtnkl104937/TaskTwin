@@ -1,6 +1,22 @@
 # TaskTwin Current State
 
-Last completed session: **39**
+Last completed session: **40**
+
+## Release candidate
+
+- The product release tag `v1.0.0-rc.1` lives in the top-level `VERSION` file
+  and is documented in `docs/RELEASE.md`. The tag does not mutate any
+  package, Runner or workspace version; it is the single, machine-readable
+  source of truth for the release candidate.
+- A repeatable UAT checklist lives in `docs/uat/v1-primary.md` with twelve
+  scenarios covering Record → Draft → Publish → Run, approval, scheduling,
+  repair, audit, notifications and fleet rollouts. The operator smoke runbook
+  lives in `docs/uat/v1-smoke-test.md`; the live known-issues register lives
+  in `docs/uat/known-issues-v1.0.0-rc.1.md`.
+- Severity model `docs/severity.md` defines P0/P1/P2/P3. V1 release blockers
+  and acceptance-critical P1s block promotion to the next product release
+  tag.
+- A first-time Runner onboarding guide lives in `docs/onboarding/v1-runner.md`.
 
 ## Workflow
 
@@ -145,3 +161,30 @@ Last completed session: **39**
   edge WAF, CAPTCHA, SSO, external SIEM or automated dependency remediation.
 - The performance baseline is intentionally small and local; it is not a
   production-capacity model and does not replace workload-specific load tests.
+
+## User-facing stabilization (v1.0.0-rc.1)
+
+- The login page surfaces an "expired session" banner when the user is
+  redirected from an expired access token.
+- The Workspaces home shows a three-step welcome checklist (extension
+  installed, Runner paired, Local Secret Store ready) sourced from the
+  Runner Devices list.
+- Heavy pages now expose `loading.tsx` skeletons with shimmering placeholders
+  that respect the reduced-motion preference.
+- The root `error.tsx` reports the stable internal code, suggests retry and
+  reminds the user to never paste secret values.
+- The Audit Verify panel uses human-readable labels for the chain status
+  ("Audit chain verified", "Audit chain mismatch", "Audit chain has a gap")
+  and failure kinds. The Runner release catalog page uses the same labels
+  via `lib/runner-rollout-labels.ts`.
+- The Fleet view adds a shortcut to the fleet rollouts page and clarifies
+  runtime mode, service state, Local Secret Store status and connection
+  semantics.
+- The Run Evidence panel reports Control Plane errors with their stable
+  technical code and never shows recorded values.
+- The Operations dashboard replaces snake-case enum displays with explicit
+  state labels and clarifies Audit Integrity ("Chain intact / mismatch /
+  sequence gap").
+- The Draft editor adds a policy digest panel summarising the active
+  Workspace execution policy and the count of deny/warn findings against
+  the current definition.

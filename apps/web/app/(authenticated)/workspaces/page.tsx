@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { WorkspaceWelcomeChecklist } from '@/components/workspace-welcome-checklist';
 import { getAccessToken } from '@/lib/server/auth-session';
 import { ControlPlaneError, listWorkspaces } from '@/lib/server/control-plane';
 
@@ -20,6 +21,8 @@ export default async function WorkspacesPage() {
     throw error;
   }
 
+  const firstWorkspace = result.workspaces[0];
+
   return (
     <main className="dashboard-page">
       <section className="page-heading">
@@ -32,6 +35,14 @@ export default async function WorkspacesPage() {
           </Link>
         ) : null}
       </section>
+      {firstWorkspace !== undefined ? (
+        <WorkspaceWelcomeChecklist
+          workspace={{
+            id: firstWorkspace.id,
+            canManageRunners: firstWorkspace.canManageRunners,
+          }}
+        />
+      ) : null}
       <section className="card-grid" aria-label="Available workspaces">
         {result.workspaces.map((workspace) => (
           <Link
