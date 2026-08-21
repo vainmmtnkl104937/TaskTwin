@@ -1,22 +1,29 @@
 # TaskTwin Current State
 
-Last completed session: **40**
+Last completed session: **41**
 
-## Release candidate
+## Production release
 
-- The product release tag `v1.0.0-rc.1` lives in the top-level `VERSION` file
-  and is documented in `docs/RELEASE.md`. The tag does not mutate any
-  package, Runner or workspace version; it is the single, machine-readable
-  source of truth for the release candidate.
-- A repeatable UAT checklist lives in `docs/uat/v1-primary.md` with twelve
-  scenarios covering Record → Draft → Publish → Run, approval, scheduling,
-  repair, audit, notifications and fleet rollouts. The operator smoke runbook
-  lives in `docs/uat/v1-smoke-test.md`; the live known-issues register lives
-  in `docs/uat/known-issues-v1.0.0-rc.1.md`.
-- Severity model `docs/severity.md` defines P0/P1/P2/P3. V1 release blockers
-  and acceptance-critical P1s block promotion to the next product release
-  tag.
-- A first-time Runner onboarding guide lives in `docs/onboarding/v1-runner.md`.
+- Session 41 promoted the `v1.0.0` product release. The product release tag
+  lives in the top-level `VERSION` file and is documented in
+  `docs/RELEASE.md` and `docs/releases/v1.0.0.md`. The tag does not mutate
+  any package, Runner or workspace version; it is the single,
+  machine-readable source of truth for the production release.
+- A repeatable V1 UAT checklist lives in `docs/uat/v1-primary.md` with
+  twelve scenarios covering Record → Draft → Publish → Run, approval,
+  scheduling, repair, audit, notifications and fleet rollouts. The
+  operator smoke runbook lives in `docs/uat/v1-smoke-test.md`; the live
+  known-issues register lives in `docs/uat/known-issues-v1.0.0.md`.
+- Severity model `docs/severity.md` defines P0/P1/P2/P3. V1 release
+  blockers and acceptance-critical P1s block promotion to the next
+  product release tag.
+- A first-time Runner onboarding guide lives in
+  `docs/onboarding/v1-runner.md`.
+
+## User-facing stabilization (v1.0.0)
+
+The `v1.0.0` product release carries forward the session-40
+v1.0.0-rc.1 stabilization fixes unchanged:
 
 ## Workflow
 

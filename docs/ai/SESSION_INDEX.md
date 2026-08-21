@@ -43,3 +43,4 @@ specific historical design question unresolved.
 38 [Backup, restore and disaster recovery](../sessions/session-38.md)
 39 Full-system golden-path validation and integration hardening
 40 [Release Candidate preparation and UAT](../sessions/session-40.md)
+41 V1.0 production release gate

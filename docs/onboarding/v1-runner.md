@@ -7,7 +7,7 @@ Local Runner is paired and the Local Secret Store is initialized.
 
 ## Before you begin
 
-- A Trusted Local Runner build for `v1.0.0-rc.1` is downloaded and verified
+- A Trusted Local Runner build for `v1.0.0` is downloaded and verified
   per `docs/runner-release-packaging.md` and `docs/runner-version.md`.
 - The Windows host has DPAPI-NG available (Windows 8 / Server 2012 or newer).
 - The Control Plane API and Web origins are reachable from the Runner host.
@@ -18,8 +18,10 @@ Local Runner is paired and the Local Secret Store is initialized.
 runner version
 ```
 
-The output must report `v1.0.0-rc.1` SemVer and the expected platform
-(`windows / x64`).
+The output must report the Local Runner SemVer (`0.1.0`) and the expected
+platform (`windows / x64`). The Output also carries the canonical
+product release tag `v1.0.0` separately — heartbeat identification uses
+the Runner SemVer; the product tag identifies the Control Plane release.
 
 ## 2. Pair the Runner with the Control Plane
 
