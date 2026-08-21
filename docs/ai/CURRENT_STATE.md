@@ -4,10 +4,11 @@ Last completed session: **41**
 
 ## Production release
 
-- The product release tag `v1.0.0` lives in the top-level `VERSION` file
-  and is documented in `docs/RELEASE.md`. The tag does not mutate any
-  package, Runner or workspace version; it is the single, machine-readable
-  source of truth for the production release.
+- Session 41 promoted the `v1.0.0` product release. The product release tag
+  lives in the top-level `VERSION` file and is documented in
+  `docs/RELEASE.md` and `docs/releases/v1.0.0.md`. The tag does not mutate
+  any package, Runner or workspace version; it is the single,
+  machine-readable source of truth for the production release.
 - A repeatable V1 UAT checklist lives in `docs/uat/v1-primary.md` with
   twelve scenarios covering Record → Draft → Publish → Run, approval,
   scheduling, repair, audit, notifications and fleet rollouts. The
@@ -19,7 +20,10 @@ Last completed session: **41**
 - A first-time Runner onboarding guide lives in
   `docs/onboarding/v1-runner.md`.
 
-## User-facing stabilization (v1.0.0-rc.1, carried into v1.0.0)
+## User-facing stabilization (v1.0.0)
+
+The `v1.0.0` product release carries forward the session-40
+v1.0.0-rc.1 stabilization fixes unchanged:
 
 ## Workflow
 

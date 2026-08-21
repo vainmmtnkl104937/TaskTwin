@@ -1,7 +1,7 @@
 # V1 Smoke Test — Operator Runbook
 
 This runbook walks an operator through the minimum end-to-end smoke test for
-`v1.0.0-rc.1`. The runbook assumes the portable production Control Plane from
+`v1.0.0`. The runbook assumes the portable production Control Plane from
 `docker/control-plane.Dockerfile` and `compose.production.yaml`. The Local
 Runner is tested on a Windows host.
 
@@ -50,7 +50,7 @@ user. Confirm:
 
 ## 5. Pair the Local Runner
 
-On the Windows host with the trusted `v1.0.0-rc.1` Runner:
+On the Windows host with the trusted `v1.0.0` Runner:
 
 ```powershell
 runner version
@@ -105,4 +105,4 @@ must always succeed without operator intervention beyond step 5.
 
 For each scenario from `docs/uat/v1-primary.md` fill in the Tester, Date,
 Result and Notes columns. File any failure in
-`docs/uat/known-issues-v1.0.0-rc.1.md` before promoting the release tag.
+`docs/uat/known-issues-v1.0.0.md` before promoting the release tag.

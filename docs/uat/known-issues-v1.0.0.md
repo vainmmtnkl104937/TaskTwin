@@ -36,6 +36,7 @@ reported after promotion is recorded here with a severity and an owner.
 
 | ID | Title | Scenario | Severity | Status | Owner | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
+| ENV-01 | Release-gate environmental gates not executed on the operator host | Session 41 release-gating pass | n/a | Open | Release manager | `pnpm dr:drill` and `pnpm e2e:golden` failed closed because the Docker daemon is not running on the operator host (`npipe:////./pipe/dockerDesktopLinuxEngine` unavailable). The Runner release dry-run and `runner.cmd update rollback` were not executed because the host Node is `22.13.0` and the pinned packaging/runtime is `22.23.2`. All static and test-driven gates (typecheck, lint, full unit tests, release-tooling tests, Runner tag/version validation) passed. Re-run on a Windows x64 host with the Docker daemon running and Node `22.23.2` before cutting the `v1.0.0` tag. |
 
 ## V1 release blockers
 
